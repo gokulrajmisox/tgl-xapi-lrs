@@ -1,0 +1,308 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { ArrowUpRight, FileText, Receipt, ShieldCheck, X } from "lucide-react";
+import { CertificateDocument } from "@/components/certificate-document";
+import { RazorpayCheckoutButton } from "@/components/razorpay-checkout-button";
+import { CERTIFICATE_TYPE_LABELS, formatInrFromPaise, type CertificateType } from "@/lib/certifications/pricing";
+
+type OrderItem = {
+  id: string;
+  product_id: string;
+  razorpay_order_id: string;
+  amount_paise: number;
+  currency: string;
+  order_status: string;
+  payment_mode: string;
+  created_at: string;
+};
+
+type PaymentItem = {
+  id: string;
+  order_id: string;
+  razorpay_payment_id: string;
+  payment_status: string;
+  payment_method: string | null;
+  verified_at: string | null;
+  created_at: string;
+};
+
+type IssuanceItem = {
+  id: string;
+  certificate_id: string;
+  recipient_name: string;
+  achievement_title: string;
+  certificate_type: CertificateType;
+  issuance_status: "issued" | "revoked" | "pending_approval";
+  revocation_reason: string | null;
+  issued_at: string | null;
+};
+
+type ProductItem = {
+  id: string;
+  name: string;
+  certificate_type: CertificateType;
+  price_paise: number;
+  eligibility?: { eligible: boolean; missingReasons: string[] } | null;
+  matchedApplicationId?: string | null;
+  activeIssuance?: IssuanceItem | null;
+};
+
+export function StudentCertificationsPanel() {
+  const [products, setProducts] = useState<ProductItem[]>([]);
+  const [orders, setOrders] = useState<OrderItem[]>([]);
+  const [payments, setPayments] = useState<PaymentItem[]>([]);
+  const [issuances, setIssuances] = useState<IssuanceItem[]>([]);
+  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [receiptOrder, setReceiptOrder] = useState<{
+    order: OrderItem;
+    payment: PaymentItem | null;
+    productName: string;
+  } | null>(null);
+
+  const load = useCallback(async () => {
+    const res = await fetch("/api/certifications/products", { cache: "no-store" });
+    if (!res.ok) return;
+    const data = await res.json();
+    setProducts(data.products ?? []);
+    setOrders(data.orders ?? []);
+    setPayments(data.payments ?? []);
+    setIssuances(data.issuances ?? []);
+    setUser(data.user ?? null);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const internshipCert = products.find((p) => p.certificate_type === "internship");
+
+  return (
+    <section className="mt-8 space-y-6 rounded-2xl border border-white/10 bg-white/[0.025] p-6">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-5">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-[#b9a9d6]">
+            Certifications &amp; INR Payments
+          </p>
+          <h2 className="mt-2 text-2xl font-medium tracking-[-0.04em]">
+            Your <span className="font-serif italic text-[#b9a9d6]">INTERNSHIP CERTIFICATE</span> &amp; credentials
+          </h2>
+          <p className="mt-2 max-w-2xl text-xs leading-5 text-white/50">
+            Track certificate eligibility, optional INR checkout, receipts, and issued QR-verified credentials.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/internships"
+            className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/80 hover:border-white/35"
+          >
+            Internships (Free)
+          </Link>
+          <Link
+            href="/certificates"
+            className="inline-flex items-center gap-1.5 rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111]"
+          >
+            All certificates <ArrowUpRight size={13} />
+          </Link>
+        </div>
+      </div>
+
+      {internshipCert && (
+        <div className="flex flex-col justify-between gap-5 rounded-xl border border-[#b9a9d6]/30 bg-black/25 p-5 lg:flex-row lg:items-center">
+          <div className="space-y-1.5">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-[#b9a9d6]">
+              Featured Credential · INTERNSHIP CERTIFICATE
+            </p>
+            <p className="text-base font-medium text-[#f4f3ef]">
+              {internshipCert.activeIssuance?.issuance_status === "issued"
+                ? `Issued: ${internshipCert.activeIssuance.certificate_id}`
+                : internshipCert.eligibility?.eligible
+                  ? "You are eligible for the INTERNSHIP CERTIFICATE"
+                  : "Complete internship work and mentor approval to unlock eligibility"}
+            </p>
+            <p className="text-xs text-white/50">
+              Certificate fee:{" "}
+              <strong className="tabular-nums text-white">
+                {formatInrFromPaise(internshipCert.price_paise)}
+              </strong>{" "}
+              (optional post-completion service)
+            </p>
+          </div>
+
+          <RazorpayCheckoutButton
+            productId={internshipCert.id}
+            productName={internshipCert.name}
+            pricePaise={internshipCert.price_paise}
+            eligible={Boolean(internshipCert.eligibility?.eligible)}
+            alreadyIssued={internshipCert.activeIssuance?.issuance_status === "issued"}
+            internshipApplicationId={internshipCert.matchedApplicationId}
+            studentName={user?.name}
+            studentEmail={user?.email}
+            onSuccess={() => void load()}
+          />
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-xs font-medium text-white/80">
+            <ShieldCheck size={15} className="text-[#b9a9d6]" aria-hidden="true" />
+            <span>Issued certificates ({issuances.length})</span>
+          </div>
+
+          {issuances.length > 0 ? (
+            <div className="space-y-4">
+              {issuances.map((cert) => (
+                <CertificateDocument
+                  key={cert.id}
+                  compact
+                  data={{
+                    certificateId: cert.certificate_id,
+                    recipientName: cert.recipient_name,
+                    certificateTitle:
+                      cert.certificate_type === "internship"
+                        ? "INTERNSHIP CERTIFICATE"
+                        : CERTIFICATE_TYPE_LABELS[cert.certificate_type].toUpperCase(),
+                    achievementTitle: cert.achievement_title,
+                    organization: "Touch Grass Later",
+                    issuedAt: cert.issued_at,
+                    status: cert.issuance_status === "revoked" ? "revoked" : "issued",
+                    revocationReason: cert.revocation_reason,
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-xl border border-dashed border-white/15 p-5 text-xs text-white/45">
+              No certificates issued yet. Once your eligibility is confirmed and optional checkout completes, your downloadable certificate and QR code appear here.
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-xs font-medium text-white/80">
+            <Receipt size={15} className="text-[#b9a9d6]" aria-hidden="true" />
+            <span>Payment history &amp; receipts ({orders.length})</span>
+          </div>
+
+          {orders.length > 0 ? (
+            <div className="space-y-2.5">
+              {orders.map((order) => {
+                const payment = payments.find((p) => p.order_id === order.id) ?? null;
+                const product = products.find((p) => p.id === order.product_id);
+                return (
+                  <article
+                    key={order.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/25 p-4 text-xs"
+                  >
+                    <div>
+                      <p className="font-medium text-[#f4f3ef]">
+                        {product?.name ?? "Certification Order"}
+                      </p>
+                      <p className="mt-1 font-mono text-[11px] text-white/45">
+                        {order.razorpay_order_id} ·{" "}
+                        <span className="capitalize">{order.order_status}</span>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono font-medium tabular-nums text-[#f4f3ef]">
+                        {formatInrFromPaise(order.amount_paise)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setReceiptOrder({
+                            order,
+                            payment,
+                            productName: product?.name ?? "TGL Certificate",
+                          })
+                        }
+                        className="inline-flex items-center gap-1 rounded-full border border-white/15 px-3 py-1.5 text-[11px] text-white/75 hover:border-white/35"
+                      >
+                        <FileText size={12} aria-hidden="true" /> Receipt
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="rounded-xl border border-dashed border-white/15 p-5 text-xs text-white/45">
+              No payment records yet.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {receiptOrder && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="receipt-dialog-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-white/15 bg-[#121212] p-6 text-[#f4f3ef]">
+            <div className="flex items-start justify-between border-b border-white/10 pb-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-[#b9a9d6]">
+                  Touch Grass Later · INR Receipt
+                </p>
+                <h3 id="receipt-dialog-title" className="mt-1 text-lg font-medium">
+                  {receiptOrder.productName}
+                </h3>
+              </div>
+              <button
+                type="button"
+                aria-label="Close receipt"
+                onClick={() => setReceiptOrder(null)}
+                className="grid size-8 place-items-center rounded-full border border-white/10 text-white/60"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <dl className="mt-4 space-y-2.5 text-xs">
+              <div className="flex justify-between">
+                <dt className="text-white/50">Order ID</dt>
+                <dd className="font-mono">{receiptOrder.order.razorpay_order_id}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-white/50">Payment ID</dt>
+                <dd className="font-mono">
+                  {receiptOrder.payment?.razorpay_payment_id ?? "Pending / None"}
+                </dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-white/50">Amount</dt>
+                <dd className="font-semibold tabular-nums">
+                  {formatInrFromPaise(receiptOrder.order.amount_paise)} INR
+                </dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-white/50">Status</dt>
+                <dd className="capitalize">{receiptOrder.order.order_status}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-white/50">Gateway Mode</dt>
+                <dd>{receiptOrder.order.payment_mode}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-white/50">Date</dt>
+                <dd className="tabular-nums">
+                  {new Date(receiptOrder.order.created_at).toLocaleString("en-IN")}
+                </dd>
+              </div>
+            </dl>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="mt-6 w-full rounded-full bg-[#f4f3ef] px-4 py-2.5 text-xs font-medium text-[#111111]"
+            >
+              Print receipt
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}

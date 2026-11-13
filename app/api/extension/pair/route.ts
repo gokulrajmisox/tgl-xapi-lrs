@@ -10,7 +10,10 @@ export async function POST(request: Request) {
   const body = PairSchema.safeParse(await request.json().catch(() => null));
   if (!body.success) return NextResponse.json({ error: "Invalid pairing request." }, { status: 400 });
   const token = randomBytes(32).toString("base64url");
-  const client = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
+  const client = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data, error } = await client.rpc("redeem_extension_pairing", {
     p_code_hash: hash(body.data.code),
     p_device_name: body.data.deviceName,

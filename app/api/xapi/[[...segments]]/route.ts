@@ -2,6 +2,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto
 import { NextRequest } from "next/server";
 import { actorHash, canonicalJson, directAgentHashes, parseAgentParameter, parseIsoDate, prepareStatement, relatedAgentHashes, relatedActivityIds, validateStatement, XapiValidationError } from "@/lib/xapi/validation";
 import { authenticateXapi, corsHeaders, emptyResponse, errorResponse, jsonResponse, preflightXapi, serviceClient, type LrsPrincipal } from "@/lib/xapi/server";
+import { getJwtSecret } from "@/lib/xapi/crypto";
 import { etagMatches } from "@/lib/xapi/etag";
 
 type Context = { params: Promise<{ segments?: string[] }> };
@@ -101,14 +102,14 @@ function parseFilters(url: URL, offset = 0): FilterSet {
 
 function continuationToken(payload: Record<string, unknown>) {
   const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const signature = createHmac("sha256", process.env.SUPABASE_JWT_SECRET!).update(encoded).digest("base64url");
+  const signature = createHmac("sha256", getJwtSecret()).update(encoded).digest("base64url");
   return `${encoded}.${signature}`;
 }
 
 function readContinuation(token: string, registrationId: string) {
   const [encoded, signature, extra] = token.split(".");
   if (!encoded || !signature || extra) throw new XapiValidationError("Invalid continuation token.");
-  const expected = createHmac("sha256", process.env.SUPABASE_JWT_SECRET!).update(encoded).digest();
+  const expected = createHmac("sha256", getJwtSecret()).update(encoded).digest();
   const received = Buffer.from(signature, "base64url");
   if (expected.length !== received.length || !timingSafeEqual(expected, received)) throw new XapiValidationError("Invalid continuation token.");
   const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as { registrationId: string; offset: number; expiresAt: number; filters: Omit<FilterSet, "offset"> };

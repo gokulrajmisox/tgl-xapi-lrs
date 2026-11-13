@@ -29,5 +29,23 @@ export default async function LrsAdminPage() {
   const endpoint = `${protocol}://${host}/api/xapi/`;
   const providers = (registrations ?? []).map((registration) => ({ ...registration, credentials: (credentials ?? []).filter((credential) => credential.registration_id === registration.id) }));
 
-  return <main className="min-h-screen bg-[#090909]"><AdminLrsPanel initialRegistrations={providers} initialUnmatched={unmatched ?? []} endpoint={endpoint} /><div className="mx-auto max-w-[1180px] px-6 pb-20 md:px-12"><ActivityMappingAdmin paths={paths ?? []} modules={modules ?? []} initialMappings={activityMappings ?? []}/></div></main>;
+  return (
+    <main className="min-h-screen bg-[#090909]">
+      <div className="mx-auto flex max-w-[1180px] flex-wrap items-center justify-between gap-4 border-b border-white/10 px-6 pt-8 pb-4 text-xs text-[#f4f3ef] md:px-12">
+        <Link href="/" className="text-white/55 hover:text-white">
+          ← Return to TGL
+        </Link>
+        <Link
+          href="/admin/certifications"
+          className="rounded-full border border-[#b9a9d6]/40 bg-white/[0.04] px-4 py-2 text-xs font-medium text-[#b9a9d6] hover:border-[#b9a9d6]"
+        >
+          Payments, Certificates &amp; Email Admin →
+        </Link>
+      </div>
+      <AdminLrsPanel initialRegistrations={providers} initialUnmatched={unmatched ?? []} endpoint={endpoint} />
+      <div className="mx-auto max-w-[1180px] px-6 pb-20 md:px-12">
+        <ActivityMappingAdmin paths={paths ?? []} modules={modules ?? []} initialMappings={activityMappings ?? []} />
+      </div>
+    </main>
+  );
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { pathways } from "@/lib/pathways";
+import { InternshipCertificateSection } from "@/components/sections/internship-certificate-section";
 
 export function TglStory() {
   return <>
@@ -17,6 +18,7 @@ export function TglStory() {
       </div>
     </section>
     <section id="projects" className="relative overflow-hidden bg-[#b9a9d6] px-6 py-24 text-[#111] md:px-12 md:py-32 lg:px-20"><div className="absolute -right-32 -top-40 size-[450px] rounded-full border border-black/[0.08]"/><div className="absolute -right-12 -top-20 size-[280px] rounded-full border border-black/[0.08]"/><div className="relative mx-auto max-w-[1280px]"><p className="text-[10px] uppercase tracking-[0.22em] text-black/50">Less watching. More making.</p><div className="mt-9 grid gap-9 md:grid-cols-[1.2fr_.8fr] md:items-end"><h2 className="max-w-[800px] text-[clamp(3rem,8vw,7.5rem)] font-medium leading-[0.84] tracking-[-0.09em]">Make learning<br />look like <span className="font-serif font-normal italic">you.</span></h2><div><p className="max-w-[380px] text-sm leading-6 text-black/60">The goal isn&apos;t to finish another tab. It&apos;s to make something that helps you see what you can do next.</p><Link href="/learning-pathways" className="mt-6 inline-flex items-center gap-3 rounded-full bg-[#111] px-5 py-3.5 text-xs font-medium text-[#f4f3ef] transition-transform hover:-translate-y-0.5">Find your starting point <ArrowUpRight size={14} /></Link></div></div></div></section>
-    <footer className="bg-[#090909] px-6 py-8 text-white/45 md:px-12 lg:px-20"><div className="mx-auto flex max-w-[1280px] flex-col justify-between gap-4 border-t border-white/10 pt-6 text-[10px] sm:flex-row"><span className="font-semibold tracking-[0.16em] text-white/70">TOUCH GRASS LATER</span><span>Learn. Build. Grow.</span><span>Built around learning by doing.</span></div></footer>
+    <InternshipCertificateSection />
+    <footer className="bg-[#090909] px-6 py-8 text-white/45 md:px-12 lg:px-20"><div className="mx-auto flex max-w-[1280px] flex-col justify-between gap-4 border-t border-white/10 pt-6 text-[10px] sm:flex-row"><span className="font-semibold tracking-[0.16em] text-white/70">TOUCH GRASS LATER</span><span>Learn. Build. Grow.</span><span><Link href="/certificates" className="hover:text-white">Certificates</Link> · <Link href="/internships" className="hover:text-white">Internships</Link> · <Link href="/admin/certifications" className="hover:text-white">Admin Console</Link></span></div></footer>
   </>;
 }

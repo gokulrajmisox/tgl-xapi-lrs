@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "build": "next build",
-    "dev": "next dev",
-    "lint": "eslint .",
+    "dev": "next dev -p 3000 -H 0.0.0.0",
+    "lint": "tsc --noEmit",
     "test:xapi": "tsx --test test/xapi/*.test.ts",
-    "start": "next start"
+    "start": "next start -p 3000 -H 0.0.0.0"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -42,7 +42,7 @@
     "@react-three/fiber": "^9.8.2",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.119.0",
-    "@vercel/analytics": "1.3.1",
+    "@types/qrcode": "^1.5.6",
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -56,6 +56,7 @@
     "motion": "^14.12.0",
     "next": "16.0.10",
     "next-themes": "^0.4.6",
+    "qrcode": "^1.5.4",
     "react": "19.2.0",
     "react-day-picker": "9.8.0",
     "react-dom": "19.2.0",

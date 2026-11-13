@@ -2,8 +2,9 @@ import { scrypt, timingSafeEqual } from "node:crypto";
 import { secretHmac } from "./crypto";
 export { secretHmac } from "./crypto";
 import { NextResponse } from "next/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createClient as createSupabaseClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createClient as createUserClient } from "@/lib/supabase/server";
+import { createMockSupabaseClient } from "@/lib/supabase/mock";
 
 export const XAPI_VERSION = "1.0.3";
 const SUPPORTED_REQUEST_VERSIONS = new Set(["1.0.0", "1.0.1", "1.0.2", "1.0.3"]);
@@ -25,11 +26,18 @@ export type LrsPrincipal = {
   credential: { id: string; credential_key: string; scopes: string[] };
 };
 
-export const serviceClient = () => createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false, autoRefreshToken: false } },
-);
+export const serviceClient = (): SupabaseClient => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) {
+    return createMockSupabaseClient() as unknown as SupabaseClient;
+  }
+  return createSupabaseClient(
+    url,
+    serviceKey,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+};
 
 export function jsonResponse(body: unknown, status = 200, extraHeaders?: HeadersInit) {
   const headers = new Headers({

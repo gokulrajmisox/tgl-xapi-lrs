@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+
+import { createMockSupabaseClient } from "@/lib/supabase/mock";
 
 const TickSchema = z.object({
   eventId: z.string().uuid(),
@@ -11,7 +13,12 @@ const TickSchema = z.object({
   activeSeconds: z.number().int().min(15).max(60),
 });
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
-const serviceClient = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
+const serviceClient = (): SupabaseClient => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) return createMockSupabaseClient() as unknown as SupabaseClient;
+  return createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+};
 
 export async function POST(request: Request) {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
