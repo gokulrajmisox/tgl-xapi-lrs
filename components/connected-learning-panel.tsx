@@ -1,0 +1,54 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { ArrowUpRight, CircleCheck, CircleDashed, Copy, Unplug } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+
+type Connection = { id: string; registration_id: string; provider_name: string; status: string; verified_at: string | null; created_at: string };
+type Evidence = { id: string; statement_id: string; evidence_type: string; source_provider: string; verification_status: string; created_at: string };
+type Provider = { id: string; name: string; provider_type: string; source_identifier: string; description: string; actor_mapping_policy: string };
+type ProviderProgress = { id: string; activity_iri: string; learning_path_id: string; provider_registration_id: string; completed_at: string | null; progress_percentage: number | null; success: boolean | null; score: number | null; completion: boolean | null; last_activity_at: string | null; evidence_count: number; verification_status: string };
+type PathProgress = { pathId: string; pathTitle: string; requiredCount: number; completedCount: number; percent: number };
+type Challenge = { code: string; expiresAt: string; extensionIri: string };
+
+export function ConnectedLearningPanel({ connections: initialConnections, evidence, progress, pathProgress, availableProviders }: { connections: Connection[]; evidence: Evidence[]; progress: ProviderProgress[]; pathProgress: PathProgress[]; availableProviders: Provider[] }) {
+  const [connections, setConnections] = useState(initialConnections);
+  const [challenges, setChallenges] = useState<Record<string, Challenge>>({});
+  const [busyId, setBusyId] = useState("");
+  const [message, setMessage] = useState("");
+  const disconnect = async (connection: Connection) => {
+    if (!window.confirm(`Disconnect ${connection.provider_name}? Future statements from this actor will no longer be associated with your account.`)) return;
+    setBusyId(connection.id); setMessage("");
+    const { data, error } = await createClient().rpc("disconnect_learning_provider", { p_connection_id: connection.id });
+    if (error || !data) setMessage("This provider could not be disconnected. Please try again.");
+    else setConnections((items) => items.map((item) => item.id === connection.id ? { ...item, status: "disconnected" } : item));
+    setBusyId("");
+  };
+  const createChallenge = async (provider: Provider) => {
+    setBusyId(provider.id); setMessage("");
+    try {
+      const response = await fetch("/api/learning/provider-link-challenge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ registrationId: provider.id }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not create provider link code.");
+      setChallenges((current) => ({ ...current, [provider.id]: result }));
+      setMessage(`${provider.name} link code created. It expires in five minutes.`);
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Could not create provider link code."); }
+    finally { setBusyId(""); }
+  };
+  const copyStatement = async (challenge: Challenge) => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify({ [challenge.extensionIri]: challenge.code }, null, 2));
+      setMessage("The one-time context extension was copied.");
+    } catch { setMessage("Select and copy the context extension manually."); }
+  };
+  const connectedCount = connections.filter((connection) => connection.status === "connected").length;
+
+  return <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-5 sm:p-6"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-[9px] uppercase tracking-[0.18em] text-white/40">xAPI / connected learning</p><h2 className="mt-2 text-xl font-medium tracking-[-0.05em]">Provider evidence</h2><p className="mt-2 max-w-xl text-xs leading-5 text-white/45">Only statements from enabled, authenticated providers and explicitly verified actor mappings appear here. These are provider-reported records, not TGL-issued certificates.</p></div><span className="rounded-full border border-white/10 px-3 py-1.5 text-[10px] text-white/50">{connectedCount} connected</span></div>
+    {message && <p role="status" className="mt-4 text-xs text-[#cbbde0]">{message}</p>}
+    <div className="mt-5 grid gap-3 md:grid-cols-2">{connections.map((connection) => { const records = evidence.filter((item) => item.source_provider === connection.provider_name); return <article key={connection.id} className="rounded-xl border border-white/[0.08] bg-black/20 p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium">{connection.provider_name}</p><p className="mt-1 text-[10px] text-white/40">{connection.status === "connected" ? "Connected" : connection.status === "needs_review" ? "Needs review" : "Disconnected"}</p></div>{connection.status === "connected" ? <CircleCheck size={15} className="text-[#b9a9d6]"/> : <CircleDashed size={15} className="text-white/35"/>}</div><p className="mt-3 text-[10px] text-white/45">{records.length} mapped evidence record{records.length === 1 ? "" : "s"}</p><p className="mt-1 text-[9px] text-white/30">{connection.verified_at ? `Identity verified ${new Date(connection.verified_at).toLocaleDateString()}` : "Identity not verified"}</p>{connection.status === "connected" && <button type="button" disabled={busyId === connection.id} onClick={() => void disconnect(connection)} className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-[10px] text-white/55 hover:border-rose-300/30 hover:text-rose-200 disabled:opacity-40"><Unplug size={12}/>{busyId === connection.id ? "Disconnecting…" : "Disconnect provider"}</button>}</article>; })}{connections.length === 0 && <p className="rounded-xl border border-dashed border-white/15 p-5 text-xs text-white/40">No provider identities have been linked yet. TGL does not infer identity from names or email addresses.</p>}</div>
+    {availableProviders.length > 0 && <div className="mt-6 border-t border-white/[0.08] pt-5"><p className="text-[9px] uppercase tracking-[0.15em] text-white/40">Link an xAPI provider</p><div className="mt-3 flex flex-col gap-3">{availableProviders.map((provider) => <article key={provider.id} className="rounded-xl border border-white/[0.08] bg-black/20 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-medium">{provider.name}</p><p className="mt-1 text-[10px] text-white/40">{provider.description || provider.provider_type} · {provider.source_identifier}</p></div>{provider.actor_mapping_policy === "verified-link-only" ? <button type="button" disabled={busyId === provider.id} onClick={() => void createChallenge(provider)} className="rounded-full bg-[#f4f3ef] px-4 py-2 text-[10px] font-medium text-[#111] disabled:opacity-50">{busyId === provider.id ? "Creating…" : "Create one-time link code"}</button> : <span className="rounded-full border border-white/10 px-3 py-2 text-[9px] text-white/40">Administrator-reviewed linking</span>}</div>{challenges[provider.id] && <div className="mt-4 rounded-lg border border-[#b9a9d6]/20 bg-[#b9a9d6]/[0.04] p-3"><p className="text-[9px] text-white/55">In a provider-generated statement, set this context extension. The provider must support custom xAPI context extensions.</p><pre className="mt-2 overflow-auto text-[9px] text-[#d9cdee]">{JSON.stringify({ [challenges[provider.id].extensionIri]: challenges[provider.id].code }, null, 2)}</pre><button type="button" onClick={() => void copyStatement(challenges[provider.id])} className="mt-3 flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-[9px] text-white/70"><Copy size={12}/>Copy extension</button></div>}</article>)}</div><p className="mt-3 text-[9px] leading-4 text-white/35">A valid one-time code links the xAPI actor from that authenticated provider registration. If your provider cannot emit this extension, TGL requires an administrator to review identity proof instead.</p></div>}
+    <div className="mt-5 border-t border-white/[0.08] pt-4"><p className="text-[9px] uppercase tracking-[0.15em] text-white/40">Mapped learning activity</p>{pathProgress.length > 0 && <ul className="mt-3 flex flex-col gap-2">{pathProgress.map((path) => <li key={path.pathId} className="rounded-lg bg-white/[0.025] px-3 py-3"><div className="flex items-center justify-between gap-3"><p className="truncate text-[10px] text-white/70">{path.pathTitle}</p><p className="shrink-0 text-[9px] text-white/40">{path.percent}%</p></div><div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#b9a9d6]" style={{width:`${path.percent}%`}}/></div><p className="mt-1 text-[9px] text-white/35">{path.completedCount} of {path.requiredCount} mapped required activities completed by provider evidence</p></li>)}</ul>}{progress.length ? <ul className="mt-3 grid gap-2 sm:grid-cols-2">{progress.slice(0,8).map((item) => <li key={item.id} className="rounded-lg bg-white/[0.025] px-3 py-3"><p className="truncate text-[10px] text-white/70">{item.activity_iri}</p><p className="mt-1 text-[9px] text-white/40">{item.completion ? "Provider reported complete" : item.progress_percentage !== null ? `${item.progress_percentage}% reported` : "Activity recorded"} · {item.verification_status.replaceAll("-", " ")}</p><p className="mt-1 text-[9px] text-white/30">{item.evidence_count} evidence statement(s){item.score !== null ? ` · score ${item.score}` : ""}{item.success !== null ? ` · ${item.success ? "passed" : "not passed"}` : ""}</p></li>)}</ul> : <p className="mt-3 text-[10px] text-white/35">No activity mappings have produced learner progress yet.</p>}</div><div className="mt-5 border-t border-white/[0.08] pt-4"><p className="text-[9px] uppercase tracking-[0.15em] text-white/40">Recent evidence</p>{evidence.length ? <ul className="mt-3 flex flex-col gap-2">{evidence.slice(0,5).map((item) => <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white/[0.025] px-3 py-2.5"><div><p className="text-[10px] text-white/75">{item.evidence_type.replaceAll("_", " ")}</p><p className="mt-1 text-[9px] text-white/35">{item.source_provider} · {item.verification_status.replaceAll("-", " ")}</p></div><span className="text-[9px] text-white/30">{new Date(item.created_at).toLocaleDateString()}</span></li>)}</ul> : <p className="mt-3 text-[10px] text-white/35">No provider statements are mapped to your account yet.</p>}</div>
+    <Link href="/learning-hub" className="mt-4 inline-flex items-center gap-2 text-[10px] text-white/45 hover:text-white">Explore TGL learning <ArrowUpRight size={12}/></Link>
+  </section>;
+}
