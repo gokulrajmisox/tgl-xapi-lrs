@@ -18,8 +18,7 @@ export function ResourceProgressControl({ resourceId, initialStatus = "not_start
     if (error) setMessage("Progress not saved. Sign in and try again.");
     else {
       setStatus(next);
-      const response = await fetch("/api/xapi/native-events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "resource", id: resourceId, status: next }) });
-      setMessage(response.ok ? "Saved as self-reported activity." : "Progress saved. Its xAPI activity record could not be added this time.");
+      setMessage("Progress saved.");
     }
     setBusy(false);
   };

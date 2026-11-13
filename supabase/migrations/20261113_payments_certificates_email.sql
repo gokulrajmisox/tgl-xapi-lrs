@@ -1,5 +1,5 @@
 -- TGL Payments, Internship Certificates & Email System Migration
--- Preserves existing learning_paths, learning_modules, learning_resources, xAPI LRS, and auth tables.
+-- Preserves existing learning_paths, learning_modules, learning_resources, and auth tables.
 
 -- 1. Internships & Participation (separate from optional paid certification)
 CREATE TABLE IF NOT EXISTS internships (

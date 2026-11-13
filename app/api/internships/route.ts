@@ -5,8 +5,12 @@ import {
   listInternships,
   listStudentApplications,
   resolveCurrentActor,
+  submitInternshipTaskWork,
   submitInternshipWork,
 } from "@/lib/certifications/store";
+import { listCoursesCatalog } from "@/lib/courses/store";
+import { getProjectStatusForUser } from "@/lib/learning-workspace-store";
+import { evaluateInternshipEligibility } from "@/lib/internships/eligibility";
 
 const ApplySchema = z.object({
   action: z.literal("apply"),
@@ -24,14 +28,46 @@ const SubmitWorkSchema = z.object({
   submissionSummary: z.string().trim().min(10).max(2000),
 });
 
+const SubmitTaskSchema = z.object({
+  action: z.literal("submit_task"),
+  applicationId: z.string().uuid(),
+  taskId: z.string().trim().min(2).max(120),
+  submissionUrl: z.string().trim().url("Provide a valid repository or deliverable URL").max(500),
+  summary: z.string().trim().min(8, "Include a clear summary of your task deliverable").max(2000),
+});
+
 export async function GET() {
   const [internships, actor] = await Promise.all([
     listInternships(),
     resolveCurrentActor(),
   ]);
-  const applications = actor.user ? await listStudentApplications(actor.user.id) : [];
+  const [applications, courses] = await Promise.all([
+    actor.user ? listStudentApplications(actor.user.id) : Promise.resolve([]),
+    listCoursesCatalog(actor.user?.id ?? null),
+  ]);
+
+  const eligibilityByInternshipId: Record<string, ReturnType<typeof evaluateInternshipEligibility>> = {};
+  if (actor.user) {
+    for (const track of internships) {
+      const course = track.required_course_slug
+        ? courses.find((c) => c.slug === track.required_course_slug)
+        : undefined;
+      const projectStatus = track.required_project_slug
+        ? getProjectStatusForUser(actor.user.id, track.required_project_slug)
+        : "not_started";
+      eligibilityByInternshipId[track.id] = evaluateInternshipEligibility({
+        requiredCourseSlug: track.required_course_slug ?? null,
+        requiredProjectSlug: track.required_project_slug ?? null,
+        requireProjectApproval: Boolean(track.require_project_approval),
+        courseEnrolled: Boolean(course?.enrolled),
+        quizPassed: Boolean(course?.quizPassed),
+        projectApproved: projectStatus === "approved",
+      });
+    }
+  }
+
   return NextResponse.json(
-    { internships, applications, user: actor.user },
+    { internships, applications, eligibilityByInternshipId, user: actor.user },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
@@ -47,7 +83,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request payload." }, { status: 400 });
   }
 
-  if ((raw as { action?: string }).action === "submit") {
+  const action = (raw as { action?: string }).action;
+
+  if (action === "submit_task") {
+    const parsed = SubmitTaskSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? "Provide a valid task URL and summary." },
+        { status: 400 },
+      );
+    }
+    const result = await submitInternshipTaskWork({
+      userId: actor.user.id,
+      applicationId: parsed.data.applicationId,
+      taskId: parsed.data.taskId,
+      submissionUrl: parsed.data.submissionUrl,
+      summary: parsed.data.summary,
+    });
+    if (result.error) return NextResponse.json({ error: result.error }, { status: 400 });
+    return NextResponse.json({ application: result.application }, { status: 200 });
+  }
+
+  if (action === "submit") {
     const parsed = SubmitWorkSchema.safeParse(raw);
     if (!parsed.success) {
       return NextResponse.json({ error: "Please provide a valid project URL and work summary." }, { status: 400 });
@@ -65,6 +122,40 @@ export async function POST(request: Request) {
   const parsed = ApplySchema.safeParse(raw);
   if (!parsed.success) {
     return NextResponse.json({ error: "Please complete all required application fields." }, { status: 400 });
+  }
+
+  const [internships, courses] = await Promise.all([
+    listInternships(),
+    listCoursesCatalog(actor.user.id),
+  ]);
+  const targetTrack = internships.find((t) => t.id === parsed.data.internshipId);
+  if (!targetTrack) {
+    return NextResponse.json({ error: "Internship track not found." }, { status: 404 });
+  }
+
+  const matchedCourse = targetTrack.required_course_slug
+    ? courses.find((c) => c.slug === targetTrack.required_course_slug)
+    : undefined;
+  const projectStatus = targetTrack.required_project_slug
+    ? getProjectStatusForUser(actor.user.id, targetTrack.required_project_slug)
+    : "not_started";
+  const eligibility = evaluateInternshipEligibility({
+    requiredCourseSlug: targetTrack.required_course_slug ?? null,
+    requiredProjectSlug: targetTrack.required_project_slug ?? null,
+    requireProjectApproval: Boolean(targetTrack.require_project_approval),
+    courseEnrolled: Boolean(matchedCourse?.enrolled),
+    quizPassed: Boolean(matchedCourse?.quizPassed),
+    projectApproved: projectStatus === "approved",
+  });
+
+  if (!eligibility.eligible) {
+    return NextResponse.json(
+      {
+        error: `Prerequisites not yet met: ${eligibility.missingRequirements.join("; ")}.`,
+        eligibility,
+      },
+      { status: 403 },
+    );
   }
 
   const result = await applyForInternship({

@@ -37,9 +37,7 @@ export function LearningPathwayWorkspace({ pathId, modules, initialProgress, enr
     if (error) setMessage("Progress could not be saved. Make sure you’re enrolled in this pathway.");
     else {
       setProgress((current) => ({ ...current, [module.id]: { module_id: module.id, status, completed_at: completedAt } }));
-      const recordResponse = await fetch("/api/xapi/native-events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "module", id: module.id, status }) });
-      if (!recordResponse.ok) setMessage("Progress saved. Its xAPI activity record could not be added this time.");
-      else setMessage("Progress saved as a self-reported learning activity.");
+      setMessage("Progress saved to your learning workspace.");
     }
     setBusyId("");
   };

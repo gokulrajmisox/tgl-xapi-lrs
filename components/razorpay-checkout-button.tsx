@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AlertCircle, CheckCircle2, CreditCard, Loader2, ShieldAlert, X } from "lucide-react";
 import { formatInrFromPaise } from "@/lib/certifications/pricing";
+import SlideCommit from "@/components/react-bits/SlideCommit";
 
 declare global {
   interface Window {
@@ -16,26 +17,32 @@ declare global {
 type CheckoutOrderState = {
   razorpayOrderId: string;
   amountPaise: number;
-  productName: string;
+  itemName: string;
   isSimulated: boolean;
 };
 
 export function RazorpayCheckoutButton({
+  orderKind = "certificate",
   productId,
+  courseId,
   productName,
   pricePaise,
-  eligible,
-  alreadyIssued,
+  eligible = true,
+  alreadyIssued = false,
+  alreadyEnrolled = false,
   internshipApplicationId,
   studentName,
   studentEmail,
   onSuccess,
 }: {
-  productId: string;
+  orderKind?: "certificate" | "course_enrollment";
+  productId?: string;
+  courseId?: string;
   productName: string;
   pricePaise: number;
-  eligible: boolean;
-  alreadyIssued: boolean;
+  eligible?: boolean;
+  alreadyIssued?: boolean;
+  alreadyEnrolled?: boolean;
   internshipApplicationId?: string | null;
   studentName?: string;
   studentEmail?: string;
@@ -45,6 +52,9 @@ export function RazorpayCheckoutButton({
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [sandboxOrder, setSandboxOrder] = useState<CheckoutOrderState | null>(null);
+
+  const isCourse = orderKind === "course_enrollment";
+  const alreadyCompleted = isCourse ? alreadyEnrolled : alreadyIssued;
 
   const loadRazorpayScript = (): Promise<boolean> =>
     new Promise((resolve) => {
@@ -65,17 +75,22 @@ export function RazorpayCheckoutButton({
     setStatusMessage("");
 
     try {
+      const payload = isCourse
+        ? { orderKind: "course_enrollment", courseId }
+        : {
+            orderKind: "certificate",
+            productId,
+            internshipApplicationId: internshipApplicationId ?? null,
+          };
+
       const response = await fetch("/api/payments/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productId,
-          internshipApplicationId: internshipApplicationId ?? null,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error ?? "Could not initiate certificate order.");
+        throw new Error(data.error ?? "Could not initiate checkout order.");
       }
 
       const order = data.order as { razorpay_order_id: string; amount_paise: number };
@@ -84,7 +99,7 @@ export function RazorpayCheckoutButton({
         setSandboxOrder({
           razorpayOrderId: order.razorpay_order_id,
           amountPaise: order.amount_paise,
-          productName,
+          itemName: productName,
           isSimulated: true,
         });
         setBusy(false);
@@ -128,11 +143,15 @@ export function RazorpayCheckoutButton({
             if (!verifyRes.ok) {
               throw new Error(verifyData.error ?? "Signature verification failed.");
             }
-            setStatusMessage(
-              verifyData.issuance
-                ? `Payment verified. Certificate ${verifyData.issuance.certificate_id} issued.`
-                : "Payment verified. Certificate issuance queued.",
-            );
+            if (isCourse) {
+              setStatusMessage("Payment verified. Course notes, videos, and project unlocked.");
+            } else {
+              setStatusMessage(
+                verifyData.issuance
+                  ? `Payment verified. Certificate ${verifyData.issuance.certificate_id} issued.`
+                  : "Payment verified. Certificate issuance queued.",
+              );
+            }
             onSuccess?.();
           } catch (verifyErr) {
             setErrorMessage(
@@ -189,6 +208,7 @@ export function RazorpayCheckoutButton({
 
   const runSandboxAction = async (
     outcome: "success" | "invalid_signature" | "failed" | "cancelled",
+    deferModalClose = false,
   ) => {
     if (!sandboxOrder) return;
     setBusy(true);
@@ -213,11 +233,12 @@ export function RazorpayCheckoutButton({
         if (!res.ok) throw new Error(data.error ?? "Failed to update payment status.");
         setErrorMessage(
           outcome === "failed"
-            ? "Simulated payment failure recorded. Internship participation remains unaffected."
+            ? isCourse
+              ? "Simulated payment failure recorded. Retry checkout anytime to unlock this course."
+              : "Simulated payment failure recorded. Internship participation remains unaffected."
             : "Checkout cancelled and recorded.",
         );
         setSandboxOrder(null);
-        onSuccess?.();
         return;
       }
 
@@ -243,22 +264,31 @@ export function RazorpayCheckoutButton({
         throw new Error(data.error ?? "Payment signature rejected.");
       }
 
-      setStatusMessage(
-        data.issuance
-          ? `Test payment verified. Certificate ${data.issuance.certificate_id} issued.`
-          : "Test payment verified.",
-      );
-      setSandboxOrder(null);
+      if (isCourse) {
+        setStatusMessage("Test payment verified. Course notes, videos, and project unlocked.");
+      } else {
+        setStatusMessage(
+          data.issuance
+            ? `Test payment verified. Certificate ${data.issuance.certificate_id} issued.`
+            : "Test payment verified.",
+        );
+      }
+      if (!deferModalClose) {
+        setSandboxOrder(null);
+      }
       onSuccess?.();
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Test verification error.");
+      if (deferModalClose) throw err;
     } finally {
       setBusy(false);
     }
   };
 
-  const disabledReason = alreadyIssued
-    ? "Certificate already issued"
+  const disabledReason = alreadyCompleted
+    ? isCourse
+      ? "Already enrolled in this course"
+      : "Certificate already issued"
     : !eligible
       ? "Complete eligibility checks first"
       : "";
@@ -267,19 +297,27 @@ export function RazorpayCheckoutButton({
     <div className="space-y-2.5">
       <button
         type="button"
-        disabled={busy || !eligible || alreadyIssued}
+        disabled={busy || !eligible || alreadyCompleted}
         onClick={() => void handleStartCheckout()}
-        className="inline-flex items-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 whitespace-nowrap shrink-0"
+        className="inline-flex items-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-3 text-xs font-medium text-[#111111] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 whitespace-nowrap shrink-0"
       >
-        {busy ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <CreditCard size={14} aria-hidden="true" />}
-        {alreadyIssued
-          ? "Certificate issued"
-          : pricePaise === 0
-            ? "Claim free certificate"
-            : `Get Certificate · ${formatInrFromPaise(pricePaise)}`}
+        {busy ? (
+          <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+        ) : (
+          <CreditCard size={14} aria-hidden="true" />
+        )}
+        {alreadyCompleted
+          ? isCourse
+            ? "Enrolled"
+            : "Certificate issued"
+          : isCourse
+            ? `Enroll & Pay · ${formatInrFromPaise(pricePaise)}`
+            : pricePaise === 0
+              ? "Claim free certificate"
+              : `Get Certificate · ${formatInrFromPaise(pricePaise)}`}
       </button>
 
-      {disabledReason && !alreadyIssued && (
+      {disabledReason && !alreadyCompleted && (
         <p className="text-[11px] text-white/45">{disabledReason}</p>
       )}
 
@@ -311,7 +349,7 @@ export function RazorpayCheckoutButton({
                   Razorpay Test Mode Simulator
                 </p>
                 <h3 id="sandbox-checkout-title" className="mt-1.5 text-lg font-medium tracking-[-0.03em]">
-                  {sandboxOrder.productName}
+                  {sandboxOrder.itemName}
                 </h3>
               </div>
               <button
@@ -340,15 +378,28 @@ export function RazorpayCheckoutButton({
               </p>
             </div>
 
-            <div className="mt-5 flex flex-col gap-2">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void runSandboxAction("success")}
-                className="w-full rounded-full bg-[#f4f3ef] px-4 py-2.5 text-xs font-medium text-[#111111] hover:bg-white disabled:opacity-50"
-              >
-                Complete test payment (valid signature)
-              </button>
+            <div className="mt-5 flex flex-col gap-3">
+              <div className="flex flex-col items-center gap-1.5">
+                <SlideCommit
+                  label={`Slide to pay ${formatInrFromPaise(sandboxOrder.amountPaise)}`}
+                  doneLabel="Paid"
+                  errorLabel="Payment failed"
+                  trackColor="#1c1922"
+                  handleColor="#f4f3ef"
+                  successColor="#22c55e"
+                  dangerColor="#e5484d"
+                  width={276}
+                  height={52}
+                  disabled={busy}
+                  onConfirm={() => runSandboxAction("success", true)}
+                  onDone={() => {
+                    window.setTimeout(() => setSandboxOrder(null), 650);
+                  }}
+                />
+                <p className="text-[11px] text-white/45">
+                  Slide across or focus and press End to confirm test payment.
+                </p>
+              </div>
               <button
                 type="button"
                 disabled={busy}

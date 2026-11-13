@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { createClient as createUserClient } from "@/lib/supabase/server";
-import { serviceClient } from "@/lib/xapi/server";
+import { serviceClient, isSupabaseConfigured } from "@/lib/supabase/service";
+import {
+  activateCourseEnrollment,
+  findCourseByIdOrSlug,
+  hasActiveCourseEnrollment,
+  revokeCourseEnrollment,
+  type CourseEnrollmentRecord,
+} from "@/lib/courses/store";
 import {
   CERTIFICATE_CURRENCY,
   formatInrFromPaise,
@@ -26,14 +33,13 @@ import {
 } from "@/lib/email/templates";
 import { dispatchLifecycleEmail, type EmailDeliveryRecord } from "@/lib/email/provider";
 
-export function isSupabaseConfigured(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&
-      process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() &&
-      (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()),
-  );
-}
+import {
+  checkAllInternshipTasksApproved,
+  type InternshipTaskDefinition,
+  type InternshipTaskSubmission,
+} from "@/lib/internships/eligibility";
+
+export { isSupabaseConfigured };
 
 export type InternshipRecord = {
   id: string;
@@ -42,6 +48,10 @@ export type InternshipRecord = {
   track: string;
   description: string;
   duration_weeks: number;
+  required_course_slug?: string | null;
+  required_project_slug?: string | null;
+  require_project_approval?: boolean;
+  tasks?: InternshipTaskDefinition[];
   is_published: boolean;
   created_at: string;
 };
@@ -57,6 +67,9 @@ export type InternshipApplicationRecord = {
   status: "applied" | "accepted" | "in_progress" | "completed" | "withdrawn";
   submission_url: string | null;
   submission_summary: string | null;
+  task_submissions?: InternshipTaskSubmission[];
+  final_evaluation_notes?: string | null;
+  final_score_label?: string | null;
   assessment_passed: boolean;
   mentor_approved: boolean;
   mentor_approved_by: string | null;
@@ -83,7 +96,9 @@ export type CertificationProductRecord = {
 export type CertificationOrderRecord = {
   id: string;
   user_id: string;
-  product_id: string;
+  order_kind?: "certificate" | "course_enrollment";
+  product_id: string | null;
+  course_id?: string | null;
   internship_application_id: string | null;
   razorpay_order_id: string;
   amount_paise: number;
@@ -191,8 +206,27 @@ function createSeedStore(): MemoryStore {
         title: "Full-Stack Product Engineering Internship",
         track: "Engineering",
         description:
-          "Build production web modules, API workflows, and accessible user interfaces with mentor code reviews. Participation is 100% free.",
+          "Build production web modules, API workflows, and accessible user interfaces with mentor code reviews and structured weekly engineering tasks.",
         duration_weeks: 8,
+        required_course_slug: "web-architecture-systems",
+        required_project_slug: "accessible-learning-portfolio",
+        require_project_approval: true,
+        tasks: [
+          {
+            id: "task-fs-1",
+            title: "Task 1: Typed Route Boundary & Schema Audit",
+            brief: "Submit a repository PR implementing Zod input validation and clean 400/403 status handling on two workspace routes.",
+            deadlineLabel: "Week 2",
+            deliverableFormat: "GitHub PR or branch URL",
+          },
+          {
+            id: "task-fs-2",
+            title: "Task 2: Accessible Production Dashboard Module",
+            brief: "Build a keyboard-accessible multi-state workflow tested at 1440px desktop and 390px mobile viewports.",
+            deadlineLabel: "Week 5",
+            deliverableFormat: "Deployed demo URL + test notes",
+          },
+        ],
         is_published: true,
         created_at: now,
       },
@@ -202,8 +236,27 @@ function createSeedStore(): MemoryStore {
         title: "Applied AI & Data Systems Internship",
         track: "Data & AI",
         description:
-          "Design evaluation pipelines, structured prompts, and measurable data workflows on real datasets. Participation is 100% free.",
+          "Design evaluation pipelines, structured prompts, and measurable data workflows on real datasets with mentor critique.",
         duration_weeks: 8,
+        required_course_slug: "applied-ai-evaluation",
+        required_project_slug: "eval-harness-studio",
+        require_project_approval: true,
+        tasks: [
+          {
+            id: "task-ai-1",
+            title: "Task 1: Golden Dataset Curation (30+ Edge Cases)",
+            brief: "Publish a reproducible JSONL test set covering normal, missing-context, and adversarial prompt cases.",
+            deadlineLabel: "Week 2",
+            deliverableFormat: "GitHub dataset link",
+          },
+          {
+            id: "task-ai-2",
+            title: "Task 2: Automated Regression Diff Report",
+            brief: "Run deterministic schema and calibration comparisons between baseline and tuned prompt templates.",
+            deadlineLabel: "Week 6",
+            deliverableFormat: "Runner script + summary report URL",
+          },
+        ],
         is_published: true,
         created_at: now,
       },
@@ -213,8 +266,27 @@ function createSeedStore(): MemoryStore {
         title: "Cloud & Security Engineering Internship",
         track: "Infrastructure",
         description:
-          "Implement authentication boundaries, webhook verification, and resilient telemetry instrumentation. Participation is 100% free.",
+          "Implement authentication boundaries, webhook verification, and resilient telemetry instrumentation with architecture reviews.",
         duration_weeks: 6,
+        required_course_slug: "cybersecurity-trust-boundaries",
+        required_project_slug: "webhook-trust-boundary",
+        require_project_approval: true,
+        tasks: [
+          {
+            id: "task-sec-1",
+            title: "Task 1: Timing-Safe Webhook Signature Harness",
+            brief: "Demonstrate raw-body HMAC SHA-256 verification plus duplicate event_id replay protection under test.",
+            deadlineLabel: "Week 2",
+            deliverableFormat: "Repository + passing test trace URL",
+          },
+          {
+            id: "task-sec-2",
+            title: "Task 2: Zero-Downtime Rollout & Incident Runbook",
+            brief: "Document health probes, backward-compatible SQL expansion steps, and rollback triggers.",
+            deadlineLabel: "Week 5",
+            deliverableFormat: "Architecture runbook URL",
+          },
+        ],
         is_published: true,
         created_at: now,
       },
@@ -230,11 +302,35 @@ function createSeedStore(): MemoryStore {
         portfolio_url: "https://github.com/example/aarav-portfolio",
         status: "completed",
         submission_url: "https://github.com/example/tgl-capstone-submission",
-        submission_summary: "Implemented xAPI validation gateway, audit logging, and accessible React dashboard.",
+        submission_summary: "Implemented signed API boundaries, audit logging, and accessible React dashboard.",
+        task_submissions: [
+          {
+            taskId: "task-fs-1",
+            submissionUrl: "https://github.com/example/tgl-capstone-submission/pull/1",
+            summary: "Added Zod schema guards across checkout and workspace endpoints.",
+            status: "approved",
+            mentorFeedback: "Clean boundary checks and unit tests.",
+            scoreLabel: "Exceeds Expectations",
+            submittedAt: "2026-11-10T10:00:00.000Z",
+            evaluatedAt: "2026-11-11T11:00:00.000Z",
+          },
+          {
+            taskId: "task-fs-2",
+            submissionUrl: "https://github.com/example/tgl-capstone-submission/pull/2",
+            summary: "Shipped responsive keyboard-accessible workspace views.",
+            status: "approved",
+            mentorFeedback: "Verified desktop 1440px and mobile 390px parity.",
+            scoreLabel: "Exceeds Expectations",
+            submittedAt: "2026-11-11T12:00:00.000Z",
+            evaluatedAt: "2026-11-11T14:20:00.000Z",
+          },
+        ],
+        final_evaluation_notes: "Delivered both studio engineering tasks cleanly with strong boundary discipline.",
+        final_score_label: "Distinction (Approved)",
         assessment_passed: true,
         mentor_approved: true,
         mentor_approved_by: DEMO_ADMIN_ID,
-        mentor_notes: "Capstone architecture and test coverage approved by mentor.",
+        mentor_notes: "Capstone architecture and internship tasks approved by mentor.",
         completed_at: "2026-11-11T14:30:00.000Z",
         created_at: now,
         updated_at: "2026-11-11T14:30:00.000Z",
@@ -250,6 +346,9 @@ function createSeedStore(): MemoryStore {
         status: "in_progress",
         submission_url: null,
         submission_summary: null,
+        task_submissions: [],
+        final_evaluation_notes: null,
+        final_score_label: null,
         assessment_passed: false,
         mentor_approved: false,
         mentor_approved_by: null,
@@ -881,7 +980,9 @@ export async function createCertificationOrder(params: {
     order = {
       id: randomUUID(),
       user_id: params.user.id,
+      order_kind: "certificate",
       product_id: product.id,
+      course_id: null,
       internship_application_id: matchedApplication?.id ?? null,
       razorpay_order_id: rpOrder.razorpayOrderId,
       amount_paise: rpOrder.amountPaise,
@@ -913,6 +1014,109 @@ export async function createCertificationOrder(params: {
     keyId: rpOrder.keyId,
     isSimulated: rpOrder.isSimulated,
     product,
+  };
+}
+
+export async function createCourseEnrollmentOrder(params: {
+  user: SandboxUser;
+  courseId: string;
+}): Promise<{
+  order?: CertificationOrderRecord;
+  keyId?: string | null;
+  isSimulated?: boolean;
+  courseTitle?: string;
+  error?: string;
+  status?: number;
+}> {
+  const course = await findCourseByIdOrSlug(params.courseId);
+  if (!course || !course.isPublished) {
+    return { error: "Course not found or not published.", status: 404 };
+  }
+
+  const alreadyEnrolled = await hasActiveCourseEnrollment(params.user.id, course.id);
+  if (alreadyEnrolled) {
+    return {
+      error: `You are already enrolled in ${course.title}.`,
+      status: 409,
+    };
+  }
+
+  const rpOrder = await createRazorpayOrder({
+    amountPaise: course.pricePaise,
+    currency: "INR",
+    receipt: `tgl_course_${course.slug.slice(0, 18)}_${Date.now()}`,
+    notes: {
+      userId: params.user.id,
+      orderKind: "course_enrollment",
+      courseId: course.id,
+      courseSlug: course.slug,
+    },
+  });
+
+  const now = new Date().toISOString();
+  let order: CertificationOrderRecord;
+
+  if (isSupabaseConfigured()) {
+    const client = serviceClient();
+    const { data, error } = await client
+      .from("certification_orders")
+      .insert({
+        user_id: params.user.id,
+        order_kind: "course_enrollment",
+        product_id: null,
+        course_id: course.id,
+        internship_application_id: null,
+        razorpay_order_id: rpOrder.razorpayOrderId,
+        amount_paise: rpOrder.amountPaise,
+        currency: "INR",
+        order_status: "created",
+        payment_mode: rpOrder.mode,
+        metadata: { courseId: course.id, courseSlug: course.slug, courseTitle: course.title },
+      })
+      .select("*")
+      .single();
+    if (error || !data) {
+      return { error: "Failed to persist course enrollment order.", status: 500 };
+    }
+    order = data as CertificationOrderRecord;
+  } else {
+    order = {
+      id: randomUUID(),
+      user_id: params.user.id,
+      order_kind: "course_enrollment",
+      product_id: null,
+      course_id: course.id,
+      internship_application_id: null,
+      razorpay_order_id: rpOrder.razorpayOrderId,
+      amount_paise: rpOrder.amountPaise,
+      currency: "INR",
+      order_status: "created",
+      payment_mode: rpOrder.mode,
+      metadata: { courseId: course.id, courseSlug: course.slug, courseTitle: course.title },
+      created_at: now,
+      updated_at: now,
+    };
+    getMemoryStore().orders.unshift(order);
+  }
+
+  await sendAndLogLifecycleEmail({
+    recipientEmail: params.user.email,
+    templateKey: "purchase_initiated",
+    variables: {
+      studentName: params.user.name,
+      certificateName: `Course Enrollment: ${course.title}`,
+      amountFormatted: formatInrFromPaise(course.pricePaise),
+      orderId: order.razorpay_order_id,
+      achievementTitle: course.title,
+    },
+    isSimulatedTransaction: rpOrder.isSimulated,
+  });
+
+  return {
+    order,
+    keyId: rpOrder.keyId,
+    isSimulated: rpOrder.isSimulated,
+    courseTitle: course.title,
   };
 }
 
@@ -1062,6 +1266,7 @@ export async function verifyAndCaptureCheckoutPayment(params: {
 }): Promise<{
   payment?: CertificationPaymentRecord;
   issuance?: CertificateIssuanceRecord;
+  enrollment?: CourseEnrollmentRecord;
   error?: string;
   status?: number;
 }> {
@@ -1150,6 +1355,36 @@ export async function verifyAndCaptureCheckoutPayment(params: {
     order.updated_at = now;
   }
 
+  const isCourseOrder =
+    order.order_kind === "course_enrollment" || Boolean(order.course_id);
+
+  if (isCourseOrder && order.course_id) {
+    const course = await findCourseByIdOrSlug(order.course_id);
+    const enrollment = await activateCourseEnrollment({
+      userId: params.user.id,
+      courseId: order.course_id,
+      paymentId: payment.id,
+    });
+
+    await sendAndLogLifecycleEmail({
+      recipientEmail: params.user.email,
+      templateKey: "payment_success",
+      variables: {
+        studentName: params.user.name,
+        certificateName: course ? `Course Enrollment: ${course.title}` : "Course Enrollment",
+        amountFormatted: formatInrFromPaise(order.amount_paise),
+        paymentId: payment.razorpay_payment_id,
+        orderId: order.razorpay_order_id,
+      },
+      isSimulatedTransaction: isSimulatedOrder,
+    });
+
+    return {
+      payment,
+      enrollment,
+    };
+  }
+
   const products = await listProducts(true);
   const product = products.find((p) => p.id === order.product_id);
 
@@ -1229,15 +1464,22 @@ export async function recordFailedOrCancelledPayment(params: {
     });
   }
 
-  const products = await listProducts(true);
-  const product = products.find((p) => p.id === order.product_id);
+  let itemName = "TGL Certificate";
+  if (order.course_id) {
+    const course = await findCourseByIdOrSlug(order.course_id);
+    if (course) itemName = `Course Enrollment: ${course.title}`;
+  } else if (order.product_id) {
+    const products = await listProducts(true);
+    const product = products.find((p) => p.id === order.product_id);
+    if (product) itemName = product.name;
+  }
 
   await sendAndLogLifecycleEmail({
     recipientEmail: params.user.email,
     templateKey: "payment_failed",
     variables: {
       studentName: params.user.name,
-      certificateName: product?.name ?? "TGL Certificate",
+      certificateName: itemName,
       amountFormatted: formatInrFromPaise(order.amount_paise),
       reason: params.reason,
       orderId: order.razorpay_order_id,
@@ -1325,7 +1567,7 @@ export async function processRazorpayWebhookEvent(params: {
           .from("certification_orders")
           .update({ order_status: "paid", updated_at: now })
           .eq("id", order.id);
-        await client.from("certification_payments").upsert(
+        const { data: capPay } = await client.from("certification_payments").upsert(
           {
             order_id: order.id,
             user_id: order.user_id,
@@ -1335,7 +1577,14 @@ export async function processRazorpayWebhookEvent(params: {
             verified_at: now,
           },
           { onConflict: "razorpay_payment_id" },
-        );
+        ).select("id").single();
+        if (order.order_kind === "course_enrollment" && order.course_id) {
+          await activateCourseEnrollment({
+            userId: order.user_id as string,
+            courseId: order.course_id as string,
+            paymentId: (capPay?.id as string | undefined) ?? paymentEntity.id,
+          });
+        }
       }
     } else if (eventType === "payment.failed" && paymentEntity?.order_id && paymentEntity.id) {
       const { data: order } = await client
@@ -1361,10 +1610,26 @@ export async function processRazorpayWebhookEvent(params: {
         );
       }
     } else if (eventType === "refund.processed" && refundEntity?.payment_id) {
-      await client
+      const { data: refPay } = await client
         .from("certification_payments")
         .update({ payment_status: "refunded", refunded_at: now, refund_id: refundEntity.id ?? null })
-        .eq("razorpay_payment_id", refundEntity.payment_id);
+        .eq("razorpay_payment_id", refundEntity.payment_id)
+        .select("order_id,user_id")
+        .maybeSingle();
+      if (refPay?.order_id) {
+        const { data: refOrder } = await client
+          .from("certification_orders")
+          .update({ order_status: "refunded", updated_at: now })
+          .eq("id", refPay.order_id)
+          .select("order_kind,course_id,user_id")
+          .maybeSingle();
+        if (refOrder?.order_kind === "course_enrollment" && refOrder.course_id) {
+          await revokeCourseEnrollment({
+            userId: refOrder.user_id as string,
+            courseId: refOrder.course_id as string,
+          });
+        }
+      }
     }
 
     await client
@@ -1404,11 +1669,12 @@ export async function processRazorpayWebhookEvent(params: {
       order.order_status = "paid";
       order.updated_at = now;
       const existingPay = store.payments.find((p) => p.razorpay_payment_id === paymentEntity.id);
+      let paymentIdRef = existingPay?.id;
       if (existingPay) {
         existingPay.payment_status = "captured";
         existingPay.verified_at = existingPay.verified_at ?? now;
       } else {
-        store.payments.unshift({
+        const createdPay: CertificationPaymentRecord = {
           id: randomUUID(),
           order_id: order.id,
           user_id: order.user_id,
@@ -1421,6 +1687,15 @@ export async function processRazorpayWebhookEvent(params: {
           refunded_at: null,
           refund_id: null,
           created_at: now,
+        };
+        store.payments.unshift(createdPay);
+        paymentIdRef = createdPay.id;
+      }
+      if ((order.order_kind === "course_enrollment" || order.course_id) && order.course_id) {
+        await activateCourseEnrollment({
+          userId: order.user_id,
+          courseId: order.course_id,
+          paymentId: paymentIdRef ?? paymentEntity.id,
         });
       }
     }
@@ -1451,7 +1726,15 @@ export async function processRazorpayWebhookEvent(params: {
       pay.refunded_at = now;
       pay.refund_id = refundEntity.id ?? null;
       const order = store.orders.find((o) => o.id === pay.order_id);
-      if (order) order.order_status = "refunded";
+      if (order) {
+        order.order_status = "refunded";
+        if ((order.order_kind === "course_enrollment" || order.course_id) && order.course_id) {
+          await revokeCourseEnrollment({
+            userId: order.user_id,
+            courseId: order.course_id,
+          });
+        }
+      }
     }
   }
 
@@ -1502,6 +1785,13 @@ export async function processAdminRefund(params: {
       .update({ order_status: "refunded", updated_at: now })
       .eq("id", order.id);
 
+    if ((order.order_kind === "course_enrollment" || order.course_id) && order.course_id) {
+      await revokeCourseEnrollment({
+        userId: order.user_id,
+        courseId: order.course_id,
+      });
+    }
+
     const issuances = await listIssuances();
     const linkedIssuance = issuances.find((i) => i.payment_id === payment.id);
     if (linkedIssuance) {
@@ -1527,14 +1817,22 @@ export async function processAdminRefund(params: {
   order.order_status = "refunded";
   order.updated_at = now;
 
+  if ((order.order_kind === "course_enrollment" || order.course_id) && order.course_id) {
+    await revokeCourseEnrollment({
+      userId: order.user_id,
+      courseId: order.course_id,
+    });
+  }
+
   const store = getMemoryStore();
   const linkedIssuance = store.issuances.find((i) => i.payment_id === payment.id);
+  const refundedCourse = order.course_id ? await findCourseByIdOrSlug(order.course_id) : null;
   await sendAndLogLifecycleEmail({
     recipientEmail: linkedIssuance?.recipient_email ?? "aarav.sharma@example.edu",
     templateKey: "payment_refunded",
     variables: {
       studentName: linkedIssuance?.recipient_name ?? "Aarav Sharma",
-      certificateName: linkedIssuance?.achievement_title ?? "TGL Certificate",
+      certificateName: refundedCourse?.title ?? linkedIssuance?.achievement_title ?? "TGL Certificate",
       amountFormatted: formatInrFromPaise(order.amount_paise),
       refundId: rpRefund.refundId,
       reason: params.reason,
@@ -1600,6 +1898,7 @@ export async function approveInternshipApplication(params: {
   applicationId: string;
   adminId: string;
   mentorNotes?: string;
+  finalScoreLabel?: string;
 }): Promise<{ application?: InternshipApplicationRecord; error?: string }> {
   const now = new Date().toISOString();
   if (isSupabaseConfigured()) {
@@ -1612,6 +1911,8 @@ export async function approveInternshipApplication(params: {
         mentor_approved: true,
         mentor_approved_by: params.adminId,
         mentor_notes: params.mentorNotes ?? "Approved by TGL mentor/admin.",
+        final_evaluation_notes: params.mentorNotes ?? "All assigned internship tasks and final evaluation approved.",
+        final_score_label: params.finalScoreLabel ?? "Pass (Mentor Approved)",
         completed_at: now,
         updated_at: now,
       })
@@ -1639,15 +1940,31 @@ export async function approveInternshipApplication(params: {
   const store = getMemoryStore();
   const app = store.applications.find((a) => a.id === params.applicationId);
   if (!app) return { error: "Internship application not found." };
+
+  const internship = store.internships.find((i) => i.id === app.internship_id);
+  const tasks = internship?.tasks ?? [];
+  const taskStatus = checkAllInternshipTasksApproved({
+    tasks,
+    submissions: app.task_submissions ?? [],
+  });
+  if (tasks.length > 0 && !taskStatus.readyForFinalApproval) {
+    return {
+      error: `All internship tasks must be approved before final completion approval. Pending tasks: ${taskStatus.pendingTaskTitles.join(", ")}.`,
+    };
+  }
+
   app.status = "completed";
   app.assessment_passed = true;
   app.mentor_approved = true;
   app.mentor_approved_by = params.adminId;
   app.mentor_notes = params.mentorNotes ?? "Approved by TGL mentor/admin.";
+  app.final_evaluation_notes =
+    params.mentorNotes ?? "All assigned internship tasks and final evaluation approved.";
+  app.final_score_label = params.finalScoreLabel ?? "Pass (Mentor Approved)";
   app.completed_at = now;
   app.updated_at = now;
 
-  const title = store.internships.find((i) => i.id === app.internship_id)?.title ?? "TGL Internship";
+  const title = internship?.title ?? "TGL Internship";
   await sendAndLogLifecycleEmail({
     recipientEmail: app.applicant_email,
     templateKey: "internship_approved",
@@ -1659,6 +1976,226 @@ export async function approveInternshipApplication(params: {
     variables: { studentName: app.applicant_name, achievementTitle: title },
   });
   return { application: app };
+}
+
+export async function submitInternshipTaskWork(params: {
+  userId: string;
+  applicationId: string;
+  taskId: string;
+  submissionUrl: string;
+  summary: string;
+}): Promise<{ application?: InternshipApplicationRecord; error?: string }> {
+  const now = new Date().toISOString();
+  const store = getMemoryStore();
+  const apps = isSupabaseConfigured()
+    ? await listStudentApplications(params.userId)
+    : store.applications;
+  const app = apps.find((a) => a.id === params.applicationId && a.user_id === params.userId);
+  if (!app) return { error: "Internship application not found." };
+
+  const existingTasks = [...(app.task_submissions ?? [])];
+  const nextItem: InternshipTaskSubmission = {
+    taskId: params.taskId,
+    submissionUrl: params.submissionUrl.trim(),
+    summary: params.summary.trim(),
+    status: "submitted",
+    mentorFeedback: null,
+    scoreLabel: null,
+    submittedAt: now,
+    evaluatedAt: null,
+  };
+
+  const idx = existingTasks.findIndex((t) => t.taskId === params.taskId);
+  if (idx >= 0) {
+    existingTasks[idx] = nextItem;
+  } else {
+    existingTasks.push(nextItem);
+  }
+
+  if (isSupabaseConfigured()) {
+    const client = serviceClient();
+    const { data, error } = await client
+      .from("internship_applications")
+      .update({
+        task_submissions_json: existingTasks,
+        submission_url: params.submissionUrl.trim(),
+        submission_summary: params.summary.trim(),
+        updated_at: now,
+      })
+      .eq("id", params.applicationId)
+      .eq("user_id", params.userId)
+      .select("*")
+      .single();
+    if (error || !data) return { error: error?.message ?? "Could not submit internship task." };
+    return {
+      application: {
+        ...(data as InternshipApplicationRecord),
+        task_submissions: existingTasks,
+      },
+    };
+  }
+
+  app.task_submissions = existingTasks;
+  app.submission_url = app.submission_url ?? params.submissionUrl.trim();
+  app.submission_summary = app.submission_summary ?? params.summary.trim();
+  app.updated_at = now;
+  return { application: app };
+}
+
+export async function evaluateInternshipTaskSubmission(params: {
+  applicationId: string;
+  taskId: string;
+  decision: "approved" | "revision_required";
+  mentorFeedback: string;
+  scoreLabel?: string;
+}): Promise<{ application?: InternshipApplicationRecord; error?: string }> {
+  const now = new Date().toISOString();
+  const store = getMemoryStore();
+  const app = isSupabaseConfigured()
+    ? (await listAllApplicationsForAdmin()).find((a) => a.id === params.applicationId)
+    : store.applications.find((a) => a.id === params.applicationId);
+
+  if (!app) return { error: "Internship application not found." };
+
+  const taskSubmissions = [...(app.task_submissions ?? [])];
+  const target = taskSubmissions.find((t) => t.taskId === params.taskId);
+  if (!target) {
+    return { error: "Student has not submitted this task yet." };
+  }
+
+  target.status = params.decision;
+  target.mentorFeedback = params.mentorFeedback.trim();
+  target.scoreLabel = params.scoreLabel?.trim() || (params.decision === "approved" ? "Approved" : "Revision Required");
+  target.evaluatedAt = now;
+
+  if (isSupabaseConfigured()) {
+    const { data, error } = await serviceClient()
+      .from("internship_applications")
+      .update({ task_submissions_json: taskSubmissions, updated_at: now })
+      .eq("id", app.id)
+      .select("*")
+      .single();
+    if (error || !data) return { error: "Could not save task evaluation." };
+    return {
+      application: {
+        ...(data as InternshipApplicationRecord),
+        task_submissions: taskSubmissions,
+      },
+    };
+  }
+
+  app.task_submissions = taskSubmissions;
+  app.updated_at = now;
+  return { application: app };
+}
+
+export async function createAdminInternship(params: {
+  title: string;
+  track: string;
+  description: string;
+  durationWeeks: number;
+  requiredCourseSlug?: string | null;
+  requiredProjectSlug?: string | null;
+  requireProjectApproval: boolean;
+  tasks: Array<{ title: string; brief: string; deadlineLabel: string; deliverableFormat: string }>;
+}): Promise<{ internship?: InternshipRecord; error?: string }> {
+  const slug = params.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  const now = new Date().toISOString();
+  const tasks: InternshipTaskDefinition[] = params.tasks.map((t, i) => ({
+    id: `task-${slug.slice(0, 12)}-${i + 1}-${Date.now().toString(36)}`,
+    title: t.title.trim(),
+    brief: t.brief.trim(),
+    deadlineLabel: t.deadlineLabel.trim(),
+    deliverableFormat: t.deliverableFormat.trim(),
+  }));
+
+  const created: InternshipRecord = {
+    id: randomUUID(),
+    slug: `${slug}-${Date.now().toString(36)}`,
+    title: params.title.trim(),
+    track: params.track.trim(),
+    description: params.description.trim(),
+    duration_weeks: Math.max(1, params.durationWeeks),
+    required_course_slug: params.requiredCourseSlug || null,
+    required_project_slug: params.requiredProjectSlug || null,
+    require_project_approval: params.requireProjectApproval,
+    tasks,
+    is_published: true,
+    created_at: now,
+  };
+
+  if (isSupabaseConfigured()) {
+    try {
+      const { data } = await serviceClient()
+        .from("internships")
+        .insert({
+          id: created.id,
+          slug: created.slug,
+          title: created.title,
+          track: created.track,
+          description: created.description,
+          duration_weeks: created.duration_weeks,
+          required_course_slug: created.required_course_slug,
+          required_project_slug: created.required_project_slug,
+          require_project_approval: created.require_project_approval,
+          tasks_json: created.tasks,
+          is_published: true,
+        })
+        .select("*")
+        .single();
+      if (data) return { internship: data as InternshipRecord };
+    } catch {
+      // Fallback
+    }
+  }
+
+  getMemoryStore().internships.unshift(created);
+  return { internship: created };
+}
+
+export async function addInternshipTask(params: {
+  internshipId: string;
+  title: string;
+  brief: string;
+  deadlineLabel: string;
+  deliverableFormat: string;
+  requireProjectApproval?: boolean;
+}): Promise<{ internship?: InternshipRecord; error?: string }> {
+  const store = getMemoryStore();
+  const internship = store.internships.find((i) => i.id === params.internshipId);
+  if (!internship) return { error: "Internship programme not found." };
+
+  const newTask: InternshipTaskDefinition = {
+    id: `task-${Date.now().toString(36)}`,
+    title: params.title.trim(),
+    brief: params.brief.trim(),
+    deadlineLabel: params.deadlineLabel.trim(),
+    deliverableFormat: params.deliverableFormat.trim(),
+  };
+
+  internship.tasks = [...(internship.tasks ?? []), newTask];
+  if (typeof params.requireProjectApproval === "boolean") {
+    internship.require_project_approval = params.requireProjectApproval;
+  }
+
+  if (isSupabaseConfigured()) {
+    try {
+      await serviceClient()
+        .from("internships")
+        .update({
+          tasks_json: internship.tasks,
+          require_project_approval: internship.require_project_approval,
+        })
+        .eq("id", internship.id);
+    } catch {
+      // Fallback
+    }
+  }
+
+  return { internship };
 }
 
 export async function revokeCertificateWithReason(params: {

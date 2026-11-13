@@ -1,20 +1,9 @@
-import Link from "next/link";
-import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowUpRight, Check } from "lucide-react";
-import { Header } from "@/components/header";
-import { pathways } from "@/lib/pathways";
+import { notFound, redirect } from "next/navigation";
+import { findPathwayByParam } from "@/lib/learning-graph";
 
-const milestones = [
-  { title: "Get oriented", detail: "Learn the core ideas and vocabulary. Use beginner-friendly, publicly available resources to build context." },
-  { title: "Practice the fundamentals", detail: "Work through small exercises. Focus on understanding the choices behind each result, not just following steps." },
-  { title: "Make a small thing", detail: "Choose a practical question and turn what you have learned into a first project. Keep the scope achievable." },
-  { title: "Reflect and iterate", detail: "Document your approach, seek feedback, and improve your work. The review process is part of the learning." },
-];
-
-export default async function PathwayDetailPage({ params }: { params: Promise<{ number: string }> }) {
+export default async function LegacyPathwayDetailPage({ params }: { params: Promise<{ number: string }> }) {
   const { number } = await params;
-  const pathway = pathways.find((item) => item.number === number);
+  const pathway = findPathwayByParam(number);
   if (!pathway) notFound();
-
-  return <main className="min-h-screen bg-[#090909] text-[#f4f3ef]"><Header /><section className="px-6 pb-24 pt-36 md:px-12 md:pb-32 md:pt-48 lg:px-20"><div className="mx-auto max-w-[1100px]"><Link href="/learning-pathways" className="mb-12 inline-flex items-center gap-2 text-xs text-white/45 transition-colors hover:text-white"><ArrowLeft size={13} /> All pathways</Link><div className="grid gap-10 border-b border-white/10 pb-12 md:grid-cols-[1.2fr_.8fr] md:items-end"><div><p className="text-[10px] uppercase tracking-[0.2em] text-white/40">Pathway {pathway.number} / {pathway.category}</p><h1 className="mt-6 max-w-3xl text-[clamp(3rem,7vw,6.4rem)] font-medium leading-[0.88] tracking-[-0.08em]">{pathway.title}</h1><p className="mt-6 max-w-xl text-sm leading-7 text-white/50">{pathway.description}</p></div><div className="rounded-2xl border border-white/10 bg-white/[0.035] p-5"><p className="text-[9px] uppercase tracking-[0.17em] text-white/35">A starting point</p><div className="mt-4 flex flex-wrap gap-2">{pathway.skills.map((skill) => <span key={skill} className="rounded-full bg-white/[0.07] px-3 py-2 text-[10px] text-white/65">{skill}</span>)}</div><p className="mt-5 text-xs leading-5 text-white/40">No prior experience assumed. Bring curiosity, a browser, and the willingness to practice.</p></div></div><div className="grid gap-16 pt-12 md:grid-cols-[.7fr_1.3fr] md:pt-16"><div><p className="font-mono text-[10px] text-white/35">THE LEARNING ARC</p><h2 className="mt-5 text-3xl font-medium tracking-[-0.06em]">Small steps.<br /><span className="font-serif italic text-[#b9a9d6]">Real progress.</span></h2><p className="mt-5 text-xs leading-6 text-white/40">An adaptable framework for self-guided learning. Specific curriculum and program availability will be published when established.</p></div><ol className="border-l border-white/10">{milestones.map((milestone, index) => <li key={milestone.title} className="relative pb-9 pl-7 last:pb-0"><span className="absolute -left-[5px] top-1 size-[9px] rounded-full border border-[#b9a9d6] bg-[#090909]" /><span className="font-mono text-[9px] text-white/35">0{index + 1}</span><h3 className="mt-2 text-lg font-medium tracking-[-0.04em]">{milestone.title}</h3><p className="mt-2 max-w-xl text-xs leading-6 text-white/45">{milestone.detail}</p></li>)}</ol></div><div className="mt-16 flex flex-col gap-6 rounded-[24px] border border-white/10 bg-white/[0.035] p-6 md:mt-20 md:flex-row md:items-center md:justify-between md:p-9"><div><p className="text-[9px] uppercase tracking-[0.17em] text-white/35">Next, make it yours</p><h2 className="mt-3 text-2xl font-medium tracking-[-0.05em]">Learning sticks when you build.</h2><p className="mt-2 max-w-lg text-xs leading-5 text-white/45">Explore the other directions and find a question worth exploring.</p></div><Link href="/learning-pathways" className="inline-flex shrink-0 items-center gap-3 rounded-full bg-[#f4f3ef] px-5 py-3 text-xs font-medium text-[#111] transition-transform hover:-translate-y-0.5">Browse pathways <ArrowUpRight size={14} /></Link></div></div></section><footer className="flex items-center justify-center gap-2 border-t border-white/10 px-6 py-7 text-[10px] text-white/35"><Check size={12} /> Learn. Build. Grow.</footer></main>;
+  redirect(`/pathways/${pathway.slug}`);
 }

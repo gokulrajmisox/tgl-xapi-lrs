@@ -35,11 +35,14 @@ type Product = {
 type Order = {
   id: string;
   user_id: string;
-  product_id: string;
+  order_kind?: "certificate" | "course_enrollment";
+  product_id: string | null;
+  course_id?: string | null;
   razorpay_order_id: string;
   amount_paise: number;
   order_status: string;
   payment_mode: string;
+  metadata?: Record<string, unknown>;
   created_at: string;
 };
 
@@ -68,6 +71,11 @@ type Issuance = {
   issued_at: string | null;
 };
 
+import type {
+  InternshipTaskDefinition,
+  InternshipTaskSubmission,
+} from "@/lib/internships/eligibility";
+
 type Application = {
   id: string;
   user_id: string;
@@ -76,23 +84,36 @@ type Application = {
   applicant_email: string;
   status: string;
   submission_url: string | null;
+  task_submissions?: InternshipTaskSubmission[];
+  final_evaluation_notes?: string | null;
+  final_score_label?: string | null;
   mentor_approved: boolean;
   mentor_notes: string | null;
 };
 
 type Internship = {
   id: string;
+  slug: string;
   title: string;
+  track: string;
+  description: string;
+  duration_weeks: number;
+  required_course_slug?: string | null;
+  required_project_slug?: string | null;
+  require_project_approval?: boolean;
+  tasks?: InternshipTaskDefinition[];
 };
 
 type TabKey = "products" | "payments" | "certificates" | "emails";
 
 export function AdminCertificationsPanel({
   isSandbox,
+  initialTab = "products",
 }: {
   isSandbox: boolean;
+  initialTab?: TabKey;
 }) {
-  const [tab, setTab] = useState<TabKey>("products");
+  const [tab, setTab] = useState<TabKey>(initialTab);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -112,6 +133,18 @@ export function AdminCertificationsPanel({
   const [newDesc, setNewDesc] = useState("");
   const [newType, setNewType] = useState<CertificateType>("special_achievement");
   const [newRupees, setNewRupees] = useState("499");
+
+  const [taskFeedbacks, setTaskFeedbacks] = useState<Record<string, string>>({});
+  const [taskScores, setTaskScores] = useState<Record<string, string>>({});
+  const [finalScores, setFinalScores] = useState<Record<string, string>>({});
+  const [newIntTitle, setNewIntTitle] = useState("");
+  const [newIntTrack, setNewIntTrack] = useState("Engineering");
+  const [newIntDesc, setNewIntDesc] = useState("");
+  const [newIntWeeks, setNewIntWeeks] = useState("6");
+  const [newIntCourseSlug, setNewIntCourseSlug] = useState("web-architecture-systems");
+  const [newIntTaskTitle, setNewIntTaskTitle] = useState("");
+  const [newIntTaskBrief, setNewIntTaskBrief] = useState("");
+  const [newIntTaskDeadline, setNewIntTaskDeadline] = useState("Week 2");
 
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [refundReasons, setRefundReasons] = useState<Record<string, string>>({});
@@ -252,6 +285,85 @@ export function AdminCertificationsPanel({
     }
   };
 
+  const handleEvaluateTask = async (
+    applicationId: string,
+    taskId: string,
+    decision: "approved" | "revision_required",
+  ) => {
+    const key = `${applicationId}:${taskId}`;
+    const mentorFeedback =
+      taskFeedbacks[key]?.trim() ||
+      (decision === "approved"
+        ? "Task deliverable verified and approved."
+        : "Please refine task deliverables and resubmit.");
+    const scoreLabel = taskScores[key]?.trim() || (decision === "approved" ? "Meets Rubric" : "Needs Revision");
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await fetch("/api/admin/certifications/issuances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "evaluate_task",
+          applicationId,
+          taskId,
+          decision,
+          mentorFeedback,
+          scoreLabel,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Task evaluation failed.");
+      setNotice(`Internship task marked ${decision.replaceAll("_", " ")}.`);
+      await loadAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Task evaluation failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCreateInternship = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await fetch("/api/admin/certifications/issuances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create_internship",
+          title: newIntTitle,
+          track: newIntTrack,
+          description: newIntDesc,
+          durationWeeks: Number(newIntWeeks) || 6,
+          requiredCourseSlug: newIntCourseSlug || null,
+          requiredProjectSlug: null,
+          requireProjectApproval: true,
+          initialTaskTitle: newIntTaskTitle,
+          initialTaskBrief: newIntTaskBrief,
+          initialTaskDeadline: newIntTaskDeadline,
+          initialTaskFormat: "GitHub URL + Verification Notes",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not create internship programme.");
+      setNotice(`Created internship "${data.internship.title}".`);
+      setNewIntTitle("");
+      setNewIntDesc("");
+      setNewIntTaskTitle("");
+      setNewIntTaskBrief("");
+      await loadAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create internship programme.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleApproveInternship = async (applicationId: string) => {
     setBusy(true);
     setError("");
@@ -263,7 +375,8 @@ export function AdminCertificationsPanel({
         body: JSON.stringify({
           action: "approve_internship",
           applicationId,
-          mentorNotes: "Completion and project submission approved by admin.",
+          mentorNotes: "All assigned tasks verified and final internship completion approved.",
+          finalScoreLabel: finalScores[applicationId]?.trim() || "Distinction / Verified",
         }),
       });
       const data = await res.json();
@@ -397,10 +510,10 @@ export function AdminCertificationsPanel({
         </div>
         <div className="flex items-center gap-3">
           <Link
-            href="/admin/lrs"
+            href="/courses"
             className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/80 hover:border-white/35"
           >
-            xAPI LRS Admin
+            Course Catalog
           </Link>
           <button
             type="button"
@@ -606,6 +719,10 @@ export function AdminCertificationsPanel({
             {filteredPayments.map((pay) => {
               const order = orders.find((o) => o.id === pay.order_id);
               const prod = products.find((p) => p.id === order?.product_id);
+              const isCourseOrder = order?.order_kind === "course_enrollment";
+              const itemTitle = isCourseOrder
+                ? `Course Enrollment: ${String(order?.metadata?.courseTitle ?? "Paid Course")}`
+                : (prod?.name ?? "Certificate Payment");
               return (
                 <article
                   key={pay.id}
@@ -613,7 +730,7 @@ export function AdminCertificationsPanel({
                 >
                   <div className="space-y-1 text-xs">
                     <p className="font-medium text-[#f4f3ef]">
-                      {prod?.name ?? "Certificate Payment"} ·{" "}
+                      {itemTitle} ·{" "}
                       <span className="font-mono tabular-nums">
                         {order ? formatInrFromPaise(order.amount_paise) : "INR"}
                       </span>
@@ -662,53 +779,273 @@ export function AdminCertificationsPanel({
       )}
 
       {tab === "certificates" && (
-        <div className="mt-8 grid gap-8 lg:grid-cols-2">
-          <section className="space-y-4">
-            <h2 className="text-lg font-medium">Internship completion &amp; eligibility review</h2>
-            <div className="space-y-3">
-              {applications.map((app) => {
-                const track = internships.find((i) => i.id === app.internship_id);
-                return (
-                  <article
-                    key={app.id}
-                    className="rounded-2xl border border-white/10 bg-[#111111] p-5 text-xs"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium text-[#f4f3ef]">
-                          {app.applicant_name} ({app.applicant_email})
-                        </p>
-                        <p className="mt-1 text-white/55">{track?.title ?? "Internship Track"}</p>
+        <div className="mt-8 space-y-10">
+          <div className="grid gap-8 lg:grid-cols-[1.2fr_.8fr]">
+            <section className="space-y-4">
+              <h2 className="text-lg font-medium">
+                Internship tasks, final evaluation &amp; completion approval ({applications.length})
+              </h2>
+              <div className="space-y-4">
+                {applications.map((app) => {
+                  const track = internships.find((i) => i.id === app.internship_id);
+                  const tasks = track?.tasks ?? [];
+                  const taskSubs = app.task_submissions ?? [];
+
+                  return (
+                    <article
+                      key={app.id}
+                      className="rounded-2xl border border-white/10 bg-[#111111] p-5 text-xs"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-[#f4f3ef]">
+                            {app.applicant_name} ({app.applicant_email})
+                          </p>
+                          <p className="mt-1 text-white/55">{track?.title ?? "Internship Track"}</p>
+                        </div>
+                        <span
+                          className={`capitalize font-medium ${
+                            app.mentor_approved ? "text-emerald-300" : "text-[#b9a9d6]"
+                          }`}
+                        >
+                          {app.status.replaceAll("_", " ")}
+                        </span>
                       </div>
-                      <span className="capitalize text-[#b9a9d6]">
-                        {app.status.replaceAll("_", " ")}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-white/45">
-                      Submission: {app.submission_url ?? "Not yet submitted"}
-                    </p>
-                    <p className="mt-1 text-white/45">
-                      Mentor approval: {app.mentor_approved ? "Approved" : "Pending"}
-                    </p>
-                    {!app.mentor_approved && (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void handleApproveInternship(app.id)}
-                        className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111]"
-                      >
-                        <ShieldCheck size={13} /> Approve completion &amp; eligibility
-                      </button>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          </section>
+
+                      {tasks.length > 0 && (
+                        <div className="mt-4 space-y-2.5 border-t border-white/10 pt-3">
+                          <p className="text-[10px] uppercase tracking-[0.14em] text-white/45">
+                            Assigned Task Submissions
+                          </p>
+                          {tasks.map((task) => {
+                            const sub = taskSubs.find((s) => s.taskId === task.id);
+                            const key = `${app.id}:${task.id}`;
+                            return (
+                              <div
+                                key={task.id}
+                                className="rounded-xl border border-white/10 bg-black/25 p-3.5"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="font-medium text-[#f4f3ef]">{task.title}</p>
+                                  <span
+                                    className={`capitalize ${
+                                      sub?.status === "approved"
+                                        ? "text-emerald-300"
+                                        : sub?.status === "revision_required"
+                                          ? "text-amber-300"
+                                          : sub?.status === "submitted"
+                                            ? "text-[#b9a9d6]"
+                                            : "text-white/40"
+                                    }`}
+                                  >
+                                    {sub ? sub.status.replaceAll("_", " ") : "Not submitted"}
+                                  </span>
+                                </div>
+                                {sub && (
+                                  <div className="mt-2 space-y-2">
+                                    <a
+                                      href={sub.submissionUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="block font-mono text-[11px] text-[#b9a9d6] underline"
+                                    >
+                                      {sub.submissionUrl}
+                                    </a>
+                                    <p className="text-white/65">{sub.summary}</p>
+                                    <div className="grid gap-2 pt-1 sm:grid-cols-2">
+                                      <input
+                                        type="text"
+                                        placeholder="Mentor feedback..."
+                                        value={taskFeedbacks[key] ?? sub.mentorFeedback ?? ""}
+                                        onChange={(e) =>
+                                          setTaskFeedbacks((prev) => ({
+                                            ...prev,
+                                            [key]: e.target.value,
+                                          }))
+                                        }
+                                        className="h-8 rounded-lg border border-white/10 bg-[#151515] px-2.5 text-[11px] text-white"
+                                      />
+                                      <input
+                                        type="text"
+                                        placeholder="Score label (e.g. Exceeds Expectations)"
+                                        value={taskScores[key] ?? sub.scoreLabel ?? ""}
+                                        onChange={(e) =>
+                                          setTaskScores((prev) => ({
+                                            ...prev,
+                                            [key]: e.target.value,
+                                          }))
+                                        }
+                                        className="h-8 rounded-lg border border-white/10 bg-[#151515] px-2.5 text-[11px] text-white"
+                                      />
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      <button
+                                        type="button"
+                                        disabled={busy}
+                                        onClick={() => void handleEvaluateTask(app.id, task.id, "approved")}
+                                        className="rounded-full bg-[#f4f3ef] px-3 py-1 text-[11px] font-medium text-[#111111]"
+                                      >
+                                        Approve task
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={busy}
+                                        onClick={() =>
+                                          void handleEvaluateTask(app.id, task.id, "revision_required")
+                                        }
+                                        className="rounded-full border border-amber-300/35 px-3 py-1 text-[11px] text-amber-200"
+                                      >
+                                        Request revision
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {!app.mentor_approved ? (
+                        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
+                          <input
+                            type="text"
+                            placeholder="Final grade / distinction label..."
+                            value={finalScores[app.id] ?? ""}
+                            onChange={(e) =>
+                              setFinalScores((prev) => ({ ...prev, [app.id]: e.target.value }))
+                            }
+                            className="h-9 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 text-xs text-white"
+                          />
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void handleApproveInternship(app.id)}
+                            className="inline-flex items-center gap-2 rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111]"
+                          >
+                            <ShieldCheck size={13} /> Approve final internship completion
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-emerald-300">
+                          Final evaluation approved ({app.final_score_label || "Verified"})
+                        </p>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* Create Internship Programme + Tasks */}
+            <form
+              onSubmit={handleCreateInternship}
+              className="self-start rounded-2xl border border-white/10 bg-[#111111] p-6 text-xs"
+            >
+              <h2 className="flex items-center gap-2 text-base font-medium">
+                <Plus size={15} className="text-[#b9a9d6]" /> Create internship programme
+              </h2>
+              <div className="mt-4 space-y-3">
+                <label className="block text-white/60">
+                  Programme title
+                  <input
+                    required
+                    minLength={4}
+                    value={newIntTitle}
+                    onChange={(e) => setNewIntTitle(e.target.value)}
+                    placeholder="e.g. Cloud Reliability Engineering Internship"
+                    className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block text-white/60">
+                    Track
+                    <input
+                      required
+                      value={newIntTrack}
+                      onChange={(e) => setNewIntTrack(e.target.value)}
+                      className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                    />
+                  </label>
+                  <label className="block text-white/60">
+                    Duration (weeks)
+                    <input
+                      type="number"
+                      min={1}
+                      max={26}
+                      value={newIntWeeks}
+                      onChange={(e) => setNewIntWeeks(e.target.value)}
+                      className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                    />
+                  </label>
+                </div>
+                <label className="block text-white/60">
+                  Prerequisite course slug
+                  <input
+                    value={newIntCourseSlug}
+                    onChange={(e) => setNewIntCourseSlug(e.target.value)}
+                    placeholder="web-architecture-systems"
+                    className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                  />
+                </label>
+                <label className="block text-white/60">
+                  Description
+                  <textarea
+                    required
+                    minLength={10}
+                    rows={2}
+                    value={newIntDesc}
+                    onChange={(e) => setNewIntDesc(e.target.value)}
+                    placeholder="Practical sprint focus and mentor expectations..."
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white"
+                  />
+                </label>
+                <label className="block text-white/60">
+                  Initial assigned task title
+                  <input
+                    required
+                    minLength={4}
+                    value={newIntTaskTitle}
+                    onChange={(e) => setNewIntTaskTitle(e.target.value)}
+                    placeholder="e.g. Task 1: Load & Failover Benchmark"
+                    className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                  />
+                </label>
+                <label className="block text-white/60">
+                  Task brief &amp; deliverable expectation
+                  <textarea
+                    required
+                    minLength={8}
+                    rows={2}
+                    value={newIntTaskBrief}
+                    onChange={(e) => setNewIntTaskBrief(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white"
+                  />
+                </label>
+                <label className="block text-white/60">
+                  Deadline label
+                  <input
+                    required
+                    value={newIntTaskDeadline}
+                    onChange={(e) => setNewIntTaskDeadline(e.target.value)}
+                    placeholder="Week 2"
+                    className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="w-full rounded-full bg-[#f4f3ef] px-4 py-2.5 text-xs font-medium text-[#111111]"
+                >
+                  Publish internship track
+                </button>
+              </div>
+            </form>
+          </div>
 
           <section className="space-y-4">
-            <h2 className="text-lg font-medium">Issued &amp; revoked certificates</h2>
-            <div className="space-y-3">
+            <h2 className="text-lg font-medium">Issued &amp; revoked certificates ({issuances.length})</h2>
+            <div className="grid gap-3 md:grid-cols-2">
               {issuances.map((cert) => (
                 <article
                   key={cert.id}

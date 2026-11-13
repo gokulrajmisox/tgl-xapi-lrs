@@ -1,24 +1,62 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createCertificationOrder, resolveCurrentActor } from "@/lib/certifications/store";
+import {
+  createCertificationOrder,
+  createCourseEnrollmentOrder,
+  resolveCurrentActor,
+} from "@/lib/certifications/store";
 
-const CreateOrderSchema = z.object({
+const CertificateOrderSchema = z.object({
+  orderKind: z.literal("certificate").optional(),
   productId: z.string().uuid(),
   internshipApplicationId: z.string().uuid().nullable().optional(),
 });
 
+const CourseOrderSchema = z.object({
+  orderKind: z.literal("course_enrollment"),
+  courseId: z.string().trim().min(2).max(120),
+});
+
+const CreateOrderSchema = z.union([CourseOrderSchema, CertificateOrderSchema]);
+
 export async function POST(request: Request) {
   const actor = await resolveCurrentActor();
   if (!actor.user) {
-    return NextResponse.json({ error: "Sign in required to initiate checkout." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Sign in required to initiate checkout." },
+      { status: 401 },
+    );
   }
 
-  const body = CreateOrderSchema.safeParse(await request.json().catch(() => null));
+  const rawBody = await request.json().catch(() => null);
+  const body = CreateOrderSchema.safeParse(rawBody);
   if (!body.success) {
     return NextResponse.json({ error: "Invalid order request." }, { status: 400 });
   }
 
   try {
+    if (body.data.orderKind === "course_enrollment") {
+      const result = await createCourseEnrollmentOrder({
+        user: actor.user,
+        courseId: body.data.courseId,
+      });
+      if (result.error || !result.order) {
+        return NextResponse.json(
+          { error: result.error ?? "Unable to create course order." },
+          { status: result.status ?? 400 },
+        );
+      }
+      return NextResponse.json(
+        {
+          order: result.order,
+          keyId: result.keyId ?? null,
+          isSimulated: Boolean(result.isSimulated),
+          courseTitle: result.courseTitle ?? null,
+        },
+        { status: 201, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
     const result = await createCertificationOrder({
       user: actor.user,
       productId: body.data.productId,
