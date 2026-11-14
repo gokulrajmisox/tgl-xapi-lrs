@@ -12,7 +12,7 @@ const primaryLinks = [
   { label: "Programmes", href: "/programmes" },
   { label: "Projects", href: "/explore" },
   { label: "Internships", href: "/internships" },
-  { label: "My Home", href: "/learn" },
+  { label: "My Learning", href: "/learn" },
 ];
 
 const wheelDestinations = [
@@ -32,7 +32,7 @@ const wheelDestinations = [
     summary: "Auto-activated with your Programme enrolment—complete sprint tasks with mentor review.",
   },
   {
-    label: "My Home",
+    label: "My Learning",
     href: "/learn",
     summary: "Track your 6-stage journey from Enrolled through Certificate Issued.",
   },

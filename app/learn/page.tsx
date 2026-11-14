@@ -49,7 +49,7 @@ export default async function StudentHomePage() {
       role="student"
       title={`Welcome back, ${learnerName}!`}
       subtitle="See what you have finished and what to do next across your courses, projects, internships, and certificates."
-      primaryAction={{ label: "Explore Courses", href: "/courses" }}
+      primaryAction={{ label: "Browse Programmes", href: "/programmes" }}
     >
       <StudentHomeClient
         learnerName={learnerName}

@@ -18,6 +18,12 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const router = useRouter();
+  const getSafeNext = () => {
+    const requestedNext = new URLSearchParams(window.location.search).get("next");
+    return requestedNext?.startsWith("/") && !requestedNext.startsWith("//")
+      ? requestedNext
+      : "/learn";
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -37,10 +43,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
           if (authError.status === 429) throw new Error("Too many attempts. Please wait and try again.");
           throw new Error("Invalid email or password.");
         }
-        const requestedNext = new URLSearchParams(window.location.search).get("next");
-        const next = requestedNext?.startsWith("/") && !requestedNext.startsWith("//")
-          ? requestedNext
-          : "/learn";
+        const next = getSafeNext();
         router.push(next);
         router.refresh();
       } else if (mode === "sign-up") {
@@ -48,7 +51,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
           email,
           password,
           options: {
-            emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ?? `${window.location.origin}/auth/callback`,
+            emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ?? `${window.location.origin}/auth/callback?next=${encodeURIComponent(getSafeNext())}`,
             ...(name.trim() ? { data: { display_name: name.trim() } } : {}),
           },
         });
@@ -58,7 +61,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
           if (authError.status === 429) throw new Error("Too many attempts. Please wait and try again.");
           throw new Error("Unable to create your account. Please try again.");
         }
-        router.push("/auth/sign-up-success");
+        router.push(`/auth/sign-up-success?next=${encodeURIComponent(getSafeNext())}`);
       } else if (mode === "forgot-password") {
         const { error: authError } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: `${window.location.origin}/auth/reset-password`,
@@ -96,7 +99,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
       {error && <p role="alert" className="text-xs leading-5 text-rose-300">{error}</p>}{message && <p role="status" className="text-xs leading-5 text-[#c9bce0]">{message}</p>}
       <button type="submit" disabled={busy} className="mt-2 h-12 rounded-full bg-[#f4f3ef] text-sm font-medium text-[#111] transition hover:bg-white disabled:cursor-wait disabled:opacity-60">{busy ? "Please wait…" : mode === "login" ? "Sign in" : mode === "sign-up" ? "Create account" : mode === "forgot-password" ? "Send reset link" : "Update password"}</button>
     </form>
-    <div className="mt-6 text-center text-xs text-white/45">{mode === "login" ? <>New to TGL? <Link href="/auth/sign-up" className="text-white underline underline-offset-4">Create an account</Link></> : mode === "sign-up" ? <>Already registered? <Link href="/auth/login" className="text-white underline underline-offset-4">Sign in</Link></> : <Link href="/auth/login" className="text-white underline underline-offset-4">Back to sign in</Link>}</div>
+    <div className="mt-6 text-center text-xs text-white/45">{mode === "login" ? <>New to TGL? <Link href={`/auth/sign-up?next=${encodeURIComponent(typeof window !== "undefined" ? getSafeNext() : "/learn")}`} className="text-white underline underline-offset-4">Create an account</Link></> : mode === "sign-up" ? <>Already registered? <Link href={`/auth/login?next=${encodeURIComponent(typeof window !== "undefined" ? getSafeNext() : "/learn")}`} className="text-white underline underline-offset-4">Sign in</Link></> : <Link href="/auth/login" className="text-white underline underline-offset-4">Back to sign in</Link>}</div>
     <p className="mt-8 border-t border-white/[0.08] pt-5 text-[11px] leading-5 text-white/50">Your enrolled courses, project submissions, mentor feedback, and internship progress stay saved to your student account.</p>
   </section>;
 }

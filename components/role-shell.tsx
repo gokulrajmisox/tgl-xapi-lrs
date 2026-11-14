@@ -29,7 +29,7 @@ type NavItem = {
 };
 
 const STUDENT_NAV: NavItem[] = [
-  { label: "My Home", href: "/learn", icon: Home },
+  { label: "My Learning", href: "/learn", icon: Home },
   { label: "Explore Programmes", href: "/programmes", icon: BookOpen },
   { label: "Projects", href: "/explore", icon: FolderGit2 },
   { label: "Internships", href: "/internships", icon: Briefcase },
