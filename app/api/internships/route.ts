@@ -16,7 +16,7 @@ import { evaluateInternshipEligibility } from "@/lib/internships/eligibility";
 const ApplySchema = z.object({
   action: z.literal("apply"),
   internshipId: z.string().uuid(),
-  applicantName: z.string().trim().min(2).max(120),
+  applicantName: z.string().trim().min(2).max(120).optional(),
   applicantEmail: z.string().trim().email().max(180),
   motivation: z.string().trim().min(10).max(2000),
   portfolioUrl: z.string().trim().url().optional().or(z.literal("")),
@@ -170,10 +170,18 @@ export async function POST(request: Request) {
     );
   }
 
+  const applicantName = parsed.data.applicantName?.trim() || actor.user.name.trim();
+  if (!applicantName) {
+    return NextResponse.json(
+      { error: "Please provide your full name before applying so it can appear on your learner record." },
+      { status: 422 },
+    );
+  }
+
   const result = await applyForInternship({
     userId: actor.user.id,
     internshipId: parsed.data.internshipId,
-    applicantName: parsed.data.applicantName,
+    applicantName,
     applicantEmail: parsed.data.applicantEmail,
     motivation: parsed.data.motivation,
     portfolioUrl: parsed.data.portfolioUrl || undefined,

@@ -37,7 +37,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
           if (authError.status === 429) throw new Error("Too many attempts. Please wait and try again.");
           throw new Error("Invalid email or password.");
         }
-        router.push("/learn");
+        const requestedNext = new URLSearchParams(window.location.search).get("next");
+        const next = requestedNext?.startsWith("/") && !requestedNext.startsWith("//")
+          ? requestedNext
+          : "/learn";
+        router.push(next);
         router.refresh();
       } else if (mode === "sign-up") {
         const { error: authError } = await supabase.auth.signUp({
@@ -45,7 +49,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
           password,
           options: {
             emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ?? `${window.location.origin}/auth/callback`,
-            data: { display_name: name.trim() },
+            ...(name.trim() ? { data: { display_name: name.trim() } } : {}),
           },
         });
         if (authError) {
@@ -84,7 +88,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
     <h1 className="mt-4 text-4xl font-medium tracking-[-0.07em]">{title}</h1>
     <p className="mt-3 text-sm leading-6 text-white/50">{description}</p>
     <form className="mt-8 flex flex-col gap-4" onSubmit={handleSubmit}>
-      {mode === "sign-up" && <label className="flex flex-col gap-2 text-xs text-white/55">Your name<input autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={80} className="h-12 rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none transition focus:border-[#b9a9d6]/60" /></label>}
+      {mode === "sign-up" && <label className="flex flex-col gap-2 text-xs text-white/55">Your name <span className="text-white/35">optional for now — we’ll ask when a claim needs it</span><input autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} className="h-12 rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none transition focus:border-[#b9a9d6]/60" /></label>}
       {needsEmail && <label className="flex flex-col gap-2 text-xs text-white/55">Email address<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required className="h-12 rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none transition focus:border-[#b9a9d6]/60" /></label>}
       {needsPassword && <label className="flex flex-col gap-2 text-xs text-white/55">{mode === "reset-password" ? "New password" : "Password"}<span className="relative"><input type={showPassword ? "text" : "password"} autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 pr-12 text-sm text-white outline-none transition focus:border-[#b9a9d6]/60" /><button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-white/45" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></span></label>}
       {(mode === "sign-up" || mode === "reset-password") && <label className="flex flex-col gap-2 text-xs text-white/55">Confirm password<input type="password" autoComplete="new-password" value={passwordAgain} onChange={(event) => setPasswordAgain(event.target.value)} minLength={8} required className="h-12 rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none transition focus:border-[#b9a9d6]/60" /></label>}

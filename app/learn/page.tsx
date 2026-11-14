@@ -30,7 +30,7 @@ export default async function StudentHomePage() {
   }
 
   const actorId = user?.id ?? DEMO_STUDENT_ID;
-  const learnerName = user?.name ?? "Aarav Sharma";
+  const learnerName = user?.name?.trim() || "Learner";
   const workspace = getLearnerSnapshot(actorId);
 
   const [courses, internships, applications, orders, payments, issuances, products] =

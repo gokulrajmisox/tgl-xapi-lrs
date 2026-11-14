@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowUpRight, Compass, Menu, X } from "lucide-react";
 import Magnet from "@/components/react-bits/Magnet";
 import MenuOptionWheel from "@/components/react-bits/MenuOptionWheel";
+import { createClient } from "@/lib/supabase/client";
 
 const primaryLinks = [
   { label: "Programmes", href: "/programmes" },
@@ -61,6 +62,7 @@ export function Header() {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [wheelIndex, setWheelIndex] = useState(0);
+  const [signedIn, setSignedIn] = useState(false);
 
   const selectedDestination = wheelDestinations[wheelIndex] ?? wheelDestinations[0];
 
@@ -72,6 +74,15 @@ export function Header() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [menuOpen]);
+
+  useEffect(() => {
+    const client = createClient();
+    void client.auth.getUser().then(({ data }) => setSignedIn(Boolean(data.user)));
+    const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
+      setSignedIn(Boolean(session?.user));
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   return (
     <header className="tgl-nav fixed inset-x-0 top-0 z-50 px-4 pt-4 md:px-8">
@@ -106,10 +117,10 @@ export function Header() {
 
         <div className="hidden shrink-0 items-center gap-2.5 md:flex">
           <Link
-            href="/auth/login"
+            href={signedIn ? "/learn" : "/auth/login"}
             className="inline-flex min-h-11 shrink-0 items-center whitespace-nowrap px-3 py-2 text-xs text-white/80 transition-colors hover:text-white"
           >
-            Sign in
+            {signedIn ? "Dashboard" : "Sign in"}
           </Link>
           <Magnet padding={64} magnetStrength={2.8} maxOffset={8} scale={1.03}>
             <Link
@@ -254,11 +265,11 @@ export function Header() {
 
               <div className="grid grid-cols-3 gap-2 text-center text-xs">
                 <Link
-                  href="/auth/login"
+                  href={signedIn ? "/learn" : "/auth/login"}
                   onClick={() => setMenuOpen(false)}
                   className="flex min-h-11 items-center justify-center rounded-xl border border-white/10 text-white/85 hover:border-white/30"
                 >
-                  Sign in
+                  {signedIn ? "Dashboard" : "Sign in"}
                 </Link>
                 <Link
                   href="/mentor"

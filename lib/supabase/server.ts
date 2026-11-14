@@ -14,7 +14,10 @@ export async function createClient(): Promise<SupabaseClient> {
     url,
     key,
     {
-      cookieOptions: { secure: process.env.NODE_ENV === "production" },
+      cookieOptions: {
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      },
       cookies: {
         getAll: () => cookieStore.getAll(),
         setAll(cookiesToSet) {

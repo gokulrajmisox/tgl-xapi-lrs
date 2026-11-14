@@ -96,6 +96,7 @@ export function InternshipsWorkspace() {
   const [user, setUser] = useState<Actor>(null);
   const [selectedInternshipId, setSelectedInternshipId] = useState<string>("");
   const [motivation, setMotivation] = useState("");
+  const [fullName, setFullName] = useState("");
   const [portfolioUrl, setPortfolioUrl] = useState("");
   const [taskUrls, setTaskUrls] = useState<Record<string, string>>({});
   const [taskSummaries, setTaskSummaries] = useState<Record<string, string>>({});
@@ -132,13 +133,25 @@ export function InternshipsWorkspace() {
     setError("");
     setNotice("");
     try {
+      if (!user.name && !fullName.trim()) {
+        setError("Please enter your full name before applying.");
+        return;
+      }
+      if (!user.name && fullName.trim()) {
+        const profileRes = await fetch("/api/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fullName: fullName.trim() }),
+        });
+        if (!profileRes.ok) throw new Error((await profileRes.json()).error ?? "Could not save your name.");
+      }
       const res = await fetch("/api/internships", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "apply",
           internshipId: selectedInternshipId,
-          applicantName: user.name,
+          applicantName: fullName.trim() || user.name,
           applicantEmail: user.email,
           motivation,
           portfolioUrl,
@@ -518,6 +531,22 @@ export function InternshipsWorkspace() {
 
             {user ? (
               <form onSubmit={handleApply} className="mt-5 space-y-4">
+                {!user.name && (
+                  <label className="block text-xs text-white/70">
+                    Full name <span className="text-white/35">required for your learner record</span>
+                    <input
+                      type="text"
+                      autoComplete="name"
+                      required
+                      minLength={2}
+                      maxLength={120}
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="Your full name as it should appear on records"
+                      className="mt-1.5 h-11 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-xs text-white"
+                    />
+                  </label>
+                )}
                 <label className="block text-xs text-white/70">
                   Selected internship
                   <select

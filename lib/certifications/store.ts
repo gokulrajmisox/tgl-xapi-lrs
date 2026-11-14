@@ -543,7 +543,7 @@ export async function resolveCurrentActor(options?: {
     const name =
       typeof user.user_metadata?.display_name === "string" && user.user_metadata.display_name.trim()
         ? user.user_metadata.display_name.trim()
-        : user.email?.split("@")[0] ?? "Learner";
+        : "";
     return {
       user: {
         id: user.id,

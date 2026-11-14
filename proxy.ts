@@ -12,7 +12,10 @@ export async function proxy(request: NextRequest) {
     url,
     key,
     {
-      cookieOptions: { secure: process.env.NODE_ENV === "production" },
+      cookieOptions: {
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      },
       cookies: {
         getAll: () => request.cookies.getAll(),
         setAll(cookiesToSet) {

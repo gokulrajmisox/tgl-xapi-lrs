@@ -18,6 +18,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { SignOutButton } from "@/components/sign-out-button";
 
 export type AppRole = "student" | "mentor" | "admin";
 
@@ -158,11 +159,14 @@ export function RoleShell({
 
         <div className="space-y-1 border-t border-white/10 pt-4 text-xs">
           <Link
-            href="/auth/login"
-            className="flex min-h-11 items-center rounded-xl px-3 py-2 text-white/65 hover:bg-white/[0.04] hover:text-white"
+            href={role === "mentor" ? "/mentor" : role === "admin" ? "/admin" : "/learn"}
+            className="flex min-h-11 items-center rounded-xl px-3 py-2 text-white/80 hover:bg-white/[0.04] hover:text-white"
           >
-            Account &amp; Sign in
+            Dashboard
           </Link>
+          <div className="flex min-h-11 items-center px-3 py-2">
+            <SignOutButton />
+          </div>
         </div>
       </aside>
 
