@@ -13,6 +13,7 @@ const TestEmailSchema = z.object({
   recipientEmail: z.string().trim().email(),
   templateKey: z.enum([
     "purchase_initiated",
+    "enrollment_confirmed",
     "payment_success",
     "payment_failed",
     "payment_refunded",
@@ -66,6 +67,12 @@ export async function POST(request: Request) {
     reason: "Test notification check",
     certificateId: "TGL-CERT-2026-8419",
     verificationUrl: `${origin}/verify/certificate/TGL-CERT-2026-8419`,
+    programmeName: d.certificateName,
+    enrollmentId: "enr_test_112233",
+    joinedOn: "14 NOV 2026",
+    completedOn: "14 NOV 2026",
+    dashboardUrl: `${origin}/learn`,
+    downloadUrl: `${origin}/api/certificates/TGL-CERT-2026-8419/pdf`,
   };
 
   if (d.previewOnly) {

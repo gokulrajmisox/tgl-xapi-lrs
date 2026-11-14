@@ -9,6 +9,7 @@ import {
 const TemplateSchema = z.object({
   templateKey: z.enum([
     "purchase_initiated",
+    "enrollment_confirmed",
     "payment_success",
     "payment_failed",
     "payment_refunded",

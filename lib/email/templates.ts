@@ -1,5 +1,6 @@
 export type EmailTemplateKey =
   | "purchase_initiated"
+  | "enrollment_confirmed"
   | "payment_success"
   | "payment_failed"
   | "payment_refunded"
@@ -17,6 +18,14 @@ export type EmailTemplateDefinition = {
 };
 
 export const DEFAULT_EMAIL_TEMPLATES: EmailTemplateDefinition[] = [
+  {
+    template_key: "enrollment_confirmed",
+    subject_template: "Congratulations! Your TGL Enrollment is Confirmed!",
+    body_template:
+      "Hello {{studentName}},\n\nYour enrollment in {{programmeName}} is confirmed.\n\nEnrollment ID: {{enrollmentId}}\nJoining date: {{joinedOn}}\nStatus: Active\nDashboard: {{dashboardUrl}}\n\nYour programme, linked internship, project review, and included certificate are now available from your TGL dashboard.\n\n— TGL Learning Portal",
+    description: "Sent once after a programme enrollment payment has been verified and enrollment is activated.",
+    updated_at: "2026-11-14T00:00:00.000Z",
+  },
   {
     template_key: "purchase_initiated",
     subject_template: "Certification checkout initiated — {{certificateName}}",
@@ -53,7 +62,7 @@ export const DEFAULT_EMAIL_TEMPLATES: EmailTemplateDefinition[] = [
     template_key: "certificate_issued",
     subject_template: "Your {{certificateName}} has been issued ({{certificateId}})",
     body_template:
-      "Hello {{studentName}},\n\nCongratulations! Your {{certificateName}} for {{achievementTitle}} has been officially issued.\n\nCertificate ID: {{certificateId}}\nPublic verification URL: {{verificationUrl}}\n\n— Touch Grass Later",
+      "Hello {{studentName}},\n\nCongratulations! Your {{certificateName}} for {{achievementTitle}} has been officially issued.\n\nJoined On: {{joinedOn}}\nCompleted On: {{completedOn}}\nCertificate ID: {{certificateId}}\nDownload PDF: {{downloadUrl}}\nPublic verification URL: {{verificationUrl}}\n\n— TGL Learning Portal",
     description: "Sent when all eligibility checks, mentor/admin approvals, and payment verification complete.",
     updated_at: "2026-11-13T00:00:00.000Z",
   },
@@ -61,7 +70,7 @@ export const DEFAULT_EMAIL_TEMPLATES: EmailTemplateDefinition[] = [
     template_key: "certificate_ready",
     subject_template: "Ready to download: {{certificateName}} ({{certificateId}})",
     body_template:
-      "Hello {{studentName}},\n\nYour {{certificateName}} is ready for download in your TGL learning dashboard.\n\nCertificate ID: {{certificateId}}\nVerify online: {{verificationUrl}}\n\n— Touch Grass Later",
+      "Hello {{studentName}},\n\nYour {{certificateName}} is ready for download.\n\nJoined On: {{joinedOn}}\nCompleted On: {{completedOn}}\nCertificate ID: {{certificateId}}\nDownload PDF: {{downloadUrl}}\nVerify online: {{verificationUrl}}\n\n— TGL Learning Portal",
     description: "Sent when the downloadable certificate and QR verification link are ready.",
     updated_at: "2026-11-13T00:00:00.000Z",
   },

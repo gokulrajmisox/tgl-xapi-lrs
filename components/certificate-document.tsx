@@ -56,51 +56,6 @@ export function CertificateDocument({
       })
     : "Pending verification";
 
-  const downloadHtml = () => {
-    const html = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>${data.certificateTitle} — ${data.certificateId}</title>
-  <style>
-    body { margin: 0; padding: 48px; background: #090909; font-family: Georgia, serif; display: flex; justify-content: center; }
-    .cert { width: 880px; background: #f4f3ef; color: #111; padding: 56px; border: 1px solid #d4d0c7; border-radius: 16px; }
-    .kicker { font-family: system-ui, sans-serif; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: #555; }
-    .title { font-size: 38px; margin: 18px 0 8px; font-weight: 500; letter-spacing: -0.02em; }
-    .name { font-size: 46px; font-style: italic; margin: 28px 0 12px; color: #111; border-bottom: 1px solid #c5bfd0; padding-bottom: 12px; }
-    .body { font-family: system-ui, sans-serif; font-size: 15px; line-height: 1.7; color: #333; max-width: 620px; }
-    .meta { margin-top: 36px; display: flex; justify-content: space-between; align-items: flex-end; font-family: system-ui, sans-serif; font-size: 12px; color: #444; }
-    .mono { font-family: monospace; font-size: 12px; }
-  </style>
-</head>
-<body>
-  <div class="cert">
-    <div class="kicker">TOUCH GRASS LATER · OFFICIAL CREDENTIAL</div>
-    <h1 class="title">${data.certificateTitle}</h1>
-    <p class="body">This credential confirms that</p>
-    <div class="name">${data.recipientName}</div>
-    <p class="body">has satisfied all completion, project submission, and authorized mentor review requirements for <strong>${data.achievementTitle}</strong>.</p>
-    <div class="meta">
-      <div>
-        <div>Issued by: ${data.organization ?? "Touch Grass Later"}</div>
-        <div>Issue date: ${formattedDate}</div>
-        <div class="mono">Certificate ID: ${data.certificateId}</div>
-        <div>Verify: ${verificationUrl}</div>
-      </div>
-      <div>${qrSvg}</div>
-    </div>
-  </div>
-</body>
-</html>`;
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${data.certificateId}.html`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <div className="space-y-4">
       <article
@@ -194,14 +149,14 @@ export function CertificateDocument({
         <div className="flex flex-wrap items-center gap-3">
           {data.status === "issued" && (
             <>
-              <button
-                type="button"
-                onClick={downloadHtml}
+              <a
+                href={`/api/certificates/${encodeURIComponent(data.certificateId)}/pdf`}
+                download={`${data.certificateId}.pdf`}
                 className="inline-flex items-center gap-2 rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111] transition-colors hover:bg-white whitespace-nowrap shrink-0"
               >
                 <Download size={14} aria-hidden="true" />
                 Download certificate
-              </button>
+              </a>
               <button
                 type="button"
                 onClick={() => window.print()}

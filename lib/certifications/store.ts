@@ -32,6 +32,7 @@ import {
   type EmailTemplateKey,
 } from "@/lib/email/templates";
 import { dispatchLifecycleEmail, type EmailDeliveryRecord } from "@/lib/email/provider";
+import type { CertificatePdfData } from "./pdf";
 
 import {
   checkAllInternshipTasksApproved,
@@ -1285,6 +1286,9 @@ export async function issueCertificateForVerifiedOrder(params: {
   }
 
   const verificationUrl = `/verify/certificate/${issuance.certificate_id}`;
+  const downloadUrl = `/api/certificates/${encodeURIComponent(issuance.certificate_id)}/pdf`;
+  const joinedOn = params.order.created_at;
+  const completedOn = matchedApplication?.completed_at ?? issuance.issued_at ?? now;
   const isSimulated = params.order.payment_mode === "simulated_test";
 
   await sendAndLogLifecycleEmail({
@@ -1296,6 +1300,9 @@ export async function issueCertificateForVerifiedOrder(params: {
       achievementTitle,
       certificateId: issuance.certificate_id,
       verificationUrl,
+      downloadUrl,
+      joinedOn,
+      completedOn,
     },
     isSimulatedTransaction: isSimulated,
   });
@@ -1309,6 +1316,9 @@ export async function issueCertificateForVerifiedOrder(params: {
       achievementTitle,
       certificateId: issuance.certificate_id,
       verificationUrl,
+      downloadUrl,
+      joinedOn,
+      completedOn,
     },
     isSimulatedTransaction: isSimulated,
   });
@@ -1357,6 +1367,7 @@ export async function verifyAndCaptureCheckoutPayment(params: {
 
   const now = new Date().toISOString();
   let payment: CertificationPaymentRecord;
+  let isNewPayment = false;
 
   if (isSupabaseConfigured()) {
     const client = serviceClient();
@@ -1384,6 +1395,7 @@ export async function verifyAndCaptureCheckoutPayment(params: {
         .single();
       if (error || !insertedPay) return { error: "Could not record payment.", status: 500 };
       payment = insertedPay as CertificationPaymentRecord;
+      isNewPayment = true;
     }
 
     await client
@@ -1411,6 +1423,7 @@ export async function verifyAndCaptureCheckoutPayment(params: {
         created_at: now,
       };
       store.payments.unshift(payment);
+      isNewPayment = true;
     }
     order.order_status = "paid";
     order.updated_at = now;
@@ -1441,18 +1454,24 @@ export async function verifyAndCaptureCheckoutPayment(params: {
         })
       : null;
 
-    await sendAndLogLifecycleEmail({
-      recipientEmail: params.user.email,
-      templateKey: "payment_success",
-      variables: {
-        studentName: params.user.name,
-        certificateName: course ? `Programme Enrolment: ${course.title}` : "Programme Enrolment",
-        amountFormatted: formatInrFromPaise(order.amount_paise),
-        paymentId: payment.razorpay_payment_id,
-        orderId: order.razorpay_order_id,
-      },
-      isSimulatedTransaction: isSimulatedOrder,
-    });
+    if (isNewPayment) {
+      await sendAndLogLifecycleEmail({
+        recipientEmail: params.user.email,
+        templateKey: "enrollment_confirmed",
+        variables: {
+          studentName: params.user.name,
+          programmeName: course?.title ?? "TGL Programme",
+          enrollmentId: enrollment.id,
+          joinedOn: new Date(enrollment.enrolledAt).toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }),
+          dashboardUrl: "/learn",
+        },
+        isSimulatedTransaction: isSimulatedOrder,
+      });
+    }
 
     return {
       payment,
@@ -1464,18 +1483,20 @@ export async function verifyAndCaptureCheckoutPayment(params: {
   const products = await listProducts(true);
   const product = products.find((p) => p.id === order.product_id);
 
-  await sendAndLogLifecycleEmail({
-    recipientEmail: params.user.email,
-    templateKey: "payment_success",
-    variables: {
-      studentName: params.user.name,
-      certificateName: product?.name ?? "TGL Certificate",
-      amountFormatted: formatInrFromPaise(order.amount_paise),
-      paymentId: payment.razorpay_payment_id,
-      orderId: order.razorpay_order_id,
-    },
-    isSimulatedTransaction: isSimulatedOrder,
-  });
+  if (isNewPayment) {
+    await sendAndLogLifecycleEmail({
+      recipientEmail: params.user.email,
+      templateKey: "payment_success",
+      variables: {
+        studentName: params.user.name,
+        certificateName: product?.name ?? "TGL Certificate",
+        amountFormatted: formatInrFromPaise(order.amount_paise),
+        paymentId: payment.razorpay_payment_id,
+        orderId: order.razorpay_order_id,
+      },
+      isSimulatedTransaction: isSimulatedOrder,
+    });
+  }
 
   const issueResult = await issueCertificateForVerifiedOrder({
     user: params.user,
@@ -2016,6 +2037,35 @@ export async function getCertificateByPublicId(
   return getMemoryStore().issuances.find((i) => i.certificate_id === certificateId) ?? null;
 }
 
+export async function getCertificatePdfData(
+  certificateId: string,
+): Promise<CertificatePdfData | null> {
+  const issuance = await getCertificateByPublicId(certificateId);
+  if (!issuance || issuance.issuance_status !== "issued" || !issuance.issued_at) return null;
+
+  const [orders, applications] = await Promise.all([
+    listOrders(issuance.user_id),
+    listStudentApplications(issuance.user_id),
+  ]);
+  const application = issuance.internship_application_id
+    ? applications.find((item) => item.id === issuance.internship_application_id)
+    : applications.find((item) => item.status === "completed" && item.mentor_approved);
+  const matchingOrder = orders.find((order) =>
+    order.course_id &&
+    (application?.course_id === order.course_id || order.metadata?.linkedInternshipSlug),
+  ) ?? orders.find((order) => order.order_status === "paid");
+  return {
+    certificateId: issuance.certificate_id,
+    studentName: issuance.recipient_name,
+    programmeName: issuance.achievement_title,
+    joinedOn: matchingOrder?.created_at ?? application?.created_at ?? issuance.created_at,
+    completedOn: application?.completed_at ?? issuance.issued_at,
+    issuedOn: issuance.issued_at,
+    authorizedSignatory: process.env.CERTIFICATE_SIGNATORY?.trim() || "Gokulraj",
+    organization: "TGL Learning Portal",
+  };
+}
+
 async function issueIncludedProgrammeCertificate(params: {
   application: InternshipApplicationRecord;
   internship: InternshipRecord | undefined;
@@ -2140,6 +2190,7 @@ async function issueIncludedProgrammeCertificate(params: {
   }
 
   const verificationUrl = `/verify/certificate/${issuance.certificate_id}`;
+  const downloadUrl = `/api/certificates/${encodeURIComponent(issuance.certificate_id)}/pdf`;
   await sendAndLogLifecycleEmail({
     recipientEmail: params.application.applicant_email,
     templateKey: "certificate_issued",
@@ -2149,6 +2200,9 @@ async function issueIncludedProgrammeCertificate(params: {
       achievementTitle,
       certificateId: issuance.certificate_id,
       verificationUrl,
+      downloadUrl,
+      joinedOn: params.application.created_at,
+      completedOn: params.application.completed_at ?? issuance.issued_at ?? now,
     },
   });
 
