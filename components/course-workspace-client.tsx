@@ -10,10 +10,12 @@ import {
   Award,
   Bell,
   BookOpen,
+  CalendarClock,
   CheckCircle2,
   Circle,
   ClipboardCheck,
   ExternalLink,
+  FileUp,
   FolderGit2,
   Lock,
   Play,
@@ -21,15 +23,23 @@ import {
   RotateCcw,
   Send,
   ShieldCheck,
+  X,
 } from "lucide-react";
 import { formatInrFromPaise } from "@/lib/certifications/pricing";
 import type { CourseLesson } from "@/lib/courses/catalog";
 import type { CourseDetailResponse } from "@/lib/courses/store";
+import { getProjectGuidance } from "@/lib/learning-graph";
 import { RazorpayCheckoutButton } from "@/components/razorpay-checkout-button";
 import SlideCommit from "@/components/react-bits/SlideCommit";
 import type {
+  CertificateIssuanceRecord,
+  InternshipApplicationRecord,
+  InternshipRecord,
+} from "@/lib/certifications/store";
+import type {
   ProjectSubmissionRecord,
   ProjectSubmissionStatus,
+  SupportingFileMeta,
 } from "@/lib/learning-workspace-store";
 
 type WorkspaceActor = {
@@ -54,15 +64,29 @@ const PROJECT_LIFECYCLE: Array<{
 
 export function CourseWorkspaceClient({
   initialDetail,
+  initialInternshipTrack = null,
+  initialInternshipApplication = null,
+  initialIssuedCertificate = null,
   user,
   isSandbox,
 }: {
   initialDetail: CourseDetailResponse;
+  initialInternshipTrack?: InternshipRecord | null;
+  initialInternshipApplication?: InternshipApplicationRecord | null;
+  initialIssuedCertificate?: CertificateIssuanceRecord | null;
   user: WorkspaceActor;
   isSandbox: boolean;
 }) {
   const router = useRouter();
   const [detail, setDetail] = useState<CourseDetailResponse>(initialDetail);
+  const [internshipTrack, setInternshipTrack] = useState<InternshipRecord | null>(
+    initialInternshipTrack,
+  );
+  const [internshipApplication, setInternshipApplication] =
+    useState<InternshipApplicationRecord | null>(initialInternshipApplication);
+  const [issuedCertificate, setIssuedCertificate] =
+    useState<CertificateIssuanceRecord | null>(initialIssuedCertificate);
+  const [claimingCert, setClaimingCert] = useState(false);
   const [viewMode, setViewModeState] = useState<CourseWorkspaceTab>("lessons");
   const selectViewMode = useCallback((next: CourseWorkspaceTab) => {
     setViewModeState(next);
@@ -115,6 +139,7 @@ export function CourseWorkspaceClient({
   const [githubUrl, setGithubUrl] = useState("");
   const [deploymentUrl, setDeploymentUrl] = useState("");
   const [supportingEvidence, setSupportingEvidence] = useState("");
+  const [supportingFiles, setSupportingFiles] = useState<SupportingFileMeta[]>([]);
   const [summary, setSummary] = useState("");
   const [reflection, setReflection] = useState("");
   const [submittingProject, setSubmittingProject] = useState(false);
@@ -124,8 +149,21 @@ export function CourseWorkspaceClient({
       cache: "no-store",
     });
     if (!res.ok) return;
-    const fresh = (await res.json()) as CourseDetailResponse;
+    const fresh = (await res.json()) as CourseDetailResponse & {
+      internshipTrack?: InternshipRecord | null;
+      internshipApplication?: InternshipApplicationRecord | null;
+      issuedCertificate?: CertificateIssuanceRecord | null;
+    };
     setDetail(fresh);
+    if ("internshipTrack" in fresh) {
+      setInternshipTrack(fresh.internshipTrack ?? null);
+    }
+    if ("internshipApplication" in fresh) {
+      setInternshipApplication(fresh.internshipApplication ?? null);
+    }
+    if ("issuedCertificate" in fresh) {
+      setIssuedCertificate(fresh.issuedCertificate ?? null);
+    }
     if (!fresh.locked) {
       const firstId = fresh.modules[0]?.lessons[0]?.id ?? "";
       setActiveLessonId((prev) => prev || firstId);
@@ -175,6 +213,30 @@ export function CourseWorkspaceClient({
   const activeLessonIdx = activeLesson
     ? flatLessons.findIndex((l) => l.id === activeLesson.id)
     : -1;
+
+  const nextIncompleteInfo = useMemo(() => {
+    if (detail.locked) {
+      return { lesson: null as CourseLesson | null, moduleTitle: "" };
+    }
+    for (const mod of detail.modules) {
+      for (const les of mod.lessons) {
+        if (detail.lessonProgress[les.id]?.status !== "completed") {
+          return { lesson: les, moduleTitle: `Module ${mod.sortOrder}: ${mod.title}` };
+        }
+      }
+    }
+    const lastMod = detail.modules[detail.modules.length - 1];
+    const firstLes = detail.modules[0]?.lessons[0] ?? null;
+    return {
+      lesson: firstLes,
+      moduleTitle: lastMod ? `Module ${lastMod.sortOrder}: ${lastMod.title}` : "",
+    };
+  }, [detail]);
+
+  const projectGuidance = useMemo(
+    () => (detail.locked ? null : getProjectGuidance(detail.project)),
+    [detail],
+  );
 
   const latestSubmission: ProjectSubmissionRecord | null =
     submissions.length > 0 ? submissions[0] : null;
@@ -333,6 +395,24 @@ export function CourseWorkspaceClient({
     }
   };
 
+  const handleSupportingFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []).slice(0, 5);
+    if (picked.length === 0) return;
+    setSupportingFiles((prev) => {
+      const merged = [...prev];
+      for (const file of picked) {
+        if (!merged.some((f) => f.name === file.name && f.sizeBytes === file.size)) {
+          merged.push({
+            name: file.name,
+            sizeBytes: file.size,
+            mimeType: file.type || "application/octet-stream",
+          });
+        }
+      }
+      return merged.slice(0, 5);
+    });
+  };
+
   const handleSubmitProject = async () => {
     if (detail.locked) return;
     if (!githubUrl.trim() || summary.trim().length < 10) {
@@ -353,13 +433,14 @@ export function CourseWorkspaceClient({
           artifactUrl: githubUrl.trim(),
           deploymentUrl: deploymentUrl.trim(),
           supportingEvidence: supportingEvidence.trim(),
+          supportingFiles,
           summary: summary.trim(),
           reflection: reflection.trim(),
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Could not submit capstone project.");
+        setError(data.error ?? "Could not submit project.");
         throw new Error(data.error ?? "Submit failed");
       }
       if (data.submission) {
@@ -370,6 +451,7 @@ export function CourseWorkspaceClient({
       }
       setSummary("");
       setReflection("");
+      setSupportingFiles([]);
       await refreshDetail();
       setNotice("Project submitted for mentor review.");
     } finally {
@@ -377,22 +459,48 @@ export function CourseWorkspaceClient({
     }
   };
 
+  const handleClaimIncludedCertificate = async () => {
+    if (!internshipApplication) return;
+    setClaimingCert(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await fetch("/api/certificates/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ internshipApplicationId: internshipApplication.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Could not claim included certificate.");
+        return;
+      }
+      if (data.issuance) {
+        setIssuedCertificate(data.issuance);
+        setNotice(`Included Internship Completion Certificate issued (${data.issuance.certificate_id}).`);
+      }
+      await refreshDetail();
+    } finally {
+      setClaimingCert(false);
+    }
+  };
+
   const course = detail.course;
 
   return (
     <div className="mx-auto max-w-[1280px] px-6 pb-24 pt-28 text-[#f4f3ef] md:px-12 md:pt-36">
-      {/* Top Breadcrumb & Course Hero Summary */}
+      {/* Top Breadcrumb & Programme Hero Summary */}
       <div className="border-b border-white/10 pb-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <Link
-            href="/courses"
+            href="/programmes"
             className="inline-flex items-center gap-2 text-xs text-white/60 hover:text-white"
           >
             <ArrowLeft size={14} aria-hidden="true" />
-            All courses
+            All programmes
           </Link>
           <span className="text-xs text-[#b9a9d6]">
-            {course.category} · {course.level} · {course.estimatedHours} hours
+            {course.category} · {course.estimatedHours}h study + {course.internshipDurationWeeks}-week internship
           </span>
         </div>
 
@@ -411,7 +519,7 @@ export function CourseWorkspaceClient({
             )}
             <p className="mt-3 text-xs text-white/50">
               Lead Mentor: <strong className="text-white/85">{course.mentorName}</strong> ·{" "}
-              {course.mentorRole} · Related Internship:{" "}
+              {course.mentorRole} · Included Internship:{" "}
               <Link href="/internships" className="text-[#b9a9d6] hover:underline">
                 {course.linkedInternshipTitle}
               </Link>
@@ -420,24 +528,24 @@ export function CourseWorkspaceClient({
 
           <div className="rounded-2xl border border-white/10 bg-[#111111] p-5 text-xs">
             <div className="flex items-center justify-between gap-4">
-              <span className="text-white/50">Access status</span>
+              <span className="text-white/50">Programme access</span>
               {detail.locked ? (
                 <span className="inline-flex items-center gap-1.5 font-medium text-amber-200">
                   <Lock size={13} aria-hidden="true" />
-                  Locked preview
+                  Syllabus preview
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 font-medium text-emerald-300">
                   <CheckCircle2 size={13} aria-hidden="true" />
-                  Enrolled &amp; unlocked
+                  Enrolled · Internship {internshipApplication ? "active" : "included"}
                 </span>
               )}
             </div>
             <div className="mt-3 flex items-baseline justify-between border-t border-white/10 pt-3">
-              <span className="text-white/50">Course fee</span>
+              <span className="text-white/50">Single programme fee</span>
               <span className="font-mono text-xl font-semibold tabular-nums text-[#f4f3ef]">
                 {formatInrFromPaise(course.pricePaise)}{" "}
-                <span className="text-xs font-normal text-white/45">INR</span>
+                <span className="text-xs font-normal text-white/45">all-inclusive</span>
               </span>
             </div>
             {!detail.locked && (
@@ -557,7 +665,7 @@ export function CourseWorkspaceClient({
 
             <section className="rounded-2xl border border-white/10 bg-[#111111] p-6">
               <p className="text-[11px] uppercase tracking-[0.16em] text-[#b9a9d6]">
-                Linked Practical Project &amp; Related Internship
+                Practical Project, Internship Tasks &amp; Completion Criteria
               </p>
               <h2 className="mt-2 text-lg font-medium">{detail.projectPreview.title}</h2>
               <p className="mt-2 text-xs leading-6 text-white/60">
@@ -568,20 +676,49 @@ export function CourseWorkspaceClient({
                 {detail.projectPreview.deliverableCount} deliverables · Reviewed by{" "}
                 {detail.projectPreview.mentorName} ({detail.projectPreview.mentorRole})
               </p>
-              <div className="mt-4 border-t border-white/10 pt-4 text-xs text-white/65">
-                <p>
-                  Related Internship:{" "}
-                  <strong className="text-[#d8cbea]">{course.linkedInternshipTitle}</strong>
+
+              <div className="mt-5 space-y-3 border-t border-white/10 pt-4 text-xs">
+                <p className="font-medium text-[#f4f3ef]">
+                  Included Internship: {course.linkedInternshipTitle} ({course.internshipDurationWeeks} weeks)
                 </p>
-                <p className="mt-1 text-[11px] text-white/45">{course.certificateInfo}</p>
+                {internshipTrack?.tasks && internshipTrack.tasks.length > 0 && (
+                  <ul className="space-y-2 text-white/65">
+                    {internshipTrack.tasks.map((task) => (
+                      <li
+                        key={task.id}
+                        className="rounded-xl border border-white/10 bg-black/25 px-3.5 py-2.5"
+                      >
+                        <span className="font-medium text-white/90">{task.title}</span>{" "}
+                        <span className="text-[#b9a9d6]">({task.deadlineLabel})</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="mt-5 border-t border-white/10 pt-4 text-xs">
+                <p className="font-medium text-[#f4f3ef]">
+                  Completion requirements for your included certificate (₹0 extra)
+                </p>
+                <ul className="mt-2.5 space-y-1.5 text-white/70">
+                  {course.completionRequirements.map((req) => (
+                    <li key={req} className="flex items-start gap-2">
+                      <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-emerald-300" aria-hidden="true" />
+                      <span>{req}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-[11px] text-emerald-300/90">
+                  {course.includedCertificateTitle}: {course.certificateInfo}
+                </p>
               </div>
             </section>
           </div>
 
           <aside className="self-start space-y-6">
             <section className="rounded-2xl border border-[#b9a9d6]/30 bg-[#131118] p-6 sm:p-7">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-[#b9a9d6]">
-                Course Checkout · Verified Access Only
+              <p className="text-[11px] uppercase tracking-[0.18em] text-[#b9a9d6]">
+                All-inclusive single enrolment fee
               </p>
               <div className="mt-3 flex items-baseline justify-between gap-4">
                 <h2 className="text-xl font-medium tracking-[-0.03em]">
@@ -591,10 +728,13 @@ export function CourseWorkspaceClient({
                   {formatInrFromPaise(course.pricePaise)}
                 </span>
               </div>
+              <p className="mt-2 text-xs leading-5 text-white/60">
+                Pay once to unlock course lessons, assignments, practical project feedback, internship tasks, and your included Internship Completion Certificate (₹0 extra after mentor approval).
+              </p>
 
               <div className="mt-4 space-y-2 border-t border-white/10 pt-4 text-xs text-white/75">
-                <p className="font-medium text-white">What enrollment unlocks immediately:</p>
-                <ul className="space-y-1.5 text-white/65">
+                <p className="font-medium text-white">Everything included with this payment:</p>
+                <ul className="space-y-1.5 text-white/70">
                   {course.includes.map((inc) => (
                     <li key={inc} className="flex items-start gap-2">
                       <CheckCircle2 size={13} className="mt-1 shrink-0 text-emerald-300" aria-hidden="true" />
@@ -603,7 +743,11 @@ export function CourseWorkspaceClient({
                   ))}
                   <li className="flex items-start gap-2">
                     <CheckCircle2 size={13} className="mt-1 shrink-0 text-emerald-300" aria-hidden="true" />
-                    <span>{course.assignmentCount} hands-on course assignments &amp; graded quiz</span>
+                    <span>{course.assignmentCount} hands-on assignments &amp; graded assessment</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 size={13} className="mt-1 shrink-0 text-emerald-300" aria-hidden="true" />
+                    <span>Official {course.includedCertificateTitle} (₹0 extra fee)</span>
                   </li>
                 </ul>
               </div>
@@ -611,18 +755,20 @@ export function CourseWorkspaceClient({
               <div className="mt-5 border-t border-white/10 pt-5">
                 {!user && !isSandbox ? (
                   <Link
-                    href={`/auth/login?next=${encodeURIComponent(`/courses/${course.slug}`)}`}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-3 text-xs font-medium text-[#111111]"
+                    href={`/auth/login?next=${encodeURIComponent(`/programmes/${course.slug}`)}`}
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-3 text-xs font-medium text-[#111111]"
                   >
                     Sign in to Enrol Now ({formatInrFromPaise(course.pricePaise)})
                     <ArrowUpRight size={14} aria-hidden="true" />
                   </Link>
                 ) : (
                   <RazorpayCheckoutButton
-                    orderKind="course_enrollment"
+                    orderKind="programme_enrollment"
                     courseId={course.id}
                     productName={course.title}
                     pricePaise={course.pricePaise}
+                    courseDuration={`${course.estimatedHours}h course + ${course.internshipDurationWeeks}-wk internship`}
+                    whatYouReceive={course.includes}
                     eligible={true}
                     alreadyEnrolled={false}
                     studentName={user?.name}
@@ -632,10 +778,10 @@ export function CourseWorkspaceClient({
                 )}
               </div>
 
-              <div className="mt-5 rounded-xl border border-white/10 bg-black/30 p-4 text-[11px] leading-5 text-white/55">
-                <p className="flex items-center gap-1.5 font-medium text-white/85">
-                  <ShieldCheck size={13} className="text-[#b9a9d6]" aria-hidden="true" />
-                  Internship &amp; Certificate Policy
+              <div className="mt-5 rounded-xl border border-white/10 bg-black/30 p-4 text-xs leading-5 text-white/60">
+                <p className="flex items-center gap-1.5 font-medium text-white/90">
+                  <ShieldCheck size={14} className="text-[#b9a9d6]" aria-hidden="true" />
+                  One-fee guarantee · No hidden certificate cost
                 </p>
                 <p className="mt-1.5">{course.internshipDisclosure}</p>
               </div>
@@ -644,7 +790,60 @@ export function CourseWorkspaceClient({
         </div>
       ) : (
         /* UNLOCKED ENROLLED COURSE WORKSPACE */
-        <div className="mt-8 grid gap-8 lg:grid-cols-[310px_1fr]">
+        <div className="mt-8 space-y-6">
+          {/* Top Progress Banner with Continue Learning CTA */}
+          <section
+            aria-label="Course progress overview"
+            className="flex flex-col justify-between gap-5 rounded-2xl border border-[#b9a9d6]/30 bg-[#131118] p-5 sm:flex-row sm:items-center sm:p-6"
+          >
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                <span className="font-medium text-[#b9a9d6]">
+                  Overall Progress: <strong className="font-mono text-white">{course.progressPercent}%</strong>
+                </span>
+                <span className="text-white/70">
+                  Lessons Completed: <strong className="font-mono text-white">{course.completedLessonCount}/{course.lessonCount}</strong>
+                </span>
+                {nextIncompleteInfo.moduleTitle && (
+                  <span className="truncate text-white/60">
+                    Current Module: <strong className="text-white/90">{nextIncompleteInfo.moduleTitle}</strong>
+                  </span>
+                )}
+              </div>
+              <div className="h-2 w-full max-w-xl overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-[#b9a9d6] transition-all"
+                  style={{ width: `${course.progressPercent}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              {nextIncompleteInfo.lesson && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    selectViewMode("lessons");
+                    setActiveLessonId(nextIncompleteInfo.lesson!.id);
+                  }}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111] hover:bg-white whitespace-nowrap shrink-0"
+                >
+                  <PlayCircle size={14} aria-hidden="true" />
+                  Continue Learning
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => selectViewMode("project")}
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 px-4 py-2.5 text-xs text-white/85 hover:border-white/35 whitespace-nowrap shrink-0"
+              >
+                <FolderGit2 size={14} aria-hidden="true" />
+                {currentProjectStatus === "not_started" ? "Start Project" : "Open Project"}
+              </button>
+            </div>
+          </section>
+
+          <div className="grid gap-8 lg:grid-cols-[310px_1fr]">
           {/* Left Module & Workspace Navigation */}
           <aside className="self-start space-y-4">
             <div className="rounded-2xl border border-white/10 bg-[#111111] p-4">
@@ -1274,34 +1473,59 @@ export function CourseWorkspaceClient({
                     })}
                   </ol>
 
-                  <p className="mt-4 text-sm leading-6 text-white/65">
+                  <p className="mt-4 text-sm leading-6 text-white/75">
                     {detail.project.brief}
                   </p>
 
-                  <div className="mt-6 grid gap-6 md:grid-cols-2">
-                    <div className="rounded-xl border border-white/10 bg-black/25 p-5 text-xs">
-                      <p className="font-medium text-[#f4f3ef]">Milestones</p>
-                      <ul className="mt-3 space-y-2 text-white/65">
-                        {detail.project.milestones.map((m) => (
-                          <li key={m} className="flex items-start gap-2">
-                            <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-[#b9a9d6]" aria-hidden="true" />
-                            <span>{m}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-black/25 p-5 text-xs">
-                      <p className="font-medium text-[#f4f3ef]">Deliverables &amp; Rubric</p>
-                      <ul className="mt-3 space-y-2 text-white/65">
-                        {detail.project.deliverables.map((d) => (
-                          <li key={d} className="flex items-start gap-2">
-                            <FolderGit2 size={13} className="mt-0.5 shrink-0 text-emerald-300" aria-hidden="true" />
-                            <span>{d}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
+                  {projectGuidance && (
+                    <>
+                      <div className="mt-5 grid gap-4 rounded-xl border border-white/10 bg-black/30 p-4 text-xs sm:grid-cols-2">
+                        <div>
+                          <p className="font-medium text-[#b9a9d6]">Why this project matters</p>
+                          <p className="mt-1 leading-5 text-white/65">{projectGuidance.whyItMatters}</p>
+                        </div>
+                        <div>
+                          <p className="flex items-center gap-1.5 font-medium text-[#b9a9d6]">
+                            <CalendarClock size={13} aria-hidden="true" />
+                            Submission deadline &amp; method
+                          </p>
+                          <p className="mt-1 leading-5 text-white/65">
+                            <strong className="text-white/90">{projectGuidance.submissionDeadline}</strong> ·{" "}
+                            {projectGuidance.submissionMethod}
+                          </p>
+                        </div>
+                      </div>
+
+                      {projectGuidance.requiredSkills.length > 0 && (
+                        <div className="mt-4 text-xs text-white/65">
+                          <span className="font-medium text-white/90">Required skills: </span>
+                          {projectGuidance.requiredSkills.join(" · ")}
+                        </div>
+                      )}
+
+                      <div className="mt-6 grid gap-6 md:grid-cols-2">
+                        <div className="rounded-xl border border-white/10 bg-black/25 p-5 text-xs">
+                          <p className="font-medium text-[#f4f3ef]">Step-by-step instructions</p>
+                          <ol className="mt-3 list-decimal space-y-2 pl-4 text-white/70">
+                            {projectGuidance.stepByStep.map((step) => (
+                              <li key={step}>{step}</li>
+                            ))}
+                          </ol>
+                        </div>
+                        <div className="rounded-xl border border-white/10 bg-black/25 p-5 text-xs">
+                          <p className="font-medium text-[#f4f3ef]">How mentors evaluate your work</p>
+                          <ul className="mt-3 space-y-2 text-white/70">
+                            {projectGuidance.evaluationCriteria.map((criterion) => (
+                              <li key={criterion} className="flex items-start gap-2">
+                                <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-emerald-300" aria-hidden="true" />
+                                <span>{criterion}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </section>
 
                 {/* Project Submission + Mentor Critique */}
@@ -1314,70 +1538,114 @@ export function CourseWorkspaceClient({
                         <Send size={15} className="text-[#b9a9d6]" aria-hidden="true" />
                       )}
                       {currentProjectStatus === "revision_required"
-                        ? `Resubmit revision to ${detail.project.mentorName}`
-                        : `Submit build for mentor review (${detail.project.mentorName})`}
+                        ? `Resubmit Project to ${detail.project.mentorName}`
+                        : `Submit Project for Mentor Review (${detail.project.mentorName})`}
                     </h3>
                     <div className="mt-4 space-y-3.5 text-xs">
-                      <label className="block text-white/65">
+                      <label className="block text-white/70">
                         GitHub repository URL
                         <input
                           type="url"
                           value={githubUrl}
                           onChange={(e) => setGithubUrl(e.target.value)}
                           placeholder="https://github.com/your-handle/project"
-                          className="mt-1.5 h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-white"
+                          className="mt-1.5 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-white"
                         />
                       </label>
-                      <label className="block text-white/65">
-                        Deployment URL (optional)
+                      <label className="block text-white/70">
+                        Live demo URL (optional)
                         <input
                           type="url"
                           value={deploymentUrl}
                           onChange={(e) => setDeploymentUrl(e.target.value)}
                           placeholder="https://your-demo.vercel.app"
-                          className="mt-1.5 h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-white"
+                          className="mt-1.5 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-white"
                         />
                       </label>
-                      <label className="block text-white/65">
-                        Supporting evidence (test logs / architecture notes)
+                      <label className="block text-white/70">
+                        Notes or test summary
                         <input
                           type="text"
                           value={supportingEvidence}
                           onChange={(e) => setSupportingEvidence(e.target.value)}
-                          placeholder="e.g. Unit test logs passed + Lighthouse screenshot in repo"
-                          className="mt-1.5 h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-white"
+                          placeholder="e.g. All checks pass, screenshots saved in /docs"
+                          className="mt-1.5 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-white"
                         />
                       </label>
-                      <label className="block text-white/65">
-                        Implementation summary
+
+                      <div className="space-y-2 rounded-xl border border-white/10 bg-black/25 p-3.5">
+                        <label className="flex cursor-pointer items-center justify-between gap-3 text-white/75">
+                          <span className="flex items-center gap-2 font-medium">
+                            <FileUp size={14} className="text-[#b9a9d6]" aria-hidden="true" />
+                            Attach supporting files (optional PDF, PNG, MD, ZIP)
+                          </span>
+                          <input
+                            type="file"
+                            multiple
+                            accept=".pdf,.png,.jpg,.jpeg,.md,.txt,.json,.zip"
+                            onChange={handleSupportingFilesChange}
+                            className="sr-only"
+                          />
+                          <span className="rounded-full border border-white/15 px-3 py-1.5 text-[11px] text-white/85 hover:border-white/35">
+                            Choose files
+                          </span>
+                        </label>
+                        {supportingFiles.length > 0 && (
+                          <ul className="space-y-1.5 pt-1">
+                            {supportingFiles.map((file) => (
+                              <li
+                                key={file.name}
+                                className="flex items-center justify-between rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-[11px]"
+                              >
+                                <span className="truncate text-white/85">{file.name}</span>
+                                <button
+                                  type="button"
+                                  aria-label={`Remove ${file.name}`}
+                                  onClick={() =>
+                                    setSupportingFiles((prev) =>
+                                      prev.filter((f) => f.name !== file.name),
+                                    )
+                                  }
+                                  className="ml-2 text-white/55 hover:text-white"
+                                >
+                                  <X size={13} />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+
+                      <label className="block text-white/70">
+                        What did you build? (10+ characters)
                         <textarea
                           rows={3}
                           value={summary}
                           onChange={(e) => setSummary(e.target.value)}
-                          placeholder="Describe your architecture, verification checks, and tests..."
+                          placeholder="Briefly explain what your project does and how you tested it..."
                           className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white"
                         />
                       </label>
-                      <label className="block text-white/65">
-                        Trade-offs &amp; reflection (optional)
+                      <label className="block text-white/70">
+                        Questions for your mentor (optional)
                         <textarea
                           rows={2}
                           value={reflection}
                           onChange={(e) => setReflection(e.target.value)}
-                          placeholder="What tradeoffs did you make?"
+                          placeholder="Anything you would like extra feedback on?"
                           className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white"
                         />
                       </label>
 
-                      <div className="flex flex-col items-center gap-2 pt-2">
+                      <div className="flex flex-col items-center gap-3 pt-2">
                         <SlideCommit
                           label={
                             currentProjectStatus === "revision_required"
-                              ? "Slide to resubmit revision"
-                              : "Slide to submit capstone"
+                              ? "Slide to Resubmit Project"
+                              : "Slide to Submit Project"
                           }
                           doneLabel="Submitted to mentor"
-                          errorLabel="Missing details"
+                          errorLabel="Check required fields"
                           trackColor="#1a1820"
                           handleColor="#f4f3ef"
                           successColor="#22c55e"
@@ -1387,9 +1655,17 @@ export function CourseWorkspaceClient({
                           disabled={submittingProject}
                           onConfirm={handleSubmitProject}
                         />
-                        <p className="text-[11px] text-white/45">
-                          Slide across or focus and press End to send your repository to mentors.
-                        </p>
+                        <button
+                          type="button"
+                          disabled={submittingProject}
+                          onClick={() => void handleSubmitProject().catch(() => {})}
+                          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/20 px-5 py-2 text-xs font-medium text-white hover:border-white/40 disabled:opacity-45"
+                        >
+                          <Send size={13} aria-hidden="true" />
+                          {currentProjectStatus === "revision_required"
+                            ? "Resubmit Project"
+                            : "Submit Project"}
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1410,7 +1686,7 @@ export function CourseWorkspaceClient({
                                 {sub.learnerName}
                               </span>
                               <span
-                                className={`capitalize font-medium ${
+                                className={`inline-flex items-center gap-1 capitalize font-medium ${
                                   sub.status === "approved"
                                     ? "text-emerald-300"
                                     : sub.status === "revision_required"
@@ -1418,6 +1694,7 @@ export function CourseWorkspaceClient({
                                       : "text-[#b9a9d6]"
                                 }`}
                               >
+                                <CheckCircle2 size={12} aria-hidden="true" />
                                 {sub.status.replaceAll("_", " ")}
                               </span>
                             </div>
@@ -1426,10 +1703,15 @@ export function CourseWorkspaceClient({
                                 {sub.githubUrl || sub.artifactUrl}
                               </p>
                             )}
-                            <p className="mt-1.5 text-white/60">{sub.summary}</p>
+                            <p className="mt-1.5 text-white/65">{sub.summary}</p>
                             {sub.supportingEvidence && (
-                              <p className="mt-1 text-[11px] text-white/45">
-                                Evidence: {sub.supportingEvidence}
+                              <p className="mt-1 text-[11px] text-white/50">
+                                Notes: {sub.supportingEvidence}
+                              </p>
+                            )}
+                            {sub.supportingFiles && sub.supportingFiles.length > 0 && (
+                              <p className="mt-1 text-[11px] text-white/55">
+                                Files: {sub.supportingFiles.map((f) => f.name).join(", ")}
                               </p>
                             )}
                             {sub.mentorFeedback && (
@@ -1440,7 +1722,7 @@ export function CourseWorkspaceClient({
                           </article>
                         ))}
                         {submissions.length === 0 && (
-                          <p className="text-white/45">
+                          <p className="text-white/50">
                             No submissions yet for this project. Click &ldquo;Start Project&rdquo; or submit your build on the left.
                           </p>
                         )}
@@ -1449,30 +1731,56 @@ export function CourseWorkspaceClient({
 
                     <div className="rounded-2xl border border-[#b9a9d6]/25 bg-[#131118] p-5 text-xs">
                       <p className="font-medium text-[#f4f3ef]">
-                        Internship &amp; Certificate Pathway
+                        Bundled Internship &amp; Included Certificate (₹0 extra)
                       </p>
-                      <p className="mt-1.5 leading-5 text-white/55">
-                        {course.internshipDisclosure}
+                      <p className="mt-1.5 leading-5 text-white/60">
+                        {issuedCertificate
+                          ? `Your included certificate (${issuedCertificate.certificate_id}) has been issued and is ready to download.`
+                          : internshipApplication?.mentor_approved && internshipApplication.status === "completed"
+                            ? "All internship tasks and mentor evaluations are approved! Claim your included Internship Completion Certificate now at ₹0 extra."
+                            : internshipApplication
+                              ? "Your linked internship track is active! Complete its weekly deliverables in the Internship Workspace to earn your included certificate (₹0 extra)."
+                              : "Complete your project submission and mentor review to finish your bundled internship track and receive your included certificate (₹0 extra)."}
                       </p>
                       <div className="mt-4 flex flex-wrap gap-3">
                         <Link
                           href="/internships"
-                          className="inline-flex items-center gap-1.5 rounded-full bg-[#f4f3ef] px-4 py-2 font-medium text-[#111111]"
+                          className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[#f4f3ef] px-4 py-2 font-medium text-[#111111]"
                         >
-                          Internship track <ArrowUpRight size={12} aria-hidden="true" />
+                          Open Internship Tasks <ArrowUpRight size={12} aria-hidden="true" />
                         </Link>
-                        <Link
-                          href="/certificates"
-                          className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-4 py-2 text-white/80 hover:border-white/35"
-                        >
-                          Optional certificates (₹299–₹599)
-                        </Link>
+                        {issuedCertificate ? (
+                          <Link
+                            href={`/verify/certificate/${encodeURIComponent(issuedCertificate.certificate_id)}`}
+                            className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-emerald-400/35 px-4 py-2 text-emerald-200 hover:border-emerald-300"
+                          >
+                            Download Certificate <ArrowUpRight size={12} aria-hidden="true" />
+                          </Link>
+                        ) : internshipApplication?.mentor_approved &&
+                          internshipApplication.status === "completed" ? (
+                          <button
+                            type="button"
+                            disabled={claimingCert}
+                            onClick={() => void handleClaimIncludedCertificate()}
+                            className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-[#b9a9d6]/45 px-4 py-2 font-medium text-[#f4f3ef] hover:bg-[#b9a9d6]/15 disabled:opacity-50"
+                          >
+                            {claimingCert ? "Issuing..." : "Claim Included Certificate (₹0 extra)"}
+                          </button>
+                        ) : (
+                          <Link
+                            href="/certificates"
+                            className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/15 px-4 py-2 text-white/85 hover:border-white/35"
+                          >
+                            Check Certificate Status
+                          </Link>
+                        )}
                       </div>
                     </div>
                   </div>
                 </section>
               </div>
             )}
+          </div>
           </div>
         </div>
       )}

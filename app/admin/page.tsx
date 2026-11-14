@@ -9,7 +9,7 @@ import { getMentorConsoleData } from "@/lib/learning-workspace-store";
 export const metadata = {
   title: "Admin Operations — Touch Grass Later",
   description:
-    "Manage cohorts, learning content, course pricing (₹499–₹1,999 INR), INR certification pricing, Razorpay payments, and email delivery.",
+    "Manage cohorts, bundled Programmes with single INR fees (₹499–₹1,999), included internships & certificates, Razorpay payments, and email delivery.",
 };
 
 type AdminSection = "overview" | "courses" | "payments" | "emails";
@@ -71,8 +71,8 @@ export default async function AdminHomePage({
     <RoleShell
       role="admin"
       title="Platform administration"
-      subtitle="Cohorts, learning network content, course pricing (₹499–₹1,999), INR certificates & Razorpay payments, and email console"
-      primaryAction={{ label: "Browse Courses", href: "/courses" }}
+      subtitle="Programmes & single INR pricing (₹499–₹1,999), included internships & certificates, Razorpay payments, and email console"
+      primaryAction={{ label: "Browse Programmes", href: "/programmes" }}
     >
       <AdminOperationsClient
         key={initialSection}

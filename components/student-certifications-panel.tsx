@@ -2,19 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, FileText, Receipt, ShieldCheck, X } from "lucide-react";
+import { ArrowUpRight, Award, FileText, Receipt, ShieldCheck, X } from "lucide-react";
 import { CertificateDocument } from "@/components/certificate-document";
-import { RazorpayCheckoutButton } from "@/components/razorpay-checkout-button";
 import { CERTIFICATE_TYPE_LABELS, formatInrFromPaise, type CertificateType } from "@/lib/certifications/pricing";
 
 type OrderItem = {
   id: string;
-  product_id: string;
+  order_kind?: "programme_enrollment" | "course_enrollment" | "certificate";
+  product_id: string | null;
   razorpay_order_id: string;
   amount_paise: number;
   currency: string;
   order_status: string;
   payment_mode: string;
+  metadata?: Record<string, unknown>;
   created_at: string;
 };
 
@@ -54,7 +55,9 @@ export function StudentCertificationsPanel() {
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [issuances, setIssuances] = useState<IssuanceItem[]>([]);
-  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [claiming, setClaiming] = useState(false);
+  const [claimNotice, setClaimNotice] = useState("");
+  const [claimError, setClaimError] = useState("");
   const [receiptOrder, setReceiptOrder] = useState<{
     order: OrderItem;
     payment: PaymentItem | null;
@@ -69,27 +72,51 @@ export function StudentCertificationsPanel() {
     setOrders(data.orders ?? []);
     setPayments(data.payments ?? []);
     setIssuances(data.issuances ?? []);
-    setUser(data.user ?? null);
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  const handleClaimIncluded = async (internshipApplicationId?: string | null) => {
+    setClaiming(true);
+    setClaimNotice("");
+    setClaimError("");
+    try {
+      const res = await fetch("/api/certificates/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ internshipApplicationId: internshipApplicationId ?? null }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setClaimError(data.error ?? "Unable to issue included certificate yet.");
+        return;
+      }
+      setClaimNotice(
+        `Included certificate ${data.issuance?.certificate_id ?? ""} issued at ₹0 extra.`,
+      );
+      await load();
+    } finally {
+      setClaiming(false);
+    }
+  };
+
   const internshipCert = products.find((p) => p.certificate_type === "internship");
+  const certIssued = internshipCert?.activeIssuance?.issuance_status === "issued";
 
   return (
     <section className="mt-8 space-y-6 rounded-2xl border border-white/10 bg-white/[0.025] p-6">
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-5">
         <div>
           <p className="text-[10px] uppercase tracking-[0.2em] text-[#b9a9d6]">
-            Certifications &amp; INR Payments
+            Included Credentials &amp; Programme Receipts
           </p>
           <h2 className="mt-2 text-2xl font-medium tracking-[-0.04em]">
             Your <span className="font-serif italic text-[#b9a9d6]">INTERNSHIP CERTIFICATE</span> &amp; credentials
           </h2>
           <p className="mt-2 max-w-2xl text-xs leading-5 text-white/50">
-            Track certificate eligibility, optional INR checkout, receipts, and issued QR-verified credentials.
+            Track certificate eligibility, download issued QR-verified credentials, and review your single-payment Programme receipts (₹0 extra certificate fee).
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -97,50 +124,74 @@ export function StudentCertificationsPanel() {
             href="/internships"
             className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/80 hover:border-white/35"
           >
-            Internships (Free)
+            Internships (Included)
           </Link>
           <Link
             href="/certificates"
             className="inline-flex items-center gap-1.5 rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111]"
           >
-            All certificates <ArrowUpRight size={13} />
+            Certificate Verification <ArrowUpRight size={13} />
           </Link>
         </div>
       </div>
+
+      {claimNotice && (
+        <p role="status" className="rounded-xl border border-emerald-400/25 bg-emerald-950/20 px-4 py-3 text-xs text-emerald-200">
+          {claimNotice}
+        </p>
+      )}
+      {claimError && (
+        <p role="alert" className="rounded-xl border border-rose-400/30 bg-rose-950/20 px-4 py-3 text-xs text-rose-200">
+          {claimError}
+        </p>
+      )}
 
       {internshipCert && (
         <div className="flex flex-col justify-between gap-5 rounded-xl border border-[#b9a9d6]/30 bg-black/25 p-5 lg:flex-row lg:items-center">
           <div className="space-y-1.5">
             <p className="text-[10px] uppercase tracking-[0.18em] text-[#b9a9d6]">
-              Featured Credential · INTERNSHIP CERTIFICATE
+              Included Credential · INTERNSHIP CERTIFICATE
             </p>
             <p className="text-base font-medium text-[#f4f3ef]">
-              {internshipCert.activeIssuance?.issuance_status === "issued"
-                ? `Issued: ${internshipCert.activeIssuance.certificate_id}`
+              {certIssued
+                ? `Issued: ${internshipCert.activeIssuance?.certificate_id}`
                 : internshipCert.eligibility?.eligible
-                  ? "You are eligible for the INTERNSHIP CERTIFICATE"
-                  : "Complete internship work and mentor approval to unlock eligibility"}
+                  ? "You are eligible to claim your included INTERNSHIP CERTIFICATE"
+                  : "Complete programme lessons, project, internship tasks, and mentor approval to unlock"}
             </p>
             <p className="text-xs text-white/50">
               Certificate fee:{" "}
-              <strong className="tabular-nums text-white">
-                {formatInrFromPaise(internshipCert.price_paise)}
+              <strong className="tabular-nums text-emerald-300">
+                {formatInrFromPaise(0)}
               </strong>{" "}
-              (optional post-completion service)
+              (covered by Programme Enrolment)
             </p>
           </div>
 
-          <RazorpayCheckoutButton
-            productId={internshipCert.id}
-            productName={internshipCert.name}
-            pricePaise={internshipCert.price_paise}
-            eligible={Boolean(internshipCert.eligibility?.eligible)}
-            alreadyIssued={internshipCert.activeIssuance?.issuance_status === "issued"}
-            internshipApplicationId={internshipCert.matchedApplicationId}
-            studentName={user?.name}
-            studentEmail={user?.email}
-            onSuccess={() => void load()}
-          />
+          {certIssued && internshipCert.activeIssuance ? (
+            <Link
+              href={`/verify/certificate/${encodeURIComponent(internshipCert.activeIssuance.certificate_id)}`}
+              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111]"
+            >
+              <Award size={14} aria-hidden="true" /> Open Verified Certificate
+            </Link>
+          ) : internshipCert.eligibility?.eligible ? (
+            <button
+              type="button"
+              disabled={claiming}
+              onClick={() => void handleClaimIncluded(internshipCert.matchedApplicationId)}
+              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111] disabled:opacity-50"
+            >
+              {claiming ? "Issuing…" : "Claim Included Certificate (₹0 extra)"}
+            </button>
+          ) : (
+            <Link
+              href="/learn"
+              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border border-white/15 px-5 py-2.5 text-xs text-white/85 hover:border-white/35"
+            >
+              Continue Programme <ArrowUpRight size={13} />
+            </Link>
+          )}
         </div>
       )}
 
@@ -175,7 +226,7 @@ export function StudentCertificationsPanel() {
             </div>
           ) : (
             <p className="rounded-xl border border-dashed border-white/15 p-5 text-xs text-white/45">
-              No certificates issued yet. Once your eligibility is confirmed and optional checkout completes, your downloadable certificate and QR code appear here.
+              No certificates issued yet. Once your lessons, project, internship tasks, and mentor approval are complete, your certificate is issued automatically at ₹0 extra.
             </p>
           )}
         </div>
@@ -183,7 +234,7 @@ export function StudentCertificationsPanel() {
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-xs font-medium text-white/80">
             <Receipt size={15} className="text-[#b9a9d6]" aria-hidden="true" />
-            <span>Payment history &amp; receipts ({orders.length})</span>
+            <span>Programme payment history &amp; receipts ({orders.length})</span>
           </div>
 
           {orders.length > 0 ? (
@@ -191,6 +242,18 @@ export function StudentCertificationsPanel() {
               {orders.map((order) => {
                 const payment = payments.find((p) => p.order_id === order.id) ?? null;
                 const product = products.find((p) => p.id === order.product_id);
+                const isProgrammeOrder =
+                  order.order_kind === "programme_enrollment" ||
+                  order.order_kind === "course_enrollment" ||
+                  Boolean(order.metadata?.courseTitle ?? order.metadata?.programmeTitle);
+                const orderTitle = isProgrammeOrder
+                  ? `Programme: ${String(
+                      order.metadata?.courseTitle ??
+                        order.metadata?.programmeTitle ??
+                        "TGL Programme Enrolment",
+                    )}`
+                  : (product?.name ?? "Programme Enrolment");
+
                 return (
                   <article
                     key={order.id}
@@ -198,7 +261,7 @@ export function StudentCertificationsPanel() {
                   >
                     <div>
                       <p className="font-medium text-[#f4f3ef]">
-                        {product?.name ?? "Certification Order"}
+                        {orderTitle}
                       </p>
                       <p className="mt-1 font-mono text-[11px] text-white/45">
                         {order.razorpay_order_id} ·{" "}
@@ -215,7 +278,7 @@ export function StudentCertificationsPanel() {
                           setReceiptOrder({
                             order,
                             payment,
-                            productName: product?.name ?? "TGL Certificate",
+                            productName: orderTitle,
                           })
                         }
                         className="inline-flex items-center gap-1 rounded-full border border-white/15 px-3 py-1.5 text-[11px] text-white/75 hover:border-white/35"

@@ -24,12 +24,18 @@ export type InternshipEligibilityEvaluation = {
   quizPassed: boolean;
   requiredCourseSlug: string | null;
   requiredProjectSlug: string | null;
+  requiredCourseTitle?: string | null;
+  requiredProjectTitle?: string | null;
+  requiredSkills?: string[];
   missingRequirements: string[];
 };
 
 export function evaluateInternshipEligibility(input: {
   requiredCourseSlug: string | null;
   requiredProjectSlug: string | null;
+  requiredCourseTitle?: string | null;
+  requiredProjectTitle?: string | null;
+  requiredSkills?: string[];
   requireProjectApproval: boolean;
   courseEnrolled: boolean;
   quizPassed: boolean;
@@ -38,10 +44,18 @@ export function evaluateInternshipEligibility(input: {
   const missingRequirements: string[] = [];
 
   if (input.requiredCourseSlug && !input.courseEnrolled) {
-    missingRequirements.push("Enroll in the paired course and complete core modules");
+    missingRequirements.push(
+      input.requiredCourseTitle
+        ? `Enrol in "${input.requiredCourseTitle}" and complete its core lessons`
+        : "Enrol in the required course and complete its core lessons",
+    );
   }
   if (input.requireProjectApproval && input.requiredProjectSlug && !input.projectApproved) {
-    missingRequirements.push("Earn mentor approval on the linked course capstone project");
+    missingRequirements.push(
+      input.requiredProjectTitle
+        ? `Earn mentor approval on "${input.requiredProjectTitle}"`
+        : "Earn mentor approval on the required practical project",
+    );
   }
 
   return {
@@ -51,6 +65,9 @@ export function evaluateInternshipEligibility(input: {
     quizPassed: input.quizPassed,
     requiredCourseSlug: input.requiredCourseSlug,
     requiredProjectSlug: input.requiredProjectSlug,
+    requiredCourseTitle: input.requiredCourseTitle ?? null,
+    requiredProjectTitle: input.requiredProjectTitle ?? null,
+    requiredSkills: input.requiredSkills ?? [],
     missingRequirements,
   };
 }

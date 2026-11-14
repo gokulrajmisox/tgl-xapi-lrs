@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { resolveCurrentActor } from "@/lib/certifications/store";
+import {
+  listInternships,
+  listIssuances,
+  listStudentApplications,
+  resolveCurrentActor,
+} from "@/lib/certifications/store";
 import { getCourseDetailForActor } from "@/lib/courses/store";
 
 export async function GET(
@@ -15,10 +20,37 @@ export async function GET(
   });
 
   if (!detail) {
-    return NextResponse.json({ error: "Course not found." }, { status: 404 });
+    return NextResponse.json({ error: "Programme not found." }, { status: 404 });
   }
 
-  return NextResponse.json(detail, {
-    headers: { "Cache-Control": "no-store" },
-  });
+  const [internships, applications, issuances] = await Promise.all([
+    listInternships(),
+    actor.user ? listStudentApplications(actor.user.id) : Promise.resolve([]),
+    actor.user ? listIssuances(actor.user.id) : Promise.resolve([]),
+  ]);
+
+  const internshipTrack =
+    internships.find((i) => i.slug === detail.course.linkedInternshipSlug) ?? null;
+  const internshipApplication =
+    internshipTrack
+      ? applications.find((a) => a.internship_id === internshipTrack.id) ?? null
+      : null;
+  const issuedCertificate =
+    internshipApplication
+      ? issuances.find(
+          (i) =>
+            i.internship_application_id === internshipApplication.id &&
+            i.issuance_status !== "revoked",
+        ) ?? null
+      : null;
+
+  return NextResponse.json(
+    {
+      ...detail,
+      internshipTrack,
+      internshipApplication,
+      issuedCertificate,
+    },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }

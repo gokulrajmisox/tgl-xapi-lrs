@@ -5,6 +5,7 @@ import {
   serviceClient,
 } from "@/lib/supabase/service";
 import {
+  DEFAULT_COMPLETION_REQUIREMENTS,
   SEED_COURSES,
   type CourseDefinition,
   type CourseModule,
@@ -99,6 +100,10 @@ export type PublicCourseSummary = {
   includes: string[];
   linkedInternshipSlug: string;
   linkedInternshipTitle: string;
+  internshipDurationWeeks: number;
+  completionRequirements: string[];
+  includedCertificateTitle: string;
+  certificateIncluded: true;
   internshipDisclosure: string;
   isPublished: boolean;
   moduleCount: number;
@@ -288,6 +293,14 @@ function summarizeCourse(
     includes: course.includes,
     linkedInternshipSlug: course.linkedInternshipSlug,
     linkedInternshipTitle: course.linkedInternshipTitle,
+    internshipDurationWeeks: course.internshipDurationWeeks ?? 8,
+    completionRequirements:
+      course.completionRequirements?.length
+        ? course.completionRequirements
+        : DEFAULT_COMPLETION_REQUIREMENTS,
+    includedCertificateTitle:
+      course.includedCertificateTitle ?? `${course.linkedInternshipTitle} Completion Certificate`,
+    certificateIncluded: true,
     internshipDisclosure: course.internshipDisclosure,
     isPublished: course.isPublished,
     moduleCount: course.modules.length,
@@ -313,7 +326,7 @@ export async function listAllCoursesRaw(includeUnpublished = false): Promise<Cou
       let q = client
         .from("courses")
         .select(
-          "id,slug,title,subtitle,category,level,price_paise,currency,estimated_hours,mentor_name,mentor_role,outcomes,includes,linked_internship_slug,linked_internship_title,internship_disclosure,is_published,modules_json,project_json",
+          "id,slug,title,subtitle,category,level,price_paise,currency,estimated_hours,mentor_name,mentor_role,outcomes,includes,linked_internship_slug,linked_internship_title,internship_duration_weeks,completion_requirements,included_certificate_title,internship_disclosure,is_published,modules_json,project_json",
         )
         .order("created_at", { ascending: true });
       if (!includeUnpublished) q = q.eq("is_published", true);
@@ -335,6 +348,12 @@ export async function listAllCoursesRaw(includeUnpublished = false): Promise<Cou
           includes: (row.includes ?? []) as string[],
           linkedInternshipSlug: row.linked_internship_slug as string,
           linkedInternshipTitle: row.linked_internship_title as string,
+          internshipDurationWeeks: (row.internship_duration_weeks as number | undefined) ?? 8,
+          completionRequirements: Array.isArray(row.completion_requirements)
+            ? (row.completion_requirements as string[])
+            : undefined,
+          includedCertificateTitle:
+            (row.included_certificate_title as string | undefined) ?? undefined,
           internshipDisclosure: row.internship_disclosure as string,
           isPublished: Boolean(row.is_published),
           modules: (row.modules_json ?? []) as CourseModule[],
@@ -1012,6 +1031,10 @@ export async function updateCourseAdminConfig(params: {
   pricePaise: number;
   isPublished?: boolean;
   subtitle?: string;
+  projectTitle?: string;
+  projectSummary?: string;
+  internshipDurationWeeks?: number;
+  completionRequirements?: string[];
   newModuleTitle?: string;
   newModuleSummary?: string;
   newAnnouncementTitle?: string;
@@ -1023,7 +1046,7 @@ export async function updateCourseAdminConfig(params: {
 
   const store = getCoursesMemoryStore();
   const existing = store.courses.find((c) => c.id === params.courseId);
-  if (!existing) return { error: "Course not found." };
+  if (!existing) return { error: "Programme not found." };
 
   existing.pricePaise = params.pricePaise;
   if (typeof params.isPublished === "boolean") {
@@ -1031,6 +1054,26 @@ export async function updateCourseAdminConfig(params: {
   }
   if (typeof params.subtitle === "string" && params.subtitle.trim()) {
     existing.subtitle = params.subtitle.trim();
+  }
+  if (typeof params.projectTitle === "string" && params.projectTitle.trim()) {
+    existing.project = {
+      ...existing.project,
+      title: params.projectTitle.trim(),
+    };
+  }
+  if (typeof params.projectSummary === "string" && params.projectSummary.trim()) {
+    existing.project = {
+      ...existing.project,
+      summary: params.projectSummary.trim(),
+    };
+  }
+  if (typeof params.internshipDurationWeeks === "number" && params.internshipDurationWeeks >= 1) {
+    existing.internshipDurationWeeks = params.internshipDurationWeeks;
+  }
+  if (Array.isArray(params.completionRequirements) && params.completionRequirements.length > 0) {
+    existing.completionRequirements = params.completionRequirements
+      .map((s) => s.trim())
+      .filter(Boolean);
   }
 
   if (params.newModuleTitle?.trim()) {
@@ -1094,6 +1137,10 @@ export async function updateCourseAdminConfig(params: {
           is_published: existing.isPublished,
           subtitle: existing.subtitle,
           modules_json: existing.modules,
+          project_json: existing.project,
+          internship_duration_weeks: existing.internshipDurationWeeks ?? 8,
+          completion_requirements:
+            existing.completionRequirements ?? DEFAULT_COMPLETION_REQUIREMENTS,
           updated_at: new Date().toISOString(),
         })
         .eq("id", existing.id);
@@ -1149,13 +1196,17 @@ export async function createAdminCourse(params: {
     ],
     includes: [
       "Structured written study notes and reference documentation",
-      "Interactive graded course quiz and practical assignments",
+      "Interactive graded programme quiz and practical assignments",
       `Linked capstone project (${params.projectTitle}) with mentor feedback`,
+      `Included ${params.linkedInternshipTitle} track & official completion certificate (₹0 extra)`,
     ],
     linkedInternshipSlug: params.linkedInternshipSlug,
     linkedInternshipTitle: params.linkedInternshipTitle,
+    internshipDurationWeeks: 8,
+    includedCertificateTitle: `${params.title.trim()} Completion Certificate`,
+    completionRequirements: [...DEFAULT_COMPLETION_REQUIREMENTS],
     internshipDisclosure:
-      "Course fee covers structured curriculum and mentor project review. Completing this course satisfies project prerequisites for the practical internship track; optional completion certificates carry a separate ₹299–₹599 INR fee after mentor approval.",
+      "One single Programme Enrolment covers learning modules, assignments, practical project review, linked internship participation, and your official completion certificate at ₹0 extra once approved.",
     isPublished: true,
     modules: [
       {

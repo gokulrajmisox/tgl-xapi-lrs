@@ -37,6 +37,27 @@ export function AdminOperationsClient({
     }
     return map;
   });
+  const [courseProjectTitles, setCourseProjectTitles] = useState<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const c of initialCourses) {
+      map[c.id] = c.projectTitle ?? "";
+    }
+    return map;
+  });
+  const [courseInternshipWeeks, setCourseInternshipWeeks] = useState<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const c of initialCourses) {
+      map[c.id] = String(c.internshipDurationWeeks ?? 6);
+    }
+    return map;
+  });
+  const [courseRequirements, setCourseRequirements] = useState<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const c of initialCourses) {
+      map[c.id] = (c.completionRequirements ?? []).join("\n");
+    }
+    return map;
+  });
   const [contentSummary, setContentSummary] = useState({
     pathwayCount: 9,
     nodeCount: 25,
@@ -50,7 +71,7 @@ export function AdminOperationsClient({
   const [mentorName, setMentorName] = useState("");
   const [mentorEmail, setMentorEmail] = useState("");
 
-  // Course creation state (POST /api/courses)
+  // Programme creation state (POST /api/courses)
   const [newCourseTitle, setNewCourseTitle] = useState("");
   const [newCourseSubtitle, setNewCourseSubtitle] = useState("");
   const [newCourseCategory, setNewCourseCategory] = useState<
@@ -63,7 +84,7 @@ export function AdminOperationsClient({
   const [newCourseProjectTitle, setNewCourseProjectTitle] = useState("");
   const [newCourseProjectSummary, setNewCourseProjectSummary] = useState("");
 
-  // Per-course module & announcement additions (PATCH /api/courses)
+  // Per-programme module & announcement additions (PATCH /api/courses)
   const [moduleTitles, setModuleTitles] = useState<Record<string, string>>({});
   const [announcementTitles, setAnnouncementTitles] = useState<Record<string, string>>({});
   const [announcementBodies, setAnnouncementBodies] = useState<Record<string, string>>({});
@@ -90,10 +111,19 @@ export function AdminOperationsClient({
       const loadedCourses = (courseData.courses ?? []) as PublicCourseSummary[];
       setCourses(loadedCourses);
       const priceMap: Record<string, string> = {};
+      const projectMap: Record<string, string> = {};
+      const weeksMap: Record<string, string> = {};
+      const reqMap: Record<string, string> = {};
       for (const c of loadedCourses) {
         priceMap[c.id] = String(Math.round(c.pricePaise / 100));
+        projectMap[c.id] = c.projectTitle ?? "";
+        weeksMap[c.id] = String(c.internshipDurationWeeks ?? 6);
+        reqMap[c.id] = (c.completionRequirements ?? []).join("\n");
       }
       setCoursePrices(priceMap);
+      setCourseProjectTitles(projectMap);
+      setCourseInternshipWeeks(weeksMap);
+      setCourseRequirements(reqMap);
     }
   }, []);
 
@@ -161,7 +191,7 @@ export function AdminOperationsClient({
       setNewCourseSubtitle("");
       setNewCourseProjectTitle("");
       setNewCourseProjectSummary("");
-      setNotice(`Created paid course "${data.course.title}" (${formatInrFromPaise(pricePaise)}).`);
+      setNotice(`Created bundled programme "${data.course.title}" (${formatInrFromPaise(pricePaise)}).`);
       await loadWorkspaceAdmin();
     } finally {
       setBusyCourseId(null);
@@ -178,6 +208,14 @@ export function AdminOperationsClient({
       const newModuleTitle = moduleTitles[course.id]?.trim();
       const newAnnouncementTitle = announcementTitles[course.id]?.trim();
       const newAnnouncementBody = announcementBodies[course.id]?.trim();
+      const editedProjectTitle = courseProjectTitles[course.id]?.trim();
+      const editedWeeks = Number(
+        courseInternshipWeeks[course.id] ?? course.internshipDurationWeeks ?? 6,
+      );
+      const parsedRequirements = (courseRequirements[course.id] ?? "")
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length >= 3);
 
       const res = await fetch("/api/courses", {
         method: "PATCH",
@@ -186,6 +224,11 @@ export function AdminOperationsClient({
           courseId: course.id,
           pricePaise,
           isPublished: togglePublish ? !course.isPublished : course.isPublished,
+          ...(editedProjectTitle ? { projectTitle: editedProjectTitle } : {}),
+          ...(Number.isFinite(editedWeeks) && editedWeeks >= 1 && editedWeeks <= 26
+            ? { internshipDurationWeeks: Math.round(editedWeeks) }
+            : {}),
+          ...(parsedRequirements.length > 0 ? { completionRequirements: parsedRequirements } : {}),
           ...(newModuleTitle ? { newModuleTitle } : {}),
           ...(newAnnouncementTitle && newAnnouncementBody
             ? { newAnnouncementTitle, newAnnouncementBody }
@@ -194,7 +237,7 @@ export function AdminOperationsClient({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Could not update course configuration.");
+        setError(data.error ?? "Could not update programme configuration.");
         return;
       }
       if (newModuleTitle) {
@@ -220,7 +263,7 @@ export function AdminOperationsClient({
       >
         {[
           { id: "overview" as const, label: "Cohorts, Content & Users" },
-          { id: "courses" as const, label: `Courses & Curriculum (${courses.length})` },
+          { id: "courses" as const, label: `Programmes & Pricing (${courses.length})` },
           { id: "payments" as const, label: "Internships, Certificates & Payments" },
           { id: "emails" as const, label: "Email Templates & Test" },
         ].map((item) => (
@@ -256,7 +299,7 @@ export function AdminOperationsClient({
         <div className="space-y-8">
           <div className="grid gap-4 sm:grid-cols-4">
             <div className="rounded-2xl border border-white/10 bg-[#111111] p-5">
-              <p className="text-[11px] text-white/45">Courses</p>
+              <p className="text-[11px] text-white/45">Programmes</p>
               <p className="mt-2 text-2xl font-medium tabular-nums">{courses.length}</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-[#111111] p-5">
@@ -403,17 +446,17 @@ export function AdminOperationsClient({
             <div>
               <h2 className="flex items-center gap-2 text-base font-medium">
                 <BookOpen size={15} className="text-[#b9a9d6]" aria-hidden="true" />
-                <span>Manage paid courses, fees (₹499–₹1,999), modules &amp; announcements</span>
+                <span>Manage bundled programmes, single INR fee (₹499–₹1,999), project, internship &amp; criteria</span>
               </h2>
               <p className="mt-1 text-xs text-white/50">
-                Create new courses, configure integer-paise INR pricing, add modules, or post mentor announcements.
+                Each Programme fee covers the course modules, attached project, included internship track, and certificate (₹0 extra).
               </p>
             </div>
             <Link
-              href="/courses"
+              href="/programmes"
               className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-4 py-2 text-xs text-white/80 hover:border-white/35"
             >
-              View public catalog <ArrowUpRight size={13} aria-hidden="true" />
+              View public programmes <ArrowUpRight size={13} aria-hidden="true" />
             </Link>
           </div>
 
@@ -427,7 +470,7 @@ export function AdminOperationsClient({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-[11px] text-[#b9a9d6]">
-                        {course.category} · {course.moduleCount} modules ·{" "}
+                        {course.category} · {course.moduleCount} modules · Certificate Included (₹0 extra) ·{" "}
                         {course.isPublished ? "Published" : "Hidden"}
                       </p>
                       <h3 className="mt-1 text-base font-medium text-[#f4f3ef]">
@@ -446,6 +489,54 @@ export function AdminOperationsClient({
                   </div>
 
                   <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 sm:grid-cols-2">
+                    <label className="block text-white/60">
+                      Attached project title
+                      <input
+                        type="text"
+                        value={courseProjectTitles[course.id] ?? ""}
+                        onChange={(e) =>
+                          setCourseProjectTitles((prev) => ({
+                            ...prev,
+                            [course.id]: e.target.value,
+                          }))
+                        }
+                        className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-xs text-white"
+                      />
+                    </label>
+                    <label className="block text-white/60">
+                      Included internship duration (weeks)
+                      <input
+                        type="number"
+                        min={1}
+                        max={26}
+                        value={courseInternshipWeeks[course.id] ?? "6"}
+                        onChange={(e) =>
+                          setCourseInternshipWeeks((prev) => ({
+                            ...prev,
+                            [course.id]: e.target.value,
+                          }))
+                        }
+                        className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 font-mono text-xs tabular-nums text-white"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="mt-3 block text-white/60">
+                    Completion &amp; certificate requirements (one requirement per line)
+                    <textarea
+                      rows={3}
+                      value={courseRequirements[course.id] ?? ""}
+                      onChange={(e) =>
+                        setCourseRequirements((prev) => ({
+                          ...prev,
+                          [course.id]: e.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white"
+                    />
+                  </label>
+
+                  <div className="mt-3 grid gap-3 border-t border-white/10 pt-4 sm:grid-cols-2">
                     <label className="block text-white/60">
                       Add new module title
                       <input
@@ -499,7 +590,7 @@ export function AdminOperationsClient({
                   <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-white/10 pt-4">
                     <div className="flex flex-wrap items-end gap-3">
                       <label className="text-white/60">
-                        INR Fee (₹499–₹1,999)
+                        Single Enrolment INR Fee (₹499–₹1,999)
                         <input
                           type="number"
                           min={499}
@@ -512,7 +603,7 @@ export function AdminOperationsClient({
                               [course.id]: e.target.value,
                             }))
                           }
-                          className="mt-1 block h-9 w-32 rounded-lg border border-white/10 bg-black/30 px-3 font-mono text-xs tabular-nums text-white"
+                          className="mt-1 block h-9 w-36 rounded-lg border border-white/10 bg-black/30 px-3 font-mono text-xs tabular-nums text-white"
                         />
                       </label>
                       <button
@@ -521,14 +612,14 @@ export function AdminOperationsClient({
                         onClick={() => void handleSaveCourse(course, false)}
                         className="h-9 rounded-full bg-[#f4f3ef] px-4 text-xs font-medium text-[#111111] disabled:opacity-45"
                       >
-                        Save updates ({formatInrFromPaise(course.pricePaise)})
+                        Save programme ({formatInrFromPaise(course.pricePaise)})
                       </button>
                     </div>
                     <Link
-                      href={`/courses/${course.slug}`}
+                      href={`/programmes/${course.slug}`}
                       className="text-[#b9a9d6] hover:text-white"
                     >
-                      Open course workspace
+                      Open programme page
                     </Link>
                   </div>
                 </article>
@@ -541,17 +632,20 @@ export function AdminOperationsClient({
             >
               <h3 className="flex items-center gap-2 text-base font-medium">
                 <Plus size={15} className="text-[#b9a9d6]" aria-hidden="true" />
-                <span>Create paid course (₹499–₹1,999)</span>
+                <span>Create bundled programme (₹499–₹1,999)</span>
               </h3>
+              <p className="mt-1 text-[11px] text-white/50">
+                Automatically includes course learning, practical project, internship track, and certificate (₹0 extra).
+              </p>
               <div className="mt-4 space-y-3">
                 <label className="block text-white/60">
-                  Course title
+                  Programme title
                   <input
                     required
                     minLength={4}
                     value={newCourseTitle}
                     onChange={(e) => setNewCourseTitle(e.target.value)}
-                    placeholder="e.g. Distributed Event Queues & Workers"
+                    placeholder="e.g. Distributed Event Queues Internship Programme"
                     className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
                   />
                 </label>
@@ -590,7 +684,7 @@ export function AdminOperationsClient({
                     </select>
                   </label>
                   <label className="block text-white/60">
-                    Fee INR (499–1999)
+                    Single INR Fee (499–1999)
                     <input
                       type="number"
                       min={499}
@@ -660,7 +754,7 @@ export function AdminOperationsClient({
                   disabled={busyCourseId === "create"}
                   className="w-full rounded-full bg-[#f4f3ef] px-4 py-2.5 text-xs font-medium text-[#111111]"
                 >
-                  Publish new paid course
+                  Publish new programme
                 </button>
               </div>
             </form>
@@ -672,6 +766,7 @@ export function AdminOperationsClient({
         <AdminCertificationsPanel
           isSandbox={isSandbox}
           initialTab={section === "emails" ? "emails" : "certificates"}
+          embedded
         />
       )}
     </div>

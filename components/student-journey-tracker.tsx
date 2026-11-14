@@ -9,13 +9,19 @@ import {
   Briefcase,
   CheckCircle2,
   Circle,
-  CreditCard,
+  Clock3,
   FolderGit2,
 } from "lucide-react";
 
 export type JourneyStageState = {
   step: number;
-  key: "pay" | "enrol" | "learn" | "project" | "internship" | "certificate";
+  key:
+    | "enrolled"
+    | "learning"
+    | "project"
+    | "internship"
+    | "completed"
+    | "certificate";
   label: string;
   detail: string;
   status: "completed" | "active" | "upcoming";
@@ -23,11 +29,11 @@ export type JourneyStageState = {
 };
 
 const STAGE_ICONS = {
-  pay: CreditCard,
-  enrol: BookOpen,
-  learn: BookOpen,
+  enrolled: CheckCircle2,
+  learning: BookOpen,
   project: FolderGit2,
   internship: Briefcase,
+  completed: Clock3,
   certificate: Award,
 } as const;
 
@@ -37,26 +43,26 @@ export function StudentJourneyTracker({ stages }: { stages: JourneyStageState[] 
   return (
     <section
       aria-labelledby="journey-tracker-heading"
-      className="rounded-3xl border border-white/10 bg-[#111111] p-6 sm:p-8"
+      className="rounded-3xl border border-white/10 bg-[#111111] p-5 sm:p-7"
     >
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-5">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-4">
         <div>
-          <p className="text-[10px] uppercase tracking-[0.2em] text-[#b9a9d6]">
-            End-to-End Student Journey Tracker
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[#b9a9d6]">
+            Your Programme Journey
           </p>
           <h2
             id="journey-tracker-heading"
-            className="mt-2 text-2xl font-medium tracking-[-0.04em] text-[#f4f3ef]"
+            className="mt-1.5 text-lg font-medium tracking-[-0.03em] text-[#f4f3ef] sm:text-xl"
           >
-            Pay → Enrol → Learn → Build Project → Complete Internship → Receive Certificate
+            Enrolled → Learning → Project → Internship → Completed → Certificate Issued
           </h2>
         </div>
         <span className="font-mono text-xs tabular-nums text-[#b9a9d6]">
-          {completedCount}/6 stages verified
+          {completedCount} of {stages.length} stages completed
         </span>
       </div>
 
-      <ol className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <ol className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {stages.map((stage, index) => {
           const Icon = STAGE_ICONS[stage.key];
           const isCompleted = stage.status === "completed";
@@ -68,54 +74,69 @@ export function StudentJourneyTracker({ stages }: { stages: JourneyStageState[] 
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25, delay: index * 0.04 }}
-              className="relative"
+              className="relative min-w-0"
             >
               <Link
                 href={stage.href}
-                className={`flex h-full flex-col justify-between rounded-2xl border p-4 transition-colors ${
+                className={`flex min-h-[136px] h-full flex-col justify-between rounded-2xl border p-4 transition-colors ${
                   isCompleted
                     ? "border-emerald-400/35 bg-emerald-950/20 hover:border-emerald-400/60"
                     : isActive
-                      ? "border-[#b9a9d6]/50 bg-[#b9a9d6]/10 hover:border-[#b9a9d6]"
+                      ? "border-[#b9a9d6]/55 bg-[#b9a9d6]/12 hover:border-[#b9a9d6]"
                       : "border-white/10 bg-black/25 hover:border-white/25"
                 }`}
               >
                 <div>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-[10px] text-white/50">
+                    <span className="font-mono text-[11px] text-white/55">
                       0{stage.step}
                     </span>
-                    {isCompleted ? (
-                      <CheckCircle2
-                        size={14}
-                        className="text-emerald-300"
-                        aria-hidden="true"
-                      />
-                    ) : isActive ? (
-                      <Icon size={14} className="text-[#b9a9d6]" aria-hidden="true" />
-                    ) : (
-                      <Circle size={13} className="text-white/25" aria-hidden="true" />
-                    )}
+                    <span
+                      className={`inline-flex items-center gap-1 text-[11px] font-medium ${
+                        isCompleted
+                          ? "text-emerald-300"
+                          : isActive
+                            ? "text-[#b9a9d6]"
+                            : "text-white/55"
+                      }`}
+                    >
+                      {isCompleted ? (
+                        <>
+                          <CheckCircle2 size={12} aria-hidden="true" />
+                          Done
+                        </>
+                      ) : isActive ? (
+                        <>
+                          <Clock3 size={12} aria-hidden="true" />
+                          Active
+                        </>
+                      ) : (
+                        <>
+                          <Circle size={11} aria-hidden="true" />
+                          Next
+                        </>
+                      )}
+                    </span>
                   </div>
-                  <p className="mt-2.5 text-sm font-medium text-[#f4f3ef]">
-                    {stage.label}
+
+                  <p className="mt-2.5 flex items-center gap-2 text-sm font-medium text-[#f4f3ef]">
+                    <Icon size={14} className="shrink-0 text-[#b9a9d6]" aria-hidden="true" />
+                    <span className="truncate">{stage.label}</span>
                   </p>
-                  <p className="mt-1 text-[11px] leading-4 text-white/55">
-                    {stage.detail}
-                  </p>
+                  <p className="mt-1 text-xs leading-5 text-white/65">{stage.detail}</p>
                 </div>
 
                 <span
-                  className={`mt-3 inline-flex items-center gap-1 text-[11px] font-medium ${
+                  className={`mt-3 inline-flex items-center gap-1 text-xs font-medium ${
                     isCompleted
                       ? "text-emerald-300"
                       : isActive
                         ? "text-[#b9a9d6]"
-                        : "text-white/45"
+                        : "text-white/70"
                   }`}
                 >
-                  {isCompleted ? "Done" : isActive ? "In progress" : "Open step"}
-                  <ArrowRight size={11} aria-hidden="true" />
+                  {isCompleted ? "View" : isActive ? "Open" : "Preview"}
+                  <ArrowRight size={12} aria-hidden="true" />
                 </span>
               </Link>
             </motion.li>

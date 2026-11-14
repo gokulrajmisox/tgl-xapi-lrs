@@ -49,6 +49,12 @@ export type ProjectBrief = {
   estimatedHours: number;
   summary: string;
   brief: string;
+  whyItMatters?: string;
+  stepByStep?: string[];
+  requiredSkills?: string[];
+  submissionDeadline?: string;
+  submissionMethod?: string;
+  evaluationCriteria?: string[];
   deliverables: string[];
   relatedConceptIds: string[];
   relatedProjectSlugs: string[];
@@ -986,3 +992,91 @@ export function findProjectBySlug(slug: string): ProjectBrief | undefined {
 export function findNodeById(id: string): LearningNode | undefined {
   return learningNodes.find((n) => n.id === id);
 }
+
+export type ResolvedProjectGuidance = {
+  whyItMatters: string;
+  stepByStep: string[];
+  requiredSkills: string[];
+  submissionDeadline: string;
+  submissionMethod: string;
+  evaluationCriteria: string[];
+};
+
+export type ProjectGuidanceInput = {
+  slug: string;
+  title: string;
+  estimatedHours: number;
+  deliverables: string[];
+  pathwaySlug?: string;
+  category?: string;
+  relatedConceptIds?: string[];
+  milestones?: string[];
+  rubric?: string[];
+  whyItMatters?: string;
+  stepByStep?: string[];
+  requiredSkills?: string[];
+  submissionDeadline?: string;
+  submissionMethod?: string;
+  evaluationCriteria?: string[];
+};
+
+export function getProjectGuidance(project: ProjectGuidanceInput): ResolvedProjectGuidance {
+  const enriched = findProjectBySlug(project.slug);
+  const pathwaySlug = project.pathwaySlug ?? enriched?.pathwaySlug;
+  const pathway = pathwaySlug
+    ? enrichedPathways.find((p) => p.slug === pathwaySlug)
+    : undefined;
+  const conceptIds = project.relatedConceptIds ?? enriched?.relatedConceptIds ?? [];
+  const conceptTitles = conceptIds
+    .map((id) => learningNodes.find((n) => n.id === id)?.title)
+    .filter((t): t is string => Boolean(t));
+
+  const deliverables =
+    project.deliverables.length > 0
+      ? project.deliverables
+      : (enriched?.deliverables ?? []);
+
+  const defaultSteps =
+    project.milestones && project.milestones.length > 0
+      ? [
+          `Click "Start Project" to register your work in progress and unlock submission inputs.`,
+          ...project.milestones,
+          `Push clean code to a public GitHub repository and attach any test logs or screenshots before clicking "Submit Project".`,
+        ]
+      : [
+          `Click "Start Project" to register your work in progress and unlock submission inputs.`,
+          `Build your solution step by step (${deliverables[0] ?? "working implementation"}).`,
+          `Verify every edge case locally (${deliverables[1] ?? "automated checks and manual walkthrough"}).`,
+          `Push clean code to a public GitHub repository and attach any test logs or screenshots before clicking "Submit Project".`,
+        ];
+
+  return {
+    whyItMatters:
+      project.whyItMatters ??
+      enriched?.whyItMatters ??
+      `Building "${project.title}" turns passive study into verified engineering proof. It prepares you directly for mentor critique and related practical internship work in ${pathway?.title ?? project.category ?? enriched?.category ?? "your chosen track"}.`,
+    stepByStep: project.stepByStep ?? enriched?.stepByStep ?? defaultSteps,
+    requiredSkills:
+      project.requiredSkills ??
+      enriched?.requiredSkills ??
+      Array.from(new Set([...(pathway?.skills ?? []), ...conceptTitles])).slice(0, 5),
+    submissionDeadline:
+      project.submissionDeadline ??
+      enriched?.submissionDeadline ??
+      `Recommended within 2 weeks of starting (~${project.estimatedHours} hrs effort)`,
+    submissionMethod:
+      project.submissionMethod ??
+      enriched?.submissionMethod ??
+      "Public GitHub Repository URL + Optional Live Demo URL + Supporting Files or Evidence Notes",
+    evaluationCriteria:
+      project.evaluationCriteria ??
+      enriched?.evaluationCriteria ??
+      (project.rubric && project.rubric.length > 0
+        ? project.rubric
+        : [
+            ...deliverables,
+            "Clear explanation of design decisions, edge cases tested, and reproducible setup steps",
+          ]),
+  };
+}
+

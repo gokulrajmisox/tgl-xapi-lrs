@@ -37,7 +37,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
           if (authError.status === 429) throw new Error("Too many attempts. Please wait and try again.");
           throw new Error("Invalid email or password.");
         }
-        router.push("/dashboard/learning");
+        router.push("/learn");
         router.refresh();
       } else if (mode === "sign-up") {
         const { error: authError } = await supabase.auth.signUp({
@@ -93,6 +93,6 @@ export function AuthForm({ mode }: { mode: Mode }) {
       <button type="submit" disabled={busy} className="mt-2 h-12 rounded-full bg-[#f4f3ef] text-sm font-medium text-[#111] transition hover:bg-white disabled:cursor-wait disabled:opacity-60">{busy ? "Please wait…" : mode === "login" ? "Sign in" : mode === "sign-up" ? "Create account" : mode === "forgot-password" ? "Send reset link" : "Update password"}</button>
     </form>
     <div className="mt-6 text-center text-xs text-white/45">{mode === "login" ? <>New to TGL? <Link href="/auth/sign-up" className="text-white underline underline-offset-4">Create an account</Link></> : mode === "sign-up" ? <>Already registered? <Link href="/auth/login" className="text-white underline underline-offset-4">Sign in</Link></> : <Link href="/auth/login" className="text-white underline underline-offset-4">Back to sign in</Link>}</div>
-    <p className="mt-8 border-t border-white/[0.08] pt-5 text-[10px] leading-5 text-white/35">TGL tracks only the learning activity you choose to share. Manual progress is self-reported and is not proof of an external course completion.</p>
+    <p className="mt-8 border-t border-white/[0.08] pt-5 text-[11px] leading-5 text-white/50">Your enrolled courses, project submissions, mentor feedback, and internship progress stay saved to your student account.</p>
   </section>;
 }

@@ -17,11 +17,14 @@ import {
 } from "../../lib/payments/razorpay";
 import { dispatchLifecycleEmail } from "../../lib/email/provider";
 import {
+  claimIncludedCertificate,
   createCertificationOrder,
+  createCourseEnrollmentOrder,
   DEMO_STUDENT_ID,
   getCertificateByPublicId,
   listEmailLogs,
   listProducts,
+  listStudentApplications,
   processRazorpayWebhookEvent,
   recordFailedOrCancelledPayment,
   resetMemoryStoreForTest,
@@ -38,15 +41,21 @@ const testStudent: SandboxUser = {
   isSandbox: true,
 };
 
-test("pricing bounds enforce ₹299–₹599 INR in integer paise or free (0)", () => {
+const unapprovedStudent: SandboxUser = {
+  id: "00000000-0000-4000-8000-000000000888",
+  email: "rohan.test@example.edu",
+  name: "Rohan Test",
+  role: "student",
+  isSandbox: true,
+};
+
+test("bundled model enforces ₹0 additional certificate fee and blocks separate certificate pricing", () => {
   assert.equal(validateProductPricePaise(0).valid, true);
-  assert.equal(validateProductPricePaise(29900).valid, true);
-  assert.equal(validateProductPricePaise(59900).valid, true);
-  assert.equal(validateProductPricePaise(29899).valid, false);
-  assert.equal(validateProductPricePaise(60000).valid, false);
+  assert.equal(validateProductPricePaise(29900).valid, false);
+  assert.equal(validateProductPricePaise(59900).valid, false);
   assert.equal(validateProductPricePaise(499.5).valid, false);
   assert.equal(formatInrFromPaise(49900), "₹499");
-  assert.equal(formatInrFromPaise(0), "Free");
+  assert.equal(formatInrFromPaise(0), "Included (₹0 extra)");
 });
 
 test("Razorpay payment signature and raw-body webhook HMAC verification", () => {
@@ -96,17 +105,23 @@ test("Razorpay payment signature and raw-body webhook HMAC verification", () => 
   );
 });
 
-test("blocks payment without eligibility and prevents payment-only issuance", async () => {
+test("retires separate certificate checkout (400) and blocks certificate claim/issuance without completion + mentor approval", async () => {
   resetMemoryStoreForTest();
   const products = await listProducts();
-  const specialProduct = products.find((p) => p.certificate_type === "special_achievement")!;
+  const internshipProduct = products.find((p) => p.certificate_type === "internship")!;
 
-  const orderResult = await createCertificationOrder({
+  const retiredOrder = await createCertificationOrder({
     user: testStudent,
-    productId: specialProduct.id,
+    productId: internshipProduct.id,
   });
-  assert.equal(orderResult.status, 403);
-  assert.match(orderResult.error ?? "", /Not eligible/i);
+  assert.equal(retiredOrder.status, 400);
+  assert.match(retiredOrder.error ?? "", /included at ₹0 extra/i);
+
+  const blockedClaim = await claimIncludedCertificate({
+    user: unapprovedStudent,
+  });
+  assert.equal(blockedClaim.status, 403);
+  assert.match(blockedClaim.error ?? "", /Complete your programme/i);
 
   const ineligibleEval = evaluateCertificateEligibility({
     certificateType: "internship",
@@ -120,86 +135,59 @@ test("blocks payment without eligibility and prevents payment-only issuance", as
   });
   const gate = canIssueCertificate({
     productEnabled: true,
-    pricePaise: 49900,
+    pricePaise: 0,
     eligibility: ineligibleEval,
     paymentStatus: "captured",
     paymentVerified: true,
   });
   assert.equal(gate.allowed, false);
-  assert.match(gate.reason ?? "", /Payment alone never issues a certificate/i);
+  assert.match(gate.reason ?? "", /never issues a certificate/i);
 });
 
-test("eligible student completes payment, verifies signature, issues certificate, generates QR, and prevents duplicate issuance", async () => {
+test("eligible student claims included ₹0 certificate, generates QR, prevents duplicate issuance, and reflects revocation immediately", async () => {
   resetMemoryStoreForTest();
-  const products = await listProducts();
-  const internshipCert = products.find((p) => p.certificate_type === "internship")!;
 
-  const orderRes = await createCertificationOrder({
+  const claimed = await claimIncludedCertificate({
     user: testStudent,
-    productId: internshipCert.id,
   });
-  assert.ok(orderRes.order);
-  assert.equal(orderRes.order.amount_paise, 49900);
-
-  // Reject invalid signature first
-  const invalidVerify = await verifyAndCaptureCheckoutPayment({
-    user: testStudent,
-    razorpayOrderId: orderRes.order.razorpay_order_id,
-    razorpayPaymentId: "pay_sim_invalid_attempt",
-    razorpaySignature: "invalid_signature",
-    simulateTestCheckout: true,
-  });
-  assert.equal(invalidVerify.status, 400);
-  assert.equal(invalidVerify.issuance, undefined);
-
-  // Valid signature succeeds and issues certificate
-  const validVerify = await verifyAndCaptureCheckoutPayment({
-    user: testStudent,
-    razorpayOrderId: orderRes.order.razorpay_order_id,
-    razorpayPaymentId: "pay_sim_valid_001",
-    razorpaySignature: `sim_sig_${orderRes.order.razorpay_order_id}`,
-    simulateTestCheckout: true,
-  });
-  assert.ok(validVerify.payment);
-  assert.equal(validVerify.payment.payment_status, "captured");
-  assert.ok(validVerify.issuance);
-  assert.equal(validVerify.issuance.issuance_status, "issued");
+  assert.ok(claimed.issuance);
+  assert.equal(claimed.issuance.issuance_status, "issued");
 
   // QR generation + Public verification
   const qrSvg = await generateCertificateQrSvg(
-    `https://touchgrasslater.org/verify/certificate/${validVerify.issuance.certificate_id}`,
+    `https://touchgrasslater.org/verify/certificate/${claimed.issuance.certificate_id}`,
   );
   assert.match(qrSvg, /<svg/);
 
-  const verifiedCert = await getCertificateByPublicId(validVerify.issuance.certificate_id);
+  const verifiedCert = await getCertificateByPublicId(claimed.issuance.certificate_id);
   assert.ok(verifiedCert);
   assert.equal(verifiedCert.issuance_status, "issued");
 
-  // Prevent duplicate certificate issuance for the same user + product
-  const duplicateOrderAttempt = await createCertificationOrder({
+  // Prevent duplicate certificate issuance for the same student/internship
+  const duplicateClaim = await claimIncludedCertificate({
     user: testStudent,
-    productId: internshipCert.id,
   });
-  assert.equal(duplicateOrderAttempt.status, 409);
-  assert.match(duplicateOrderAttempt.error ?? "", /Duplicate issuance is not permitted/i);
+  assert.equal(duplicateClaim.status, 409);
+  assert.match(duplicateClaim.error ?? "", /Duplicate issuance is not permitted/i);
 
   // Revocation with audit reason reflects immediately in verification lookup
   const revoked = await revokeCertificateWithReason({
-    certificateId: validVerify.issuance.certificate_id,
+    certificateId: claimed.issuance.certificate_id,
     reason: "Audit check test revocation",
   });
   assert.equal(revoked.issuance?.issuance_status, "revoked");
-  const afterRevoke = await getCertificateByPublicId(validVerify.issuance.certificate_id);
+  const afterRevoke = await getCertificateByPublicId(claimed.issuance.certificate_id);
   assert.equal(afterRevoke?.issuance_status, "revoked");
   assert.equal(afterRevoke?.revocation_reason, "Audit check test revocation");
 });
 
-test("handles failed and cancelled payments and logs lifecycle notifications", async () => {
+test("handles failed and cancelled programme payments and logs lifecycle notifications", async () => {
   resetMemoryStoreForTest();
-  const products = await listProducts();
-  const internshipCert = products.find((p) => p.certificate_type === "internship")!;
 
-  const order1 = await createCertificationOrder({ user: testStudent, productId: internshipCert.id });
+  const order1 = await createCourseEnrollmentOrder({
+    user: testStudent,
+    courseId: "course-web-architecture",
+  });
   assert.ok(order1.order);
   const failedRes = await recordFailedOrCancelledPayment({
     user: testStudent,
@@ -209,7 +197,10 @@ test("handles failed and cancelled payments and logs lifecycle notifications", a
   });
   assert.equal(failedRes.order?.order_status, "failed");
 
-  const order2 = await createCertificationOrder({ user: testStudent, productId: internshipCert.id });
+  const order2 = await createCourseEnrollmentOrder({
+    user: testStudent,
+    courseId: "course-web-architecture",
+  });
   assert.ok(order2.order);
   const cancelledRes = await recordFailedOrCancelledPayment({
     user: testStudent,
@@ -223,12 +214,14 @@ test("handles failed and cancelled payments and logs lifecycle notifications", a
   assert.ok(logs.some((log) => log.template_key === "payment_failed"));
 });
 
-test("processes webhook idempotently and rejects duplicate/replayed events", async () => {
+test("processes programme webhook idempotently, auto-activates linked internship, and rejects replayed events", async () => {
   resetMemoryStoreForTest();
-  const products = await listProducts();
-  const internshipCert = products.find((p) => p.certificate_type === "internship")!;
-  const orderRes = await createCertificationOrder({ user: testStudent, productId: internshipCert.id });
+  const orderRes = await createCourseEnrollmentOrder({
+    user: unapprovedStudent,
+    courseId: "course-web-architecture",
+  });
   assert.ok(orderRes.order);
+  assert.equal(orderRes.order.order_kind, "programme_enrollment");
 
   const whSecret = "whsec_unit_test_secret";
   const payload = JSON.stringify({
@@ -253,6 +246,12 @@ test("processes webhook idempotently and rejects duplicate/replayed events", asy
   });
   assert.equal(first.status, 200);
   assert.equal(first.processingStatus, "processed");
+
+  const appsAfterCapture = await listStudentApplications(unapprovedStudent.id);
+  assert.ok(
+    appsAfterCapture.some((a) => a.status === "in_progress"),
+    "Linked internship should auto-activate upon verified programme payment capture",
+  );
 
   const replay = await processRazorpayWebhookEvent({
     rawBody: payload,

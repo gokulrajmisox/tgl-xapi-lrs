@@ -16,9 +16,9 @@ import {
 } from "@/lib/certifications/store";
 
 export const metadata = {
-  title: "Student Dashboard — Touch Grass Later",
+  title: "My Home — Touch Grass Later",
   description:
-    "Track your 6-stage learning-to-internship journey: paid courses, lesson progress, project deliverables, internship tasks, mentor feedback, and QR certificates.",
+    "Follow your next step across Courses, Projects, Internships, and Verified Certificates.",
 };
 
 export default async function StudentHomePage() {
@@ -47,9 +47,9 @@ export default async function StudentHomePage() {
   return (
     <RoleShell
       role="student"
-      title="Student dashboard"
-      subtitle="Pay → Enrol → Learn → Build Project → Complete Internship → Receive Internship Certificate"
-      primaryAction={{ label: "Browse paid courses", href: "/courses" }}
+      title={`Welcome back, ${learnerName}!`}
+      subtitle="See what you have finished and what to do next across your courses, projects, internships, and certificates."
+      primaryAction={{ label: "Explore Courses", href: "/courses" }}
     >
       <StudentHomeClient
         learnerName={learnerName}

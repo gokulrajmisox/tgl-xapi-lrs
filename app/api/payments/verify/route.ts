@@ -40,6 +40,7 @@ export async function POST(request: Request) {
       payment: result.payment,
       issuance: result.issuance ?? null,
       enrollment: result.enrollment ?? null,
+      internshipApplication: result.internshipApplication ?? null,
       issuanceError: result.error ?? null,
     },
     { status: 200, headers: { "Cache-Control": "no-store" } },

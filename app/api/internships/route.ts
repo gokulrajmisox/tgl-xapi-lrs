@@ -9,6 +9,7 @@ import {
   submitInternshipWork,
 } from "@/lib/certifications/store";
 import { listCoursesCatalog } from "@/lib/courses/store";
+import { findProjectBySlug } from "@/lib/learning-graph";
 import { getProjectStatusForUser } from "@/lib/learning-workspace-store";
 import { evaluateInternshipEligibility } from "@/lib/internships/eligibility";
 
@@ -47,23 +48,28 @@ export async function GET() {
   ]);
 
   const eligibilityByInternshipId: Record<string, ReturnType<typeof evaluateInternshipEligibility>> = {};
-  if (actor.user) {
-    for (const track of internships) {
-      const course = track.required_course_slug
-        ? courses.find((c) => c.slug === track.required_course_slug)
-        : undefined;
-      const projectStatus = track.required_project_slug
+  for (const track of internships) {
+    const course = track.required_course_slug
+      ? courses.find((c) => c.slug === track.required_course_slug)
+      : undefined;
+    const projectBrief = track.required_project_slug
+      ? findProjectBySlug(track.required_project_slug)
+      : undefined;
+    const projectStatus =
+      actor.user && track.required_project_slug
         ? getProjectStatusForUser(actor.user.id, track.required_project_slug)
         : "not_started";
-      eligibilityByInternshipId[track.id] = evaluateInternshipEligibility({
-        requiredCourseSlug: track.required_course_slug ?? null,
-        requiredProjectSlug: track.required_project_slug ?? null,
-        requireProjectApproval: Boolean(track.require_project_approval),
-        courseEnrolled: Boolean(course?.enrolled),
-        quizPassed: Boolean(course?.quizPassed),
-        projectApproved: projectStatus === "approved",
-      });
-    }
+    eligibilityByInternshipId[track.id] = evaluateInternshipEligibility({
+      requiredCourseSlug: track.required_course_slug ?? null,
+      requiredProjectSlug: track.required_project_slug ?? null,
+      requiredCourseTitle: course?.title ?? null,
+      requiredProjectTitle: projectBrief?.title ?? course?.projectTitle ?? null,
+      requiredSkills: course?.skills ?? [],
+      requireProjectApproval: Boolean(track.require_project_approval),
+      courseEnrolled: Boolean(course?.enrolled),
+      quizPassed: Boolean(course?.quizPassed),
+      projectApproved: projectStatus === "approved",
+    });
   }
 
   return NextResponse.json(
@@ -136,12 +142,18 @@ export async function POST(request: Request) {
   const matchedCourse = targetTrack.required_course_slug
     ? courses.find((c) => c.slug === targetTrack.required_course_slug)
     : undefined;
+  const matchedProject = targetTrack.required_project_slug
+    ? findProjectBySlug(targetTrack.required_project_slug)
+    : undefined;
   const projectStatus = targetTrack.required_project_slug
     ? getProjectStatusForUser(actor.user.id, targetTrack.required_project_slug)
     : "not_started";
   const eligibility = evaluateInternshipEligibility({
     requiredCourseSlug: targetTrack.required_course_slug ?? null,
     requiredProjectSlug: targetTrack.required_project_slug ?? null,
+    requiredCourseTitle: matchedCourse?.title ?? null,
+    requiredProjectTitle: matchedProject?.title ?? matchedCourse?.projectTitle ?? null,
+    requiredSkills: matchedCourse?.skills ?? [],
     requireProjectApproval: Boolean(targetTrack.require_project_approval),
     courseEnrolled: Boolean(matchedCourse?.enrolled),
     quizPassed: Boolean(matchedCourse?.quizPassed),

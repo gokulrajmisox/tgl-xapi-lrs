@@ -263,10 +263,15 @@ export function MentorConsoleClient({
 
               <p className="mt-3 leading-5 text-white/65">{sub.summary}</p>
               {sub.supportingEvidence && (
-                <p className="mt-1.5 text-white/55">Evidence: {sub.supportingEvidence}</p>
+                <p className="mt-1.5 text-white/55">Notes: {sub.supportingEvidence}</p>
+              )}
+              {sub.supportingFiles && sub.supportingFiles.length > 0 && (
+                <p className="mt-1.5 text-white/60">
+                  Attached files: {sub.supportingFiles.map((f) => f.name).join(", ")}
+                </p>
               )}
               {sub.reflection && (
-                <p className="mt-1.5 text-white/45">Learner note: {sub.reflection}</p>
+                <p className="mt-1.5 text-white/45">Student note: {sub.reflection}</p>
               )}
 
               {sub.mentorFeedback && (

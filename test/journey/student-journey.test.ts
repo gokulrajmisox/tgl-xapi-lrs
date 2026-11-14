@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   approveInternshipApplication,
+  claimIncludedCertificate,
   createAdminInternship,
   createCertificationOrder,
   createCourseEnrollmentOrder,
@@ -31,6 +32,7 @@ import {
   startLearnerProjectWork,
   submitLearnerProjectWork,
 } from "../../lib/learning-workspace-store";
+import { getProjectGuidance, learningProjects } from "../../lib/learning-graph";
 
 const freshStudent: SandboxUser = {
   id: "00000000-0000-4000-8000-000000000777",
@@ -76,6 +78,7 @@ test("End-to-end journey: Pay -> Enrol -> Learn (Assignments + Quiz) -> 5-stage 
     simulateTestCheckout: true,
   });
   assert.equal(coursePaid.enrollment?.status, "active");
+  assert.equal(coursePaid.internshipApplication?.status, "in_progress");
 
   // 2. Learn: complete all lessons, submit assignment, and submit graded quiz
   const detail = await getCourseDetailForActor({
@@ -199,11 +202,12 @@ test("End-to-end journey: Pay -> Enrol -> Learn (Assignments + Quiz) -> 5-stage 
   });
   assert.equal(approvedProj.submission?.status, "approved");
 
-  // Critical invariant: approving a project MUST NOT auto-create or auto-complete any internship!
-  const appsBeforeApply = await listStudentApplications(freshStudent.id);
-  assert.equal(appsBeforeApply.length, 0);
+  // Verify paying for the Programme auto-activated the bundled internship (without separate purchase)
+  const appsAfterPayment = await listStudentApplications(freshStudent.id);
+  assert.equal(appsAfterPayment.length, 1);
+  assert.equal(appsAfterPayment[0].status, "in_progress");
 
-  // 4. Internship: create admin programme or apply to eligible track, submit all assigned tasks
+  // 4. Admin can still publish an additional internship track, and the bundled track is active
   const createdInternRes = await createAdminInternship({
     title: "Production Web Engineering Sprint",
     track: "Engineering",
@@ -239,17 +243,9 @@ test("End-to-end journey: Pay -> Enrol -> Learn (Assignments + Quiz) -> 5-stage 
   });
   assert.equal(eligibleCheck.eligible, true);
 
-  // Apply to Full-Stack track cleanly
-  const { applyForInternship } = await import("../../lib/certifications/store");
-  const applied = await applyForInternship({
-    userId: freshStudent.id,
-    internshipId: fsTrack.id,
-    applicantName: freshStudent.name,
-    applicantEmail: freshStudent.email,
-    motivation: "Ready to execute weekly engineering deliverables with mentor reviews.",
-    portfolioUrl: "https://github.com/kavya/tgl-portfolio",
-  });
-  assert.ok(applied.application);
+  // Use the auto-activated bundled internship application
+  const activeApplication = appsAfterPayment[0];
+  assert.ok(activeApplication);
 
   const fsTasks = fsTrack.tasks ?? [];
   assert.equal(fsTasks.length, 2);
@@ -257,13 +253,13 @@ test("End-to-end journey: Pay -> Enrol -> Learn (Assignments + Quiz) -> 5-stage 
   // Submit task 1 & approve it
   await submitInternshipTaskWork({
     userId: freshStudent.id,
-    applicationId: applied.application.id,
+    applicationId: activeApplication.id,
     taskId: fsTasks[0].id,
     submissionUrl: "https://github.com/kavya/task-1-pr",
     summary: "Implemented Zod input checks and clean 400 error payloads.",
   });
   await evaluateInternshipTaskSubmission({
-    applicationId: applied.application.id,
+    applicationId: activeApplication.id,
     taskId: fsTasks[0].id,
     decision: "approved",
     mentorFeedback: "Clean boundary schemas.",
@@ -272,7 +268,7 @@ test("End-to-end journey: Pay -> Enrol -> Learn (Assignments + Quiz) -> 5-stage 
 
   // Final internship approval MUST fail while Task 2 is still unapproved
   const blockedFinal = await approveInternshipApplication({
-    applicationId: applied.application.id,
+    applicationId: activeApplication.id,
     adminId: "00000000-0000-4000-8000-000000000001",
     mentorNotes: "Attempt early approval",
   });
@@ -281,13 +277,13 @@ test("End-to-end journey: Pay -> Enrol -> Learn (Assignments + Quiz) -> 5-stage 
   // Submit Task 2, request revision, resubmit, approve Task 2, then approve final internship completion
   await submitInternshipTaskWork({
     userId: freshStudent.id,
-    applicationId: applied.application.id,
+    applicationId: activeApplication.id,
     taskId: fsTasks[1].id,
     submissionUrl: "https://github.com/kavya/task-2-demo",
     summary: "Built initial dashboard layout.",
   });
   await evaluateInternshipTaskSubmission({
-    applicationId: applied.application.id,
+    applicationId: activeApplication.id,
     taskId: fsTasks[1].id,
     decision: "revision_required",
     mentorFeedback: "Verify 390px viewport overflow.",
@@ -295,13 +291,13 @@ test("End-to-end journey: Pay -> Enrol -> Learn (Assignments + Quiz) -> 5-stage 
   });
   await submitInternshipTaskWork({
     userId: freshStudent.id,
-    applicationId: applied.application.id,
+    applicationId: activeApplication.id,
     taskId: fsTasks[1].id,
     submissionUrl: "https://github.com/kavya/task-2-demo-v2",
     summary: "Fixed mobile overflow and verified cleanly.",
   });
   await evaluateInternshipTaskSubmission({
-    applicationId: applied.application.id,
+    applicationId: activeApplication.id,
     taskId: fsTasks[1].id,
     decision: "approved",
     mentorFeedback: "Approved desktop and mobile implementation.",
@@ -309,7 +305,7 @@ test("End-to-end journey: Pay -> Enrol -> Learn (Assignments + Quiz) -> 5-stage 
   });
 
   const finalApproved = await approveInternshipApplication({
-    applicationId: applied.application.id,
+    applicationId: activeApplication.id,
     adminId: "00000000-0000-4000-8000-000000000001",
     mentorNotes: "Strong execution across all internship tasks.",
     finalScoreLabel: "Distinction",
@@ -318,30 +314,20 @@ test("End-to-end journey: Pay -> Enrol -> Learn (Assignments + Quiz) -> 5-stage 
   assert.equal(finalApproved.application?.mentor_approved, true);
   assert.equal(finalApproved.application?.final_score_label, "Distinction");
 
-  // 5. Claim Internship Certificate -> verify public QR lookup works
-  const products = await listProducts(false);
-  const internProduct = products.find((p) => p.certificate_type === "internship")!;
+  // 5. Final internship approval automatically issues included Internship Certificate at ₹0 extra
+  assert.ok(finalApproved.issuance);
+  assert.equal(finalApproved.issuance.issuance_status, "issued");
 
-  const certOrder = await createCertificationOrder({
-    user: freshStudent,
-    productId: internProduct.id,
-    internshipApplicationId: applied.application.id,
-  });
-  assert.ok(certOrder.order);
-
-  const certVerified = await verifyAndCaptureCheckoutPayment({
-    user: freshStudent,
-    razorpayOrderId: certOrder.order.razorpay_order_id,
-    razorpayPaymentId: "pay_journey_cert_1",
-    razorpaySignature: `sim_sig_${certOrder.order.razorpay_order_id}`,
-    simulateTestCheckout: true,
-  });
-  assert.ok(certVerified.issuance);
-  assert.equal(certVerified.issuance.issuance_status, "issued");
-
-  const lookup = await getCertificateByPublicId(certVerified.issuance.certificate_id);
+  const lookup = await getCertificateByPublicId(finalApproved.issuance.certificate_id);
   assert.equal(lookup?.recipient_name, "Kavya Nair");
   assert.equal(lookup?.issuance_status, "issued");
+
+  // Claiming again returns 409 duplicate guard rather than creating a second record
+  const duplicateClaim = await claimIncludedCertificate({
+    user: freshStudent,
+    internshipApplicationId: activeApplication.id,
+  });
+  assert.equal(duplicateClaim.status, 409);
 
   // 6. Admin can also publish a new paid course within INR bounds
   const createdCourse = await createAdminCourse({
@@ -360,4 +346,108 @@ test("End-to-end journey: Pay -> Enrol -> Learn (Assignments + Quiz) -> 5-stage 
     projectSummary: "Implement idempotent queue retries with dead-letter logging.",
   });
   assert.equal(createdCourse.course?.pricePaise, 149900);
+});
+
+test("Every seeded project provides clear beginner guidance and persists supporting files", () => {
+  resetWorkspaceStoreForTest();
+  assert.ok(learningProjects.length > 0);
+  for (const project of learningProjects) {
+    const guidance = getProjectGuidance(project);
+    assert.ok(guidance.whyItMatters.length > 10);
+    assert.ok(guidance.stepByStep.length >= 3);
+    assert.ok(guidance.requiredSkills.length >= 1);
+    assert.ok(guidance.submissionDeadline.length > 5);
+    assert.ok(guidance.submissionMethod.length > 5);
+    assert.ok(guidance.evaluationCriteria.length >= 2);
+  }
+
+  const submitted = submitLearnerProjectWork({
+    userId: freshStudent.id,
+    learnerName: freshStudent.name,
+    learnerEmail: freshStudent.email,
+    projectSlug: "accessible-learning-portfolio",
+    githubUrl: "https://github.com/kavya/tgl-portfolio",
+    supportingEvidence: "Attached Playwright audit screenshot and test summary.",
+    supportingFiles: [
+      { name: "playwright-audit.png", sizeBytes: 48210, mimeType: "image/png" },
+      { name: "test-report.txt", sizeBytes: 2048, mimeType: "text/plain" },
+    ],
+    summary: "Implemented accessible workspace with verified tests.",
+    reflection: "Tested across desktop and mobile.",
+  });
+
+  assert.equal(submitted.submission?.supportingFiles?.length, 2);
+  assert.deepEqual(
+    submitted.submission?.supportingFiles?.map((f) => f.name),
+    ["playwright-audit.png", "test-report.txt"],
+  );
+});
+
+test("Internship eligibility surfaces human-readable titles instead of raw slugs", () => {
+  const result = evaluateInternshipEligibility({
+    requiredCourseSlug: "web-architecture-systems",
+    requiredProjectSlug: "accessible-learning-portfolio",
+    requiredCourseTitle: "Web Architecture & Systems",
+    requiredProjectTitle: "Accessible Learning Portfolio & Verification Workspace",
+    requiredSkills: ["React", "TypeScript", "API Design"],
+    requireProjectApproval: true,
+    courseEnrolled: false,
+    quizPassed: false,
+    projectApproved: false,
+  });
+
+  assert.equal(result.eligible, false);
+  assert.equal(result.requiredCourseTitle, "Web Architecture & Systems");
+  assert.equal(result.requiredProjectTitle, "Accessible Learning Portfolio & Verification Workspace");
+  assert.deepEqual(result.requiredSkills, ["React", "TypeScript", "API Design"]);
+  assert.equal(
+    result.missingRequirements.some((msg) => msg.includes("web-architecture-systems") || msg.includes("accessible-learning-portfolio")),
+    false,
+  );
+  assert.equal(
+    result.missingRequirements.some((msg) => msg.includes("Web Architecture & Systems")),
+    true,
+  );
+});
+
+test("Invalid Razorpay signature never unlocks enrollment, and ineligible or duplicate certificate claims stay blocked", async () => {
+  resetMemoryStoreForTest();
+  resetCoursesStoreForTest();
+  resetWorkspaceStoreForTest();
+
+  const orderRes = await createCourseEnrollmentOrder({
+    user: freshStudent,
+    courseId: "course-web-architecture",
+  });
+  assert.ok(orderRes.order);
+
+  const tamperedVerify = await verifyAndCaptureCheckoutPayment({
+    user: freshStudent,
+    razorpayOrderId: orderRes.order.razorpay_order_id,
+    razorpayPaymentId: "pay_tampered_1",
+    razorpaySignature: "invalid_hmac_signature",
+    simulateTestCheckout: true,
+  });
+  assert.ok(tamperedVerify.error);
+  assert.equal(tamperedVerify.enrollment, undefined);
+
+  const lockedDetail = await getCourseDetailForActor({
+    slug: "web-architecture-systems",
+    userId: freshStudent.id,
+  });
+  assert.equal(lockedDetail?.locked, true);
+
+  // Ineligible certificate claim without completed internship or course stays blocked (403)
+  const blockedClaim = await claimIncludedCertificate({ user: freshStudent });
+  assert.equal(blockedClaim.status, 403);
+
+  // Separate certificate order creation remains retired (400)
+  const products = await listProducts(false);
+  const internProduct = products.find((p) => p.certificate_type === "internship")!;
+  const ineligibleOrder = await createCertificationOrder({
+    user: freshStudent,
+    productId: internProduct.id,
+  });
+  assert.ok(ineligibleOrder.error);
+  assert.equal(ineligibleOrder.status, 400);
 });

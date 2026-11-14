@@ -7,6 +7,7 @@ import type { Mesh } from "three";
 import Link from "next/link";
 import { ArrowDown, ArrowUpRight } from "lucide-react";
 import FluxLines from "@/components/react-bits/FluxLines";
+import Magnet from "@/components/react-bits/Magnet";
 import StrokeText from "@/components/react-bits/StrokeText";
 
 function CoreObject() {
@@ -58,19 +59,19 @@ export function TglHero() {
     <section id="home" className="relative isolate min-h-[790px] overflow-hidden bg-[#090909] text-[#f4f3ef] md:min-h-[860px]">
       <div className="pointer-events-none absolute inset-0 -z-20">
         <FluxLines
-          colors={["#b9a9d6", "#7d6b9e", "#f4f3ef"]}
-          opacity={0.58}
-          speed={0.35}
-          scale={1.4}
-          turbulence={0.95}
-          glow={1.85}
-          lineWidth={1.15}
+          colors={["#b9a9d6", "#8d79b3", "#f4f3ef"]}
+          opacity={0.78}
+          speed={0.42}
+          scale={1.45}
+          turbulence={1.0}
+          glow={2.15}
+          lineWidth={1.3}
           flowDirection="down"
-          mouseStrength={0.9}
-          dpr={1.25}
+          mouseStrength={1.05}
+          dpr={1.35}
         />
       </div>
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-r from-[#090909]/72 via-[#090909]/25 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-r from-[#090909]/54 via-[#090909]/16 to-transparent" />
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_72%_42%,rgba(138,125,163,0.16),transparent_37%),radial-gradient(ellipse_at_12%_88%,rgba(80,77,91,0.12),transparent_36%)]" />
       <div className="pointer-events-none absolute inset-0 -z-10 opacity-[0.035] [background-image:url('data:image/svg+xml,%3Csvg viewBox=%220 0 180 180%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22n%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%22.82%22 numOctaves=%224%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23n)%22 opacity=%22.6%22/%3E%3C/svg%3E')]" />
       <div className="mx-auto grid min-h-[790px] max-w-[1440px] items-center gap-2 px-6 pb-20 pt-32 md:min-h-[860px] md:grid-cols-[1.04fr_.96fr] md:px-12 md:pb-14 md:pt-28 lg:px-20">
@@ -86,10 +87,12 @@ export function TglHero() {
               className="font-serif font-normal italic tracking-[-0.09em]"
             />
           </h1>
-          <p className="mt-8 max-w-[460px] text-[15px] leading-7 text-white/65 md:text-base">Structured courses with real notes, curated YouTube lectures, applied projects, and mentor-reviewed internships.</p>
+          <p className="mt-8 max-w-[490px] text-[15px] leading-7 text-white/70 md:text-base">Enrol in one bundled internship-training programme: study clear notes and curated videos, ship a real project, finish your mentor-reviewed internship, and claim your included certificate at ₹0 extra.</p>
           <div className="mt-9 flex flex-wrap items-center gap-3">
-            <Link href="/courses" className="group inline-flex items-center gap-6 rounded-full bg-[#f4f3ef] px-5 py-3.5 text-[13px] font-medium text-[#111] transition-all hover:bg-white">Browse courses <ArrowUpRight size={15} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" /></Link>
-            <Link href="/explore" className="rounded-full border border-white/15 px-5 py-3.5 text-[13px] text-white/75 transition-colors hover:border-white/35 hover:text-white">Explore network</Link>
+            <Magnet padding={65} magnetStrength={2.8} maxOffset={8} scale={1.03}>
+              <Link href="/programmes" className="group inline-flex min-h-11 items-center gap-5 rounded-full bg-[#f4f3ef] px-5 py-3 text-[13px] font-medium text-[#111] transition-all hover:bg-white">Explore Programmes <ArrowUpRight size={15} aria-hidden="true" className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" /></Link>
+            </Magnet>
+            <Link href="/learn" className="inline-flex min-h-11 items-center rounded-full border border-white/20 px-5 py-3 text-[13px] text-white/85 transition-colors hover:border-white/45 hover:text-white">My Student Home</Link>
           </div>
           <div className="mt-16 flex items-center gap-4 text-[10px] uppercase tracking-[0.18em] text-white/35"><span className="h-px w-10 bg-white/20" /> Learn. Build. Grow.</div>
         </div>

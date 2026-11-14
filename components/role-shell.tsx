@@ -28,28 +28,28 @@ type NavItem = {
 };
 
 const STUDENT_NAV: NavItem[] = [
-  { label: "Student Home", href: "/learn", icon: Home },
-  { label: "Courses", href: "/courses", icon: BookOpen },
-  { label: "Learning Map", href: "/learn/map", icon: Network },
-  { label: "Explore Network", href: "/explore", icon: Compass },
-  { label: "Work & Portfolio", href: "/learn/portfolio", icon: FolderGit2 },
+  { label: "My Home", href: "/learn", icon: Home },
+  { label: "Explore Programmes", href: "/programmes", icon: BookOpen },
+  { label: "Projects", href: "/explore", icon: FolderGit2 },
   { label: "Internships", href: "/internships", icon: Briefcase },
   { label: "Certificates", href: "/certificates", icon: Award },
+  { label: "Achievements", href: "/learn/portfolio", icon: Compass },
+  { label: "Course Map", href: "/learn/map", icon: Network },
 ];
 
 const MENTOR_NAV: NavItem[] = [
   { label: "Review Queue", href: "/mentor", icon: MessageSquare },
   { label: "Assigned Learners", href: "/mentor#learners", icon: Users },
-  { label: "Courses", href: "/courses", icon: BookOpen },
-  { label: "Explore Network", href: "/explore", icon: Compass },
+  { label: "Explore Programmes", href: "/programmes", icon: BookOpen },
+  { label: "Projects", href: "/explore", icon: Compass },
 ];
 
 const ADMIN_NAV: NavItem[] = [
   { label: "Admin Home", href: "/admin", icon: Shield },
-  { label: "Course Pricing", href: "/admin?section=courses", icon: BookOpen },
+  { label: "Programmes & Pricing", href: "/admin?section=courses", icon: BookOpen },
   { label: "Payments & Certs", href: "/admin?section=payments", icon: Award },
-  { label: "Email Console", href: "/admin?section=emails", icon: MessageSquare },
-  { label: "Public Courses", href: "/courses", icon: LayoutGrid },
+  { label: "Email Testing", href: "/admin?section=emails", icon: MessageSquare },
+  { label: "Programme Catalog", href: "/programmes", icon: LayoutGrid },
 ];
 
 export function RoleShell({
@@ -156,18 +156,12 @@ export function RoleShell({
           </nav>
         </div>
 
-        <div className="space-y-2 border-t border-white/10 pt-4 text-xs">
-          <Link
-            href="/pathways/web-development"
-            className="block rounded-xl px-3 py-2 text-white/55 hover:bg-white/[0.04] hover:text-white"
-          >
-            Sample pathway map
-          </Link>
+        <div className="space-y-1 border-t border-white/10 pt-4 text-xs">
           <Link
             href="/auth/login"
-            className="block rounded-xl px-3 py-2 text-white/55 hover:bg-white/[0.04] hover:text-white"
+            className="flex min-h-11 items-center rounded-xl px-3 py-2 text-white/65 hover:bg-white/[0.04] hover:text-white"
           >
-            Account &amp; sign in
+            Account &amp; Sign in
           </Link>
         </div>
       </aside>
@@ -181,16 +175,16 @@ export function RoleShell({
           <span className="text-[11px] font-semibold tracking-[0.15em]">TGL</span>
         </Link>
         <span className="text-xs font-medium capitalize text-[#b9a9d6]">
-          {role} workspace
+          {role} home
         </span>
         <button
           type="button"
           onClick={() => setDrawerOpen((v) => !v)}
           aria-label={drawerOpen ? "Close workspace menu" : "Open workspace menu"}
           aria-expanded={drawerOpen}
-          className="grid size-10 place-items-center rounded-full border border-white/15 text-white"
+          className="grid size-11 place-items-center rounded-full border border-white/15 text-white"
         >
-          {drawerOpen ? <X size={16} /> : <Menu size={16} />}
+          {drawerOpen ? <X size={16} aria-hidden="true" /> : <Menu size={16} aria-hidden="true" />}
         </button>
       </header>
 
@@ -273,38 +267,38 @@ export function RoleShell({
         </main>
       </div>
 
-      {/* Compact Mobile Bottom Nav Bar (height: 56px, well below 15% of 844px viewport) */}
+      {/* Compact Mobile Bottom Nav Bar */}
       <nav
         aria-label="Mobile quick navigation"
         className="fixed inset-x-0 bottom-0 z-30 grid h-14 grid-cols-4 border-t border-white/10 bg-[#0d0d0d]/95 backdrop-blur-md lg:hidden"
       >
         <Link
           href={role === "mentor" ? "/mentor" : role === "admin" ? "/admin" : "/learn"}
-          className="flex flex-col items-center justify-center gap-0.5 text-[10px] text-white/75 hover:text-white"
+          className="flex min-h-11 flex-col items-center justify-center gap-0.5 text-[10px] text-white/80 hover:text-white"
         >
           <Home size={16} aria-hidden="true" />
           <span>Home</span>
         </Link>
         <Link
-          href="/learn/map"
-          className="flex flex-col items-center justify-center gap-0.5 text-[10px] text-white/75 hover:text-white"
-        >
-          <Network size={16} aria-hidden="true" />
-          <span>Map</span>
-        </Link>
-        <Link
-          href="/courses"
-          className="flex flex-col items-center justify-center gap-0.5 text-[10px] text-white/75 hover:text-white"
+          href="/programmes"
+          className="flex min-h-11 flex-col items-center justify-center gap-0.5 text-[10px] text-white/80 hover:text-white"
         >
           <BookOpen size={16} aria-hidden="true" />
-          <span>Courses</span>
+          <span>Programmes</span>
         </Link>
         <Link
-          href={role === "mentor" ? "/mentor" : "/learn/portfolio"}
-          className="flex flex-col items-center justify-center gap-0.5 text-[10px] text-white/75 hover:text-white"
+          href={role === "mentor" ? "/explore" : "/internships"}
+          className="flex min-h-11 flex-col items-center justify-center gap-0.5 text-[10px] text-white/80 hover:text-white"
         >
-          <MessageSquare size={16} aria-hidden="true" />
-          <span>Feedback</span>
+          <Briefcase size={16} aria-hidden="true" />
+          <span>{role === "mentor" ? "Projects" : "Internships"}</span>
+        </Link>
+        <Link
+          href="/certificates"
+          className="flex min-h-11 flex-col items-center justify-center gap-0.5 text-[10px] text-white/80 hover:text-white"
+        >
+          <Award size={16} aria-hidden="true" />
+          <span>Certificates</span>
         </Link>
       </nav>
     </div>

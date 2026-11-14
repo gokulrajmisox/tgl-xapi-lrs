@@ -13,7 +13,7 @@ import {
 export const metadata = {
   title: "Work, Portfolio & Certificates — Touch Grass Later",
   description:
-    "Review project submissions, mentor feedback, verified activity evidence, and optional INR certificates.",
+    "Review project submissions, mentor feedback, verified activity evidence, and included QR-verified Internship Certificates.",
 };
 
 export default async function StudentPortfolioPage() {
@@ -31,7 +31,7 @@ export default async function StudentPortfolioPage() {
     <RoleShell
       role="student"
       title="Work, evidence & credentials"
-      subtitle="Verified project submissions, mentor critiques, and optional INR certification checkout"
+      subtitle="Verified project submissions, mentor critiques, and included QR-verified Internship Certificates"
       primaryAction={{ label: "Open learning map", href: "/learn/map" }}
     >
       <div className="space-y-10">
@@ -154,17 +154,17 @@ export default async function StudentPortfolioPage() {
           </div>
         </section>
 
-        {/* Optional Certificates & INTERNSHIP CERTIFICATE Checkout */}
+        {/* Included Certificates & INTERNSHIP CERTIFICATE */}
         <section className="rounded-2xl border border-white/10 bg-[#0d0d0f] p-6">
           <div className="mb-4">
             <p className="text-[11px] uppercase tracking-[0.16em] text-[#b9a9d6]">
-              Optional Credentials · INTERNSHIP CERTIFICATE
+              Included Credentials · INTERNSHIP CERTIFICATE
             </p>
             <h2 className="mt-1 text-xl font-medium tracking-[-0.03em] text-[#f4f3ef]">
               Official certificates &amp; QR verification
             </h2>
             <p className="mt-1 text-xs text-white/55">
-              Internship and pathway participation are free. Payment (₹299–₹599 INR) is optional and available only once eligibility checks and mentor approval pass.
+              Internship participation and your official INTERNSHIP CERTIFICATE are included in your single Programme Enrolment (₹0 additional fee) once completion checks and mentor approval pass.
             </p>
           </div>
           <StudentCertificationsPanel />

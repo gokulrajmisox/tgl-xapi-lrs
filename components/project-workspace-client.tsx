@@ -1,26 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowUpRight,
   Bookmark,
+  CalendarClock,
   CheckCircle2,
+  Clock3,
   Compass,
   ExternalLink,
+  FileUp,
   FolderGit2,
   MessageSquare,
   Play,
   RotateCcw,
   Send,
   Users,
+  X,
 } from "lucide-react";
-import type { LearningNode, ProjectBrief } from "@/lib/learning-graph";
+import {
+  getProjectGuidance,
+  type LearningNode,
+  type ProjectBrief,
+} from "@/lib/learning-graph";
 import type {
   MentorMessageRecord,
   ProjectSubmissionRecord,
   ProjectSubmissionStatus,
+  SupportingFileMeta,
 } from "@/lib/learning-workspace-store";
 import SlideCommit from "@/components/react-bits/SlideCommit";
 
@@ -34,6 +44,47 @@ const PROJECT_LIFECYCLE: Array<{
   { key: "under_review", label: "Under Review" },
   { key: "approved", label: "Approved" },
 ];
+
+function StatusBadge({ status }: { status: "not_started" | ProjectSubmissionStatus }) {
+  if (status === "approved") {
+    return (
+      <span className="inline-flex items-center gap-1.5 font-medium text-emerald-300">
+        <CheckCircle2 size={13} aria-hidden="true" />
+        Approved
+      </span>
+    );
+  }
+  if (status === "revision_required") {
+    return (
+      <span className="inline-flex items-center gap-1.5 font-medium text-amber-300">
+        <AlertCircle size={13} aria-hidden="true" />
+        Revision Required
+      </span>
+    );
+  }
+  if (status === "under_review" || status === "submitted") {
+    return (
+      <span className="inline-flex items-center gap-1.5 font-medium text-[#b9a9d6]">
+        <Clock3 size={13} aria-hidden="true" />
+        {status === "under_review" ? "Under Review" : "Submitted"}
+      </span>
+    );
+  }
+  if (status === "in_progress") {
+    return (
+      <span className="inline-flex items-center gap-1.5 font-medium text-[#b9a9d6]">
+        <Play size={12} aria-hidden="true" />
+        In Progress
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 font-medium text-white/65">
+      <Clock3 size={12} aria-hidden="true" />
+      Not Started
+    </span>
+  );
+}
 
 export function ProjectWorkspaceClient({
   project,
@@ -54,6 +105,8 @@ export function ProjectWorkspaceClient({
   const [messages, setMessages] = useState<MentorMessageRecord[]>(initialMessages);
   const [saved, setSaved] = useState(initiallySaved);
 
+  const guidance = useMemo(() => getProjectGuidance(project), [project]);
+
   const latestSubmission: ProjectSubmissionRecord | null =
     submissions.length > 0 ? submissions[0] : null;
   const currentStatus: "not_started" | ProjectSubmissionStatus =
@@ -63,6 +116,9 @@ export function ProjectWorkspaceClient({
   const [deploymentUrl, setDeploymentUrl] = useState(latestSubmission?.deploymentUrl ?? "");
   const [supportingEvidence, setSupportingEvidence] = useState(
     latestSubmission?.supportingEvidence ?? "",
+  );
+  const [supportingFiles, setSupportingFiles] = useState<SupportingFileMeta[]>(
+    latestSubmission?.supportingFiles ?? [],
   );
   const [summary, setSummary] = useState(
     latestSubmission && latestSubmission.status === "revision_required"
@@ -75,6 +131,24 @@ export function ProjectWorkspaceClient({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+
+  const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []).slice(0, 5);
+    if (picked.length === 0) return;
+    setSupportingFiles((prev) => {
+      const merged = [...prev];
+      for (const file of picked) {
+        if (!merged.some((f) => f.name === file.name && f.sizeBytes === file.size)) {
+          merged.push({
+            name: file.name,
+            sizeBytes: file.size,
+            mimeType: file.type || "application/octet-stream",
+          });
+        }
+      }
+      return merged.slice(0, 5);
+    });
+  };
 
   const toggleSave = async () => {
     const res = await fetch("/api/workspace/learner", {
@@ -102,7 +176,7 @@ export function ProjectWorkspaceClient({
           prev.some((s) => s.id === data.submission.id) ? prev : [data.submission, ...prev],
         );
       }
-      setNotice("Project moved to In Progress. Add your GitHub repo and deliverables below.");
+      setNotice("Project started. Follow the steps below and submit your GitHub link when ready.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start project.");
     } finally {
@@ -114,7 +188,9 @@ export function ProjectWorkspaceClient({
 
   const submitWorkAsync = async () => {
     if (!canSubmitWork) {
-      throw new Error("Provide a GitHub repository URL and at least a 10-character summary.");
+      const msg = "Please enter your GitHub repository link and write at least 10 characters explaining what you built.";
+      setError(msg);
+      throw new Error(msg);
     }
     setBusy(true);
     setNotice("");
@@ -130,6 +206,7 @@ export function ProjectWorkspaceClient({
           artifactUrl: githubUrl.trim(),
           deploymentUrl: deploymentUrl.trim(),
           supportingEvidence: supportingEvidence.trim(),
+          supportingFiles,
           summary: summary.trim(),
           reflection: reflection.trim(),
         }),
@@ -142,8 +219,8 @@ export function ProjectWorkspaceClient({
       });
       setNotice(
         currentStatus === "revision_required"
-          ? "Revision resubmitted and queued for mentor re-evaluation."
-          : "Project submission recorded and queued for mentor review.",
+          ? "Updated project submitted! Your mentor will review your changes soon."
+          : "Project submitted! Your mentor will review it and share feedback here.",
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Could not submit work.";
@@ -201,50 +278,40 @@ export function ProjectWorkspaceClient({
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
-          href={`/pathways/${project.pathwaySlug}`}
-          className="inline-flex items-center gap-2 text-xs text-white/55 hover:text-white"
+          href={`/courses`}
+          className="inline-flex min-h-11 items-center gap-2 text-xs text-white/70 hover:text-white"
         >
-          <ArrowLeft size={13} aria-hidden="true" /> Return to pathway map
+          <ArrowLeft size={14} aria-hidden="true" /> Explore Courses
         </Link>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => void toggleSave()}
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3.5 py-2 text-xs text-white/80 hover:border-white/35"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/15 px-4 py-2 text-xs text-white/85 hover:border-white/35"
           >
             <Bookmark size={13} aria-hidden="true" />
             {saved ? "Saved project" : "Save project"}
           </button>
           <Link
             href="/learn/portfolio"
-            className="inline-flex items-center gap-1.5 rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111]"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111]"
           >
-            Portfolio &amp; evidence <ArrowUpRight size={13} aria-hidden="true" />
+            My Portfolio <ArrowUpRight size={13} aria-hidden="true" />
           </Link>
         </div>
       </div>
 
-      {/* 5-Stage Lifecycle Tracker */}
-      <section className="rounded-2xl border border-white/10 bg-[#111111] p-5">
+      {/* Clear 5-Stage Lifecycle Tracker */}
+      <section className="rounded-2xl border border-white/10 bg-[#111111] p-5 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.18em] text-[#b9a9d6]">
-              Project Status Lifecycle
+            <p className="text-[11px] uppercase tracking-[0.16em] text-[#b9a9d6]">
+              Project Progress
             </p>
-            <p className="mt-1 text-sm font-medium capitalize text-[#f4f3ef]">
-              Current status:{" "}
-              <span
-                className={
-                  currentStatus === "approved"
-                    ? "text-emerald-300"
-                    : currentStatus === "revision_required"
-                      ? "text-amber-300"
-                      : "text-[#b9a9d6]"
-                }
-              >
-                {currentStatus.replaceAll("_", " ")}
-              </span>
-            </p>
+            <div className="mt-1 flex items-center gap-2 text-sm">
+              <span className="text-white/65">Current status:</span>
+              <StatusBadge status={currentStatus} />
+            </div>
           </div>
 
           {currentStatus === "not_started" && (
@@ -252,10 +319,10 @@ export function ProjectWorkspaceClient({
               type="button"
               disabled={busy}
               onClick={() => void handleStartProject()}
-              className="inline-flex items-center gap-2 rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111] disabled:opacity-45"
+              className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111] disabled:opacity-45"
             >
-              <Play size={12} aria-hidden="true" />
-              Start project
+              <Play size={13} aria-hidden="true" />
+              Start Project
             </button>
           )}
         </div>
@@ -272,7 +339,7 @@ export function ProjectWorkspaceClient({
                     ? "border-amber-400/40 bg-amber-950/25 text-amber-200"
                     : reached
                       ? "border-[#b9a9d6]/40 bg-[#b9a9d6]/10 text-[#f4f3ef]"
-                      : "border-white/10 bg-black/20 text-white/40"
+                      : "border-white/10 bg-black/20 text-white/45"
                 }`}
               >
                 <span className="font-mono text-[10px] opacity-70">0{idx + 1}</span>
@@ -295,9 +362,9 @@ export function ProjectWorkspaceClient({
             <p className="font-medium">
               {latestSubmission.status === "revision_required"
                 ? `Revision requested by ${latestSubmission.mentorName}:`
-                : `Mentor critique (${latestSubmission.mentorName}):`}
+                : `Mentor feedback (${latestSubmission.mentorName}):`}
             </p>
-            <p className="mt-1 leading-5 opacity-90">{latestSubmission.mentorFeedback}</p>
+            <p className="mt-1 leading-5 opacity-95">{latestSubmission.mentorFeedback}</p>
           </div>
         )}
       </section>
@@ -313,25 +380,64 @@ export function ProjectWorkspaceClient({
         </p>
       )}
 
-      {/* Brief & Deliverables */}
+      {/* Brief, Step-by-Step Instructions, Skills, Deadline, Evaluation Criteria & Submission Form */}
       <div className="grid gap-6 lg:grid-cols-[1.15fr_.85fr]">
-        <section className="space-y-5 rounded-2xl border border-white/10 bg-[#111111] p-6">
-          <p className="text-xs text-[#b9a9d6]">
-            {project.category} · {project.difficulty} · {project.estimatedHours} hours · {project.cohortName}
-          </p>
-          <h2 className="text-2xl font-medium tracking-[-0.04em] text-[#f4f3ef]">
-            {project.title}
-          </h2>
-          <p className="text-sm leading-6 text-white/65">{project.brief}</p>
+        <section className="space-y-6 rounded-2xl border border-white/10 bg-[#111111] p-6">
+          <div>
+            <p className="text-xs text-[#b9a9d6]">
+              {project.category} · {project.difficulty} · {project.estimatedHours} hours · {project.cohortName}
+            </p>
+            <h2 className="mt-2 text-2xl font-medium tracking-[-0.04em] text-[#f4f3ef]">
+              What you need to build: {project.title}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-white/75">{project.brief}</p>
+          </div>
+
+          <div className="grid gap-4 rounded-xl border border-white/10 bg-black/30 p-4 text-xs sm:grid-cols-2">
+            <div>
+              <p className="font-medium text-[#b9a9d6]">Why this project matters</p>
+              <p className="mt-1 leading-5 text-white/70">{guidance.whyItMatters}</p>
+            </div>
+            <div>
+              <p className="flex items-center gap-1.5 font-medium text-[#b9a9d6]">
+                <CalendarClock size={13} aria-hidden="true" />
+                Submission deadline &amp; method
+              </p>
+              <p className="mt-1 leading-5 text-white/70">
+                <strong className="text-white">{guidance.submissionDeadline}</strong> ·{" "}
+                {guidance.submissionMethod}
+              </p>
+            </div>
+          </div>
+
+          {guidance.requiredSkills.length > 0 && (
+            <div className="border-t border-white/10 pt-4 text-xs">
+              <h3 className="font-medium uppercase tracking-[0.14em] text-white/55">
+                Required skills
+              </h3>
+              <p className="mt-2 text-white/80">{guidance.requiredSkills.join(" · ")}</p>
+            </div>
+          )}
 
           <div className="border-t border-white/10 pt-4">
-            <h3 className="text-xs font-medium uppercase tracking-[0.14em] text-white/45">
-              Expected deliverables
+            <h3 className="text-xs font-medium uppercase tracking-[0.14em] text-white/55">
+              Step-by-step instructions
+            </h3>
+            <ol className="mt-3 list-decimal space-y-2 pl-4 text-xs leading-5 text-white/75">
+              {guidance.stepByStep.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          </div>
+
+          <div className="border-t border-white/10 pt-4">
+            <h3 className="text-xs font-medium uppercase tracking-[0.14em] text-white/55">
+              Evaluation criteria
             </h3>
             <ul className="mt-3 space-y-2 text-xs text-white/75">
-              {project.deliverables.map((item) => (
+              {guidance.evaluationCriteria.map((item) => (
                 <li key={item} className="flex items-start gap-2.5">
-                  <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-[#b9a9d6]" aria-hidden="true" />
+                  <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-emerald-300" aria-hidden="true" />
                   <span>{item}</span>
                 </li>
               ))}
@@ -340,8 +446,8 @@ export function ProjectWorkspaceClient({
 
           {project.resources.length > 0 && (
             <div className="border-t border-white/10 pt-4">
-              <h3 className="text-xs font-medium uppercase tracking-[0.14em] text-white/45">
-                Reference resources
+              <h3 className="text-xs font-medium uppercase tracking-[0.14em] text-white/55">
+                Helpful guides &amp; examples
               </h3>
               <div className="mt-3 space-y-2">
                 {project.resources.map((res) => (
@@ -350,15 +456,15 @@ export function ProjectWorkspaceClient({
                     href={res.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-between rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-xs hover:border-white/25"
+                    className="flex min-h-11 items-center justify-between rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-xs hover:border-white/25"
                   >
                     <div>
                       <p className="font-medium text-[#f4f3ef]">{res.title}</p>
-                      <p className="text-[11px] text-white/45">
+                      <p className="text-[11px] text-white/50">
                         {res.provider} · {res.duration}
                       </p>
                     </div>
-                    <ExternalLink size={13} className="text-white/50" aria-hidden="true" />
+                    <ExternalLink size={13} className="text-white/55" aria-hidden="true" />
                   </a>
                 ))}
               </div>
@@ -367,7 +473,7 @@ export function ProjectWorkspaceClient({
         </section>
 
         {/* Submit / Resubmit Work Form */}
-        <section className="space-y-4 rounded-2xl border border-white/10 bg-[#111111] p-6">
+        <section className="self-start space-y-4 rounded-2xl border border-white/10 bg-[#111111] p-6">
           <div className="flex items-center justify-between gap-2">
             <h3 className="flex items-center gap-2 text-base font-medium">
               {currentStatus === "revision_required" ? (
@@ -376,81 +482,122 @@ export function ProjectWorkspaceClient({
                 <FolderGit2 size={15} className="text-[#b9a9d6]" aria-hidden="true" />
               )}
               <span>
-                {currentStatus === "revision_required"
-                  ? "Resubmit updated project work"
-                  : "Submit project deliverables"}
+                {currentStatus === "revision_required" ? "Resubmit Project" : "Submit Project"}
               </span>
             </h3>
           </div>
-          <p className="text-xs leading-5 text-white/50">
-            Mentor <strong className="text-white/80">{project.mentorName}</strong> ({project.mentorRole}) reviews GitHub code, deployment verification, and evidence notes before approval.
+          <p className="text-xs leading-5 text-white/60">
+            Mentor <strong className="text-white/90">{project.mentorName}</strong> ({project.mentorRole}) will check your repository link, live demo, and notes, then share feedback here.
           </p>
 
-          <form onSubmit={handleSubmitWork} className="space-y-3">
-            <label className="block text-xs text-white/60">
-              GitHub repository URL
+          <form onSubmit={handleSubmitWork} className="space-y-3.5">
+            <label className="block text-xs text-white/70">
+              GitHub repository link (required)
               <input
                 type="url"
                 required
                 value={githubUrl}
                 onChange={(e) => setGithubUrl(e.target.value)}
                 placeholder="https://github.com/username/project"
-                className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-xs text-white"
+                className="mt-1.5 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-xs text-white"
               />
             </label>
 
-            <label className="block text-xs text-white/60">
-              Live deployment URL (optional)
+            <label className="block text-xs text-white/70">
+              Live website or demo link (optional)
               <input
                 type="url"
                 value={deploymentUrl}
                 onChange={(e) => setDeploymentUrl(e.target.value)}
                 placeholder="https://your-demo.vercel.app"
-                className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-xs text-white"
+                className="mt-1.5 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-xs text-white"
               />
             </label>
 
-            <label className="block text-xs text-white/60">
-              Supporting evidence (test logs, demo notes, PR link)
+            <label className="block text-xs text-white/70">
+              Test notes or evidence (optional)
               <input
                 type="text"
                 value={supportingEvidence}
                 onChange={(e) => setSupportingEvidence(e.target.value)}
-                placeholder="e.g. Unit test run 14/14 passed, screenshots in /docs"
-                className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-xs text-white"
+                placeholder="e.g. All tests passed, screenshots included in /docs"
+                className="mt-1.5 h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-xs text-white"
               />
             </label>
 
-            <label className="block text-xs text-white/60">
-              Implementation summary
+            <div className="space-y-2 rounded-xl border border-white/10 bg-black/25 p-3.5 text-xs">
+              <label className="flex cursor-pointer items-center justify-between gap-3 text-white/75">
+                <span className="flex items-center gap-2 font-medium">
+                  <FileUp size={14} className="text-[#b9a9d6]" aria-hidden="true" />
+                  Attach supporting files (optional)
+                </span>
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,.png,.jpg,.jpeg,.md,.txt,.json,.zip"
+                  onChange={handleFilesSelected}
+                  className="sr-only"
+                />
+                <span className="rounded-full border border-white/15 px-3 py-1.5 text-[11px] text-white/85 hover:border-white/35">
+                  Choose files
+                </span>
+              </label>
+              {supportingFiles.length > 0 && (
+                <ul className="space-y-1.5 pt-1">
+                  {supportingFiles.map((file) => (
+                    <li
+                      key={file.name}
+                      className="flex items-center justify-between rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-[11px]"
+                    >
+                      <span className="truncate text-white/85">{file.name}</span>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${file.name}`}
+                        onClick={() =>
+                          setSupportingFiles((prev) =>
+                            prev.filter((f) => f.name !== file.name),
+                          )
+                        }
+                        className="ml-2 text-white/55 hover:text-white"
+                      >
+                        <X size={13} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <label className="block text-xs text-white/70">
+              What did you build? (10+ characters)
               <textarea
                 required
                 rows={3}
                 value={summary}
                 onChange={(e) => setSummary(e.target.value)}
-                placeholder="Key design decisions, verification tests, and behavior..."
-                className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-white"
+                placeholder="Explain what your project does and what you tested..."
+                className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-white"
               />
             </label>
 
-            <label className="block text-xs text-white/60">
-              Reflection / open question for mentor (optional)
+            <label className="block text-xs text-white/70">
+              Question for your mentor (optional)
               <textarea
                 rows={2}
                 value={reflection}
                 onChange={(e) => setReflection(e.target.value)}
-                placeholder="What tradeoffs would you like reviewed?"
-                className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-white"
+                placeholder="Anything you would like extra feedback on?"
+                className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-white"
               />
             </label>
 
             <div className="pt-2">
-              <div className="flex flex-col items-start gap-2">
+              <div className="flex flex-col items-center gap-3">
                 <SlideCommit
                   label={
                     currentStatus === "revision_required"
-                      ? "Slide to resubmit work"
-                      : "Slide to submit work"
+                      ? "Slide to Resubmit Project"
+                      : "Slide to Submit Project"
                   }
                   doneLabel="Submitted"
                   errorLabel="Check fields"
@@ -463,88 +610,24 @@ export function ProjectWorkspaceClient({
                   disabled={busy || !canSubmitWork}
                   onConfirm={submitWorkAsync}
                 />
-                <p className="text-[11px] text-white/45">
+                <button
+                  type="submit"
+                  disabled={busy || !canSubmitWork}
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111] hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <Send size={13} aria-hidden="true" />
+                  {currentStatus === "revision_required" ? "Resubmit Project" : "Submit Project"}
+                </button>
+                <p className="text-center text-[11px] text-white/50">
                   {canSubmitWork
-                    ? "Drag handle across or focus slider and press End to submit for mentor critique."
-                    : "Enter a GitHub repository URL and a 10+ character summary to unlock submission."}
+                    ? "Slide the bar above or click Submit Project to send your work for review."
+                    : "Add your GitHub link and a 10+ character summary above to submit."}
                 </p>
               </div>
             </div>
           </form>
         </section>
       </div>
-
-      {/* Related Concepts & Cross-Linked Projects */}
-      <section className="grid gap-6 md:grid-cols-2">
-        <div className="rounded-2xl border border-white/10 bg-[#111111] p-6">
-          <h3 className="flex items-center gap-2 text-sm font-medium">
-            <Compass size={15} className="text-[#b9a9d6]" aria-hidden="true" />
-            <span>Related concepts across pathways</span>
-          </h3>
-          <div className="mt-4 space-y-2">
-            {relatedConcepts.map((c) => (
-              <Link
-                key={c.id}
-                href={`/pathways/${c.pathwaySlug}`}
-                className="flex items-center justify-between rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-xs hover:border-white/25"
-              >
-                <div>
-                  <p className="font-medium text-[#f4f3ef]">{c.title}</p>
-                  <p className="text-[11px] text-white/45">{c.summary}</p>
-                </div>
-                <ArrowUpRight size={13} className="shrink-0 text-white/50" aria-hidden="true" />
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-[#111111] p-6">
-          <h3 className="flex items-center gap-2 text-sm font-medium">
-            <Users size={15} className="text-[#b9a9d6]" aria-hidden="true" />
-            <span>Peer work &amp; adjacent projects</span>
-          </h3>
-          <div className="mt-4 space-y-3">
-            {project.peerWork.length > 0 ? (
-              project.peerWork.map((peer) => (
-                <article
-                  key={peer.id}
-                  className="rounded-xl border border-white/10 bg-black/25 p-4 text-xs"
-                >
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-[#f4f3ef]">{peer.learnerName}</p>
-                    <a
-                      href={peer.artifactUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[#b9a9d6] hover:underline"
-                    >
-                      Inspect work
-                    </a>
-                  </div>
-                  <p className="mt-1.5 text-white/60">{peer.summary}</p>
-                  <p className="mt-1.5 text-[11px] text-emerald-300">{peer.mentorHighlight}</p>
-                </article>
-              ))
-            ) : (
-              <p className="text-xs text-white/45">Be the first learner in this cohort to publish a peer showcase.</p>
-            )}
-
-            {relatedProjects.length > 0 && (
-              <div className="flex flex-wrap gap-2 border-t border-white/10 pt-3">
-                {relatedProjects.map((rp) => (
-                  <Link
-                    key={rp.slug}
-                    href={`/projects/${rp.slug}`}
-                    className="rounded-full border border-white/15 px-3 py-1.5 text-[11px] text-white/75 hover:border-white/35"
-                  >
-                    Next: {rp.title}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
 
       {/* Submissions & Mentor Feedback Thread */}
       <section className="grid gap-6 lg:grid-cols-2">
@@ -566,20 +649,10 @@ export function ProjectWorkspaceClient({
                     >
                       {sub.githubUrl || sub.artifactUrl || "Draft started"}
                     </a>
-                    <span
-                      className={`capitalize font-medium ${
-                        sub.status === "approved"
-                          ? "text-emerald-300"
-                          : sub.status === "revision_required"
-                            ? "text-amber-300"
-                            : "text-white/80"
-                      }`}
-                    >
-                      {sub.status.replaceAll("_", " ")}
-                    </span>
+                    <StatusBadge status={sub.status} />
                   </div>
                   {sub.deploymentUrl && (
-                    <p className="mt-1 font-mono text-[11px] text-white/55">
+                    <p className="mt-1 font-mono text-[11px] text-white/60">
                       Live demo:{" "}
                       <a
                         href={sub.deploymentUrl}
@@ -591,10 +664,15 @@ export function ProjectWorkspaceClient({
                       </a>
                     </p>
                   )}
-                  <p className="mt-2 text-white/65">{sub.summary}</p>
+                  <p className="mt-2 text-white/70">{sub.summary}</p>
                   {sub.supportingEvidence && (
-                    <p className="mt-1.5 text-[11px] text-white/50">
-                      Evidence: {sub.supportingEvidence}
+                    <p className="mt-1.5 text-[11px] text-white/55">
+                      Notes: {sub.supportingEvidence}
+                    </p>
+                  )}
+                  {sub.supportingFiles && sub.supportingFiles.length > 0 && (
+                    <p className="mt-1.5 text-[11px] text-white/60">
+                      Attached files: {sub.supportingFiles.map((f) => f.name).join(", ")}
                     </p>
                   )}
                   {sub.mentorFeedback && (
@@ -606,8 +684,8 @@ export function ProjectWorkspaceClient({
                 </article>
               ))
             ) : (
-              <p className="rounded-xl border border-dashed border-white/15 p-5 text-xs text-white/45">
-                No submissions for this project yet. Click &ldquo;Start project&rdquo; or submit your GitHub repo above when ready.
+              <p className="rounded-xl border border-dashed border-white/15 p-5 text-xs text-white/50">
+                No submissions for this project yet. Click &ldquo;Start Project&rdquo; or submit your GitHub link above when ready.
               </p>
             )}
           </div>
@@ -616,21 +694,21 @@ export function ProjectWorkspaceClient({
         <div className="rounded-2xl border border-white/10 bg-[#111111] p-6">
           <h3 className="flex items-center gap-2 text-base font-medium">
             <MessageSquare size={15} className="text-[#b9a9d6]" aria-hidden="true" />
-            <span>Mentor discussion ({messages.length})</span>
+            <span>Ask your mentor ({messages.length})</span>
           </h3>
 
-          <form onSubmit={handleAskMentor} className="mt-4 flex gap-2">
+          <form onSubmit={handleAskMentor} className="mt-4 flex flex-wrap gap-2">
             <input
               type="text"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder={`Ask ${project.mentorName} about this project...`}
-              className="h-10 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-xs text-white"
+              placeholder={`Ask ${project.mentorName} a question about this project...`}
+              className="h-11 min-w-[200px] flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-xs text-white"
             />
             <button
               type="submit"
               disabled={busy || question.trim().length < 5}
-              className="inline-flex items-center gap-1.5 rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111] disabled:opacity-45 whitespace-nowrap shrink-0"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111] disabled:opacity-45 whitespace-nowrap shrink-0"
             >
               <Send size={12} aria-hidden="true" /> Ask mentor
             </button>
@@ -643,17 +721,89 @@ export function ProjectWorkspaceClient({
                   key={msg.id}
                   className="rounded-xl border border-white/10 bg-black/25 p-3.5 text-xs"
                 >
-                  <div className="flex items-center justify-between text-[11px] text-white/45">
+                  <div className="flex items-center justify-between text-[11px] text-white/50">
                     <span>
                       {msg.authorName} ({msg.authorRole})
                     </span>
                     <span>{msg.resolved ? "Answered" : "Awaiting reply"}</span>
                   </div>
-                  <p className="mt-1.5 text-white/75">{msg.body}</p>
+                  <p className="mt-1.5 text-white/80">{msg.body}</p>
                 </article>
               ))
             ) : (
-              <p className="text-xs text-white/45">No questions posted on this project yet.</p>
+              <p className="text-xs text-white/50">No questions posted on this project yet.</p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Related Concepts & Cross-Linked Projects */}
+      <section className="grid gap-6 md:grid-cols-2">
+        <div className="rounded-2xl border border-white/10 bg-[#111111] p-6">
+          <h3 className="flex items-center gap-2 text-sm font-medium">
+            <Compass size={15} className="text-[#b9a9d6]" aria-hidden="true" />
+            <span>Related topics to review</span>
+          </h3>
+          <div className="mt-4 space-y-2">
+            {relatedConcepts.map((c) => (
+              <Link
+                key={c.id}
+                href={`/pathways/${c.pathwaySlug}`}
+                className="flex min-h-11 items-center justify-between rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-xs hover:border-white/25"
+              >
+                <div>
+                  <p className="font-medium text-[#f4f3ef]">{c.title}</p>
+                  <p className="text-[11px] text-white/50">{c.summary}</p>
+                </div>
+                <ArrowUpRight size={13} className="shrink-0 text-white/55" aria-hidden="true" />
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-[#111111] p-6">
+          <h3 className="flex items-center gap-2 text-sm font-medium">
+            <Users size={15} className="text-[#b9a9d6]" aria-hidden="true" />
+            <span>Example work from peers</span>
+          </h3>
+          <div className="mt-4 space-y-3">
+            {project.peerWork.length > 0 ? (
+              project.peerWork.map((peer) => (
+                <article
+                  key={peer.id}
+                  className="rounded-xl border border-white/10 bg-black/25 p-4 text-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium text-[#f4f3ef]">{peer.learnerName}</p>
+                    <a
+                      href={peer.artifactUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#b9a9d6] hover:underline"
+                    >
+                      View example
+                    </a>
+                  </div>
+                  <p className="mt-1.5 text-white/65">{peer.summary}</p>
+                  <p className="mt-1.5 text-[11px] text-emerald-300">{peer.mentorHighlight}</p>
+                </article>
+              ))
+            ) : (
+              <p className="text-xs text-white/50">Be the first student to publish an example for this project.</p>
+            )}
+
+            {relatedProjects.length > 0 && (
+              <div className="flex flex-wrap gap-2 border-t border-white/10 pt-3">
+                {relatedProjects.map((rp) => (
+                  <Link
+                    key={rp.slug}
+                    href={`/projects/${rp.slug}`}
+                    className="inline-flex min-h-11 items-center rounded-full border border-white/15 px-3.5 py-1.5 text-xs text-white/80 hover:border-white/35"
+                  >
+                    Next: {rp.title}
+                  </Link>
+                ))}
+              </div>
             )}
           </div>
         </div>

@@ -7,7 +7,7 @@ import { InternshipCertificateSection } from "@/components/sections/internship-c
 export const metadata = {
   title: "Internships & INTERNSHIP CERTIFICATE — Touch Grass Later",
   description:
-    "Apply for free project-based internships at Touch Grass Later. Participation is free; optional QR-verified Internship Certificates are available after verified completion.",
+    "Complete mentor-reviewed practical internship sprints included in your Touch Grass Later Programme Enrolment, unlocking your QR-verified Internship Certificate at ₹0 extra fee.",
 };
 
 export default function InternshipsPage() {
@@ -26,7 +26,7 @@ export default function InternshipsPage() {
           <div className="grid gap-8 border-b border-white/10 pb-10 md:grid-cols-[1.2fr_.8fr] md:items-end md:pb-14">
             <div>
               <p className="text-[10px] uppercase tracking-[0.22em] text-white/40">
-                TGL Internships · Free Participation
+                TGL Internships · Included in Programme Enrolment
               </p>
               <h1 className="mt-6 text-[clamp(3.2rem,8vw,7.4rem)] font-medium leading-[0.86] tracking-[-0.08em]">
                 Build real work.
@@ -37,9 +37,9 @@ export default function InternshipsPage() {
               </h1>
             </div>
             <p className="max-w-[430px] text-sm leading-7 text-white/55">
-              Apply, collaborate, and complete internship projects at zero cost. Optional{" "}
+              Every TGL Programme bundles course learning, practical project work, mentor-reviewed internship tasks, and an official{" "}
               <strong className="font-medium text-white">INTERNSHIP CERTIFICATE</strong>{" "}
-              issuance is unlocked only after submission and authorized mentor approval.
+              in one single fee—zero extra charges after verification.
             </p>
           </div>
 
@@ -52,7 +52,7 @@ export default function InternshipsPage() {
       <InternshipCertificateSection />
 
       <footer className="border-t border-white/10 px-6 py-8 text-center text-[11px] text-white/40">
-        TOUCH GRASS LATER · INTERNSHIP PARTICIPATION IS FREE · OPTIONAL CERTIFICATE ISSUANCE IS VERIFIED ONLY
+        TOUCH GRASS LATER · INTERNSHIPS &amp; CERTIFICATES ARE INCLUDED IN PROGRAMME ENROLMENT (₹0 EXTRA FEE)
       </footer>
     </main>
   );

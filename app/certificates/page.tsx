@@ -7,7 +7,7 @@ import { InternshipCertificateSection } from "@/components/sections/internship-c
 export const metadata = {
   title: "Certificates & INTERNSHIP CERTIFICATE — Touch Grass Later",
   description:
-    "View verified certification options (Internship Certificate, Course Completion, Project Completion, Special Achievement) with dynamic INR pricing and QR verification.",
+    "Official QR-verified Internship Certificates included with every TGL Programme Enrolment at ₹0 additional certificate fee after verified completion.",
 };
 
 export default function CertificatesPage() {
@@ -26,7 +26,7 @@ export default function CertificatesPage() {
           <div className="grid gap-8 border-b border-white/10 pb-10 md:grid-cols-[1.2fr_.8fr] md:items-end md:pb-14">
             <div>
               <p className="text-[10px] uppercase tracking-[0.22em] text-white/40">
-                TGL Credentials · INR Certification Service
+                TGL Credentials · Included with Programme Enrolment (₹0 extra)
               </p>
               <h1 className="mt-6 text-[clamp(3.2rem,8vw,7.4rem)] font-medium leading-[0.86] tracking-[-0.08em]">
                 Verified
@@ -37,7 +37,7 @@ export default function CertificatesPage() {
               </h1>
             </div>
             <p className="max-w-[440px] text-sm leading-7 text-white/55">
-              Optional official certificates for verified internship, course, project, and distinction work. Eligibility is checked server-side before checkout—payment alone never creates a certificate.
+              Your official QR-verified Internship Certificate is included at zero extra cost in your Programme Enrolment (₹499–₹1,999 INR). Eligibility is checked server-side—payment alone never creates a certificate.
             </p>
           </div>
 

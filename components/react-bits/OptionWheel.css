@@ -2,14 +2,18 @@
   position: relative;
   display: grid;
   place-items: center;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 8px 0;
   touch-action: pan-y;
   user-select: none;
 }
 
 .option-wheel-ring {
   position: relative;
-  width: var(--wheel-size, 400px);
-  height: var(--wheel-size, 400px);
+  width: min(var(--wheel-size, 400px), calc(100vw - 4.5rem));
+  height: min(var(--wheel-size, 400px), calc(100vw - 4.5rem));
   max-width: 100%;
   border-radius: 9999px;
 }
@@ -34,7 +38,7 @@
 
 @media (max-width: 640px) {
   .option-wheel-ring {
-    width: min(306px, calc(100vw - 3rem));
-    height: min(306px, calc(100vw - 3rem));
+    width: min(232px, calc(100vw - 7.5rem));
+    height: min(232px, calc(100vw - 7.5rem));
   }
 }

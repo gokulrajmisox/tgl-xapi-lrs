@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  AlertTriangle,
   CheckCircle2,
   Eye,
   Mail,
@@ -13,9 +14,9 @@ import {
   ShieldAlert,
   ShieldCheck,
   ShieldX,
+  X,
 } from "lucide-react";
 import {
-  CERTIFICATE_TYPE_LABELS,
   formatInrFromPaise,
   type CertificateType,
 } from "@/lib/certifications/pricing";
@@ -35,7 +36,7 @@ type Product = {
 type Order = {
   id: string;
   user_id: string;
-  order_kind?: "certificate" | "course_enrollment";
+  order_kind?: "programme_enrollment" | "course_enrollment" | "certificate";
   product_id: string | null;
   course_id?: string | null;
   razorpay_order_id: string;
@@ -104,14 +105,16 @@ type Internship = {
   tasks?: InternshipTaskDefinition[];
 };
 
-type TabKey = "products" | "payments" | "certificates" | "emails";
+type TabKey = "certificates" | "payments" | "emails";
 
 export function AdminCertificationsPanel({
   isSandbox,
-  initialTab = "products",
+  initialTab = "certificates",
+  embedded = false,
 }: {
   isSandbox: boolean;
   initialTab?: TabKey;
+  embedded?: boolean;
 }) {
   const [tab, setTab] = useState<TabKey>(initialTab);
   const [products, setProducts] = useState<Product[]>([]);
@@ -127,12 +130,6 @@ export function AdminCertificationsPanel({
     testMode: boolean;
     from: string;
   } | null>(null);
-
-  const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
-  const [newName, setNewName] = useState("");
-  const [newDesc, setNewDesc] = useState("");
-  const [newType, setNewType] = useState<CertificateType>("special_achievement");
-  const [newRupees, setNewRupees] = useState("499");
 
   const [taskFeedbacks, setTaskFeedbacks] = useState<Record<string, string>>({});
   const [taskScores, setTaskScores] = useState<Record<string, string>>({});
@@ -157,6 +154,23 @@ export function AdminCertificationsPanel({
   const [testPreview, setTestPreview] = useState<{ subject: string; html: string; text: string } | null>(null);
   const [simulateEmailFailure, setSimulateEmailFailure] = useState(false);
 
+  const [pendingConfirm, setPendingConfirm] = useState<
+    | {
+        type: "refund";
+        paymentId: string;
+        itemTitle: string;
+        amountLabel: string;
+        reason: string;
+      }
+    | {
+        type: "revoke";
+        certificateId: string;
+        recipientName: string;
+        reason: string;
+      }
+    | null
+  >(null);
+
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -175,11 +189,6 @@ export function AdminCertificationsPanel({
       setIssuances(data.issuances ?? []);
       setApplications(data.applications ?? []);
       setInternships(data.internships ?? []);
-      const initialPrices: Record<string, string> = {};
-      for (const p of data.products ?? []) {
-        initialPrices[p.id] = String(Math.round(p.price_paise / 100));
-      }
-      setPriceEdits(initialPrices);
     }
 
     if (emailsRes.ok) {
@@ -201,67 +210,6 @@ export function AdminCertificationsPanel({
       setEditBody(tpl.body_template);
     }
   }, [selectedTemplateKey, templates]);
-
-  const handleCreateProduct = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const pricePaise = Math.round(Number(newRupees) * 100);
-      const res = await fetch("/api/admin/certifications/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newName,
-          description: newDesc,
-          certificateType: newType,
-          pricePaise,
-          enabled: true,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to create certification product.");
-      setNotice(`Created "${data.product.name}" at ${formatInrFromPaise(data.product.price_paise)}.`);
-      setNewName("");
-      setNewDesc("");
-      await loadAll();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unexpected error.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleUpdateProduct = async (product: Product, toggleEnabled?: boolean) => {
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const rupees = Number(priceEdits[product.id] ?? product.price_paise / 100);
-      const pricePaise = Math.round(rupees * 100);
-      const res = await fetch("/api/admin/certifications/products", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: product.id,
-          name: product.name,
-          description: product.description,
-          certificateType: product.certificate_type,
-          pricePaise,
-          enabled: toggleEnabled ? !product.enabled : product.enabled,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not update product.");
-      setNotice(`Updated "${data.product.name}" (${formatInrFromPaise(data.product.price_paise)}, ${data.product.enabled ? "Enabled" : "Disabled"}).`);
-      await loadAll();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update product.");
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const handleRefund = async (paymentId: string) => {
     const reason = (refundReasons[paymentId] || "Admin-approved refund").trim();
@@ -381,7 +329,11 @@ export function AdminCertificationsPanel({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Approval failed.");
-      setNotice("Internship completion approved and eligibility confirmation emails logged.");
+      setNotice(
+        data.issuance?.certificate_id
+          ? `Internship approved & included certificate ${data.issuance.certificate_id} issued at ₹0 extra.`
+          : "Internship completion approved and certificate confirmation emails logged.",
+      );
       await loadAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Approval failed.");
@@ -495,7 +447,13 @@ export function AdminCertificationsPanel({
   );
 
   return (
-    <div className="mx-auto max-w-[1200px] px-6 pb-24 pt-36 text-[#f4f3ef] md:px-12 md:pt-44">
+    <div
+      className={
+        embedded
+          ? "text-[#f4f3ef] pb-12 pt-2"
+          : "mx-auto max-w-[1200px] px-6 pb-24 pt-36 text-[#f4f3ef] md:px-12 md:pt-44"
+      }
+    >
       <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
         <div>
           <p className="text-[10px] uppercase tracking-[0.2em] text-white/45">
@@ -505,15 +463,15 @@ export function AdminCertificationsPanel({
             Certification &amp; <span className="font-serif italic text-[#b9a9d6]">Payment Console</span>
           </h1>
           <p className="mt-3 max-w-2xl text-xs leading-6 text-white/55">
-            Configure INR prices (₹299–₹599), inspect Razorpay orders and refunds, approve internship completions, revoke certificates with audit notes, and send test emails.
+            Inspect Razorpay Programme orders and refunds, evaluate internship tasks, approve completions (auto-issuing ₹0 certificates), revoke certificates with audit notes, and send test emails.
           </p>
         </div>
         <div className="flex items-center gap-3">
           <Link
-            href="/courses"
+            href="/programmes"
             className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/80 hover:border-white/35"
           >
-            Course Catalog
+            Programme Catalog
           </Link>
           <button
             type="button"
@@ -528,7 +486,7 @@ export function AdminCertificationsPanel({
 
       {isSandbox && (
         <p className="mt-5 rounded-xl border border-[#b9a9d6]/30 bg-[#b9a9d6]/10 px-4 py-3 text-xs text-[#dfd5ef]">
-          Sandbox mode active (Supabase env vars not set). All state updates, price checks, refunds, revocations, and test email logs run in server memory.
+          Sandbox mode active (Supabase env vars not set). All state updates, refunds, revocations, auto-issued certificates, and test email logs run in server memory.
         </p>
       )}
 
@@ -546,9 +504,8 @@ export function AdminCertificationsPanel({
       <div role="tablist" aria-label="Admin sections" className="mt-8 flex flex-wrap gap-2 border-b border-white/10 pb-4">
         {(
           [
-            ["products", `Products & Pricing (${products.length})`],
-            ["payments", `Orders & Payments (${orders.length})`],
-            ["certificates", `Eligibility & Certificates (${issuances.length})`],
+            ["certificates", `Internships & Certificates (${issuances.length})`],
+            ["payments", `Programme Orders & Payments (${orders.length})`],
             ["emails", `Email Templates & Test (${emailLogs.length})`],
           ] as [TabKey, string][]
         ).map(([key, label]) => (
@@ -569,134 +526,10 @@ export function AdminCertificationsPanel({
         ))}
       </div>
 
-      {tab === "products" && (
-        <div className="mt-8 grid gap-8 lg:grid-cols-[1.2fr_.8fr]">
-          <section className="space-y-4">
-            <h2 className="text-lg font-medium">Configurable certification products (₹299–₹599 INR)</h2>
-            <div className="space-y-3">
-              {products.map((product) => (
-                <article
-                  key={product.id}
-                  className="rounded-2xl border border-white/10 bg-[#111111] p-5"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <p className="text-[11px] text-[#b9a9d6]">
-                        {CERTIFICATE_TYPE_LABELS[product.certificate_type]} ·{" "}
-                        {product.enabled ? "Enabled" : "Disabled"}
-                      </p>
-                      <h3 className="mt-1 text-base font-medium">{product.name}</h3>
-                      <p className="mt-1 text-xs text-white/50">{product.description}</p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void handleUpdateProduct(product, true)}
-                      className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/80 hover:border-white/35"
-                    >
-                      {product.enabled ? "Disable" : "Enable"}
-                    </button>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-white/10 pt-4">
-                    <label className="text-xs text-white/60">
-                      Price in INR (₹0 for free, or ₹299–₹599)
-                      <input
-                        type="number"
-                        min={0}
-                        max={599}
-                        step={1}
-                        value={priceEdits[product.id] ?? ""}
-                        onChange={(e) =>
-                          setPriceEdits((prev) => ({ ...prev, [product.id]: e.target.value }))
-                        }
-                        className="mt-1 block h-9 w-36 rounded-lg border border-white/10 bg-black/30 px-3 font-mono text-xs tabular-nums text-white"
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void handleUpdateProduct(product, false)}
-                      className="h-9 rounded-full bg-[#f4f3ef] px-4 text-xs font-medium text-[#111111] disabled:opacity-45"
-                    >
-                      Save price ({formatInrFromPaise(product.price_paise)})
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <form
-            onSubmit={handleCreateProduct}
-            className="self-start rounded-2xl border border-white/10 bg-[#111111] p-6"
-          >
-            <h2 className="flex items-center gap-2 text-base font-medium">
-              <Plus size={15} className="text-[#b9a9d6]" /> Create certification product
-            </h2>
-            <div className="mt-4 space-y-3">
-              <label className="block text-xs text-white/60">
-                Certificate name
-                <input
-                  required
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="e.g. Open Source Excellence Certificate"
-                  className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-xs text-white"
-                />
-              </label>
-              <label className="block text-xs text-white/60">
-                Certificate type
-                <select
-                  value={newType}
-                  onChange={(e) => setNewType(e.target.value as CertificateType)}
-                  className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#151515] px-3 text-xs text-white"
-                >
-                  <option value="internship">Internship Certificate</option>
-                  <option value="course_completion">Course Completion Certificate</option>
-                  <option value="project_completion">Project Completion Certificate</option>
-                  <option value="special_achievement">Special Achievement Certificate</option>
-                </select>
-              </label>
-              <label className="block text-xs text-white/60">
-                Price (₹299–₹599 INR or ₹0)
-                <input
-                  type="number"
-                  required
-                  min={0}
-                  max={599}
-                  value={newRupees}
-                  onChange={(e) => setNewRupees(e.target.value)}
-                  className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 font-mono text-xs tabular-nums text-white"
-                />
-              </label>
-              <label className="block text-xs text-white/60">
-                Description
-                <textarea
-                  required
-                  rows={3}
-                  value={newDesc}
-                  onChange={(e) => setNewDesc(e.target.value)}
-                  placeholder="Describe the verified criteria for this certificate..."
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white"
-                />
-              </label>
-              <button
-                type="submit"
-                disabled={busy}
-                className="w-full rounded-full bg-[#f4f3ef] px-4 py-2.5 text-xs font-medium text-[#111111]"
-              >
-                Create product
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
       {tab === "payments" && (
         <div className="mt-8 space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-lg font-medium">Orders, payments &amp; refunds</h2>
+            <h2 className="text-lg font-medium">Programme orders, payments &amp; refunds</h2>
             <div className="flex flex-wrap gap-1.5">
               {["all", "captured", "failed", "cancelled", "refunded"].map((status) => (
                 <button
@@ -719,10 +552,17 @@ export function AdminCertificationsPanel({
             {filteredPayments.map((pay) => {
               const order = orders.find((o) => o.id === pay.order_id);
               const prod = products.find((p) => p.id === order?.product_id);
-              const isCourseOrder = order?.order_kind === "course_enrollment";
-              const itemTitle = isCourseOrder
-                ? `Course Enrollment: ${String(order?.metadata?.courseTitle ?? "Paid Course")}`
-                : (prod?.name ?? "Certificate Payment");
+              const isProgrammeOrder =
+                order?.order_kind === "programme_enrollment" ||
+                order?.order_kind === "course_enrollment" ||
+                Boolean(order?.metadata?.courseTitle ?? order?.metadata?.programmeTitle);
+              const itemTitle = isProgrammeOrder
+                ? `Programme Enrolment: ${String(
+                    order?.metadata?.courseTitle ??
+                      order?.metadata?.programmeTitle ??
+                      "TGL Programme",
+                  )}`
+                : (prod?.name ?? "Programme Enrolment");
               return (
                 <article
                   key={pay.id}
@@ -759,8 +599,16 @@ export function AdminCertificationsPanel({
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => void handleRefund(pay.id)}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-rose-300/35 px-3.5 py-2 text-xs text-rose-200 hover:bg-rose-300/10"
+                        onClick={() =>
+                          setPendingConfirm({
+                            type: "refund",
+                            paymentId: pay.id,
+                            itemTitle,
+                            amountLabel: order ? formatInrFromPaise(order.amount_paise) : "INR",
+                            reason: (refundReasons[pay.id] || "Admin-approved refund").trim(),
+                          })
+                        }
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-rose-300/35 px-3.5 py-2 text-xs text-rose-200 hover:bg-rose-300/10"
                       >
                         <RotateCcw size={12} /> Process refund
                       </button>
@@ -1092,8 +940,21 @@ export function AdminCertificationsPanel({
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => void handleRevokeCertificate(cert.certificate_id)}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-rose-300/35 px-3.5 py-2 text-xs text-rose-200 hover:bg-rose-300/10"
+                        onClick={() => {
+                          const reason = (revokeReasons[cert.certificate_id] || "").trim();
+                          if (reason.length < 5) {
+                            setError("Enter an audit reason (at least 5 characters) before revoking a certificate.");
+                            return;
+                          }
+                          setError("");
+                          setPendingConfirm({
+                            type: "revoke",
+                            certificateId: cert.certificate_id,
+                            recipientName: cert.recipient_name,
+                            reason,
+                          });
+                        }}
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-rose-300/35 px-3.5 py-2 text-xs text-rose-200 hover:bg-rose-300/10"
                       >
                         <ShieldX size={13} /> Revoke
                       </button>
@@ -1281,6 +1142,91 @@ export function AdminCertificationsPanel({
               )}
             </div>
           </section>
+        </div>
+      )}
+
+      {pendingConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="admin-confirm-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-rose-400/35 bg-[#121212] p-6 text-[#f4f3ef] shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+              <div className="flex items-start gap-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-rose-500/20 text-rose-300">
+                  <AlertTriangle size={18} aria-hidden="true" />
+                </span>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-rose-300">
+                    Confirm Admin Action
+                  </p>
+                  <h3 id="admin-confirm-title" className="mt-1 text-lg font-medium tracking-[-0.03em]">
+                    {pendingConfirm.type === "refund"
+                      ? `Refund ${pendingConfirm.amountLabel}?`
+                      : `Revoke certificate ${pendingConfirm.certificateId}?`}
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="Cancel action"
+                onClick={() => setPendingConfirm(null)}
+                className="grid size-11 place-items-center rounded-full border border-white/10 text-white/65 hover:text-white"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-2 text-xs text-white/75">
+              {pendingConfirm.type === "refund" ? (
+                <>
+                  <p>
+                    You are about to process a refund for{" "}
+                    <strong className="text-white">{pendingConfirm.itemTitle}</strong>.
+                  </p>
+                  <p className="text-white/55">Reason: {pendingConfirm.reason}</p>
+                </>
+              ) : (
+                <>
+                  <p>
+                    This immediately marks{" "}
+                    <strong className="text-white">{pendingConfirm.certificateId}</strong>{" "}
+                    ({pendingConfirm.recipientName}) as revoked on public verification pages.
+                  </p>
+                  <p className="text-white/55">Audit reason: {pendingConfirm.reason}</p>
+                </>
+              )}
+            </div>
+
+            <div className="mt-6 flex flex-col gap-2.5 sm:flex-row">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setPendingConfirm(null)}
+                className="min-h-11 flex-1 rounded-full border border-white/15 px-4 py-2 text-xs text-white/85 hover:border-white/35"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  const action = pendingConfirm;
+                  setPendingConfirm(null);
+                  if (action.type === "refund") {
+                    await handleRefund(action.paymentId);
+                  } else {
+                    await handleRevokeCertificate(action.certificateId);
+                  }
+                }}
+                className="min-h-11 flex-1 rounded-full bg-rose-500 px-4 py-2 text-xs font-medium text-white hover:bg-rose-400 disabled:opacity-50"
+              >
+                {pendingConfirm.type === "refund" ? "Confirm Refund" : "Confirm Revocation"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

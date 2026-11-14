@@ -66,19 +66,28 @@ export type CourseDefinition = {
   includes: string[];
   linkedInternshipSlug: string;
   linkedInternshipTitle: string;
+  internshipDurationWeeks?: number;
+  completionRequirements?: string[];
+  includedCertificateTitle?: string;
   internshipDisclosure: string;
   isPublished: boolean;
   modules: CourseModule[];
   project: CourseProjectDefinition;
 };
 
+export const DEFAULT_COMPLETION_REQUIREMENTS: string[] = [
+  "Complete all programme learning modules and pass the graded assessment check",
+  "Submit the practical capstone project and earn mentor approval",
+  "Complete all assigned internship tasks and receive final mentor/admin approval",
+];
+
 export const SEED_COURSES: CourseDefinition[] = [
   {
     id: "course-web-architecture",
     slug: "web-architecture-systems",
-    title: "Web Architecture & Full-Stack Systems",
+    title: "Full Stack Web Architecture Internship Programme",
     subtitle:
-      "Design accessible interfaces, typed server boundaries, and production payment trust flows with Next.js and PostgreSQL.",
+      "Design accessible interfaces, typed server boundaries, and production payment trust flows with Next.js and PostgreSQL — bundled with an 8-week guided internship and included completion certificate.",
     category: "Engineering",
     level: "Foundations → Production",
     pricePaise: 129900,
@@ -90,18 +99,25 @@ export const SEED_COURSES: CourseDefinition[] = [
       "Structure App Router layouts separating server-only secrets from interactive client leaves",
       "Build WCAG AA keyboard-navigable dashboards, forms, and live status regions",
       "Validate API inputs with Zod schemas and authoritative server-computed prices",
-      "Ship a mentor-reviewed capstone web workspace ready for portfolio review",
+      "Complete 2 internship engineering sprints and receive a verified completion certificate",
     ],
     includes: [
-      "3 structured modules with detailed written study notes and code walkthroughs",
-      "Curated YouTube technical lectures embedded natively with creator attribution",
-      "1 scoped real-world capstone project with milestone checklist and mentor review",
-      "Direct eligibility pathway into the Full-Stack Product Engineering Internship track",
+      "3 structured learning modules with study notes & curated YouTube lectures",
+      "Practical assignments, graded architecture quiz, and capstone project review",
+      "8-week Full-Stack Product Engineering Internship track with 2 mentor-reviewed tasks",
+      "Official Internship Completion Certificate included (₹0 extra after approval)",
     ],
     linkedInternshipSlug: "full-stack-product-engineering",
     linkedInternshipTitle: "Full-Stack Product Engineering Internship",
+    internshipDurationWeeks: 8,
+    includedCertificateTitle: "Full-Stack Product Engineering Internship Completion Certificate",
+    completionRequirements: [
+      "Complete all 3 Web Architecture modules & pass the graded check",
+      "Submit Accessible Learning Portfolio & pass Kabir Malhotra's review",
+      "Finish both 8-week Full-Stack Product Engineering internship tasks and earn final approval",
+    ],
     internshipDisclosure:
-      "Course enrollment unlocks all modules, notes, videos, and project submissions. Completing this course satisfies project prerequisites for the practical internship track; optional completion certificates carry a separate ₹299–₹599 INR issuance fee after mentor approval. Completing a course or studio internship does not guarantee external employer placement.",
+      "One single Programme Enrolment fee unlocks all learning modules, notes, curated videos, assignments, practical project review, the 8-week Full-Stack Product Engineering Internship, and your official completion certificate at ₹0 extra once approved. Completing a TGL studio internship does not guarantee external employer placement.",
     isPublished: true,
     modules: [
       {
@@ -272,9 +288,9 @@ export const SEED_COURSES: CourseDefinition[] = [
   {
     id: "course-python-systems",
     slug: "python-systems-cli",
-    title: "Python Systems & CLI Engineering",
+    title: "Python Systems & CLI Internship Programme",
     subtitle:
-      "Write deterministic Python data pipelines, defensive parsers, and fast contract tests for production utilities.",
+      "Write deterministic Python data pipelines, defensive parsers, and fast contract tests — bundled with practical project mentorship and an included internship certificate.",
     category: "Engineering",
     level: "Core → Systems",
     pricePaise: 79900,
@@ -286,18 +302,25 @@ export const SEED_COURSES: CourseDefinition[] = [
       "Stream large JSONL and CSV event logs with constant memory overhead",
       "Use Python type hints, dataclasses, and strict validation contracts",
       "Write deterministic unit tests covering timezone and malformed input edge cases",
-      "Package clean CLI commands with predictable exit codes and JSON reports",
+      "Ship clean CLI utilities, complete internship tasks, and earn a verified certificate",
     ],
     includes: [
-      "3 practical modules with complete written engineering notes",
-      "Curated YouTube Python systems lectures with creator attribution",
-      "1 applied CLI Telemetry Analyzer project reviewed by a Staff Systems Engineer",
-      "Preparation pathway for the Full-Stack Product Engineering Internship track",
+      "3 practical learning modules with engineering notes & curated YouTube lectures",
+      "1 applied CLI Telemetry Analyzer project reviewed by Ananya Rao",
+      "Included Full-Stack Product Engineering Internship participation & task reviews",
+      "Official Internship Completion Certificate included (₹0 extra after approval)",
     ],
     linkedInternshipSlug: "full-stack-product-engineering",
     linkedInternshipTitle: "Full-Stack Product Engineering Internship",
+    internshipDurationWeeks: 8,
+    includedCertificateTitle: "Python Systems & Engineering Internship Completion Certificate",
+    completionRequirements: [
+      "Complete all 3 Python Systems modules & pass the systems reliability quiz",
+      "Build and earn mentor approval on CLI Telemetry Analyzer",
+      "Complete all linked internship deliverables and receive final mentor approval",
+    ],
     internshipDisclosure:
-      "Course enrollment unlocks all notes, video lessons, and mentor project feedback. Optional completion certificates carry a separate ₹299–₹599 INR fee after passing project requirements. Studio projects do not constitute external job placement guarantees.",
+      "One single Programme Enrolment price covers all notes, video lessons, practical project review, internship participation, and your completion certificate at ₹0 extra once approved. Studio projects do not constitute external job placement guarantees.",
     isPublished: true,
     modules: [
       {
@@ -452,9 +475,9 @@ export const SEED_COURSES: CourseDefinition[] = [
   {
     id: "course-applied-ai",
     slug: "applied-ai-evaluation",
-    title: "Applied AI & Evaluation Studio",
+    title: "Applied AI & Evaluation Internship Programme",
     subtitle:
-      "Build measurable LLM evaluation harnesses, golden test suites, and regression checks beyond ad-hoc prompting.",
+      "Build measurable LLM evaluation harnesses, golden test suites, and regression checks — bundled with an 8-week Applied AI & Data Systems internship and included certificate.",
     category: "Data & AI",
     level: "Intermediate → Studio",
     pricePaise: 149900,
@@ -466,18 +489,25 @@ export const SEED_COURSES: CourseDefinition[] = [
       "Design curated golden datasets measuring accuracy, schema adherence, and refusal quality",
       "Replace subjective prompt tuning with repeatable regression diffs",
       "Calibrate confidence thresholds and fallback workflows for uncertain model outputs",
-      "Ship a runnable Structured AI Evaluation Harness reviewed by an AI researcher",
+      "Complete the Applied AI & Data Systems Internship and earn an included completion certificate",
     ],
     includes: [
-      "3 applied modules with detailed evaluation engineering notes",
-      "Curated YouTube deep-dives from Andrej Karpathy & 3Blue1Brown",
-      "1 real-world AI Evaluation Harness project with rubric feedback",
-      "Direct alignment with the Applied AI & Data Systems Internship track",
+      "3 applied AI modules with notes & curated Karpathy / 3Blue1Brown lectures",
+      "1 real-world AI Evaluation Harness project with mentor rubric feedback",
+      "8-week Applied AI & Data Systems Internship participation & dataset/diff tasks",
+      "Official Internship Completion Certificate included (₹0 extra after approval)",
     ],
     linkedInternshipSlug: "applied-ai-data-systems",
     linkedInternshipTitle: "Applied AI & Data Systems Internship",
+    internshipDurationWeeks: 8,
+    includedCertificateTitle: "Applied AI & Data Systems Internship Completion Certificate",
+    completionRequirements: [
+      "Complete all 3 Applied AI modules & pass the evaluation engineering quiz",
+      "Earn mentor approval on Structured AI Evaluation Harness",
+      "Finish golden dataset & regression diff internship tasks and receive final approval",
+    ],
     internshipDisclosure:
-      "Course enrollment includes full study notes, curated videos, and mentor project review. Practical internship track admission and completion certificates are clearly separated from external employer hiring guarantees.",
+      "One Programme Enrolment covers all study notes, curated videos, project critique, the 8-week Applied AI & Data Systems Internship, and your verified completion certificate at ₹0 extra once approved.",
     isPublished: true,
     modules: [
       {
@@ -608,9 +638,9 @@ export const SEED_COURSES: CourseDefinition[] = [
   {
     id: "course-cybersecurity",
     slug: "cybersecurity-trust-boundaries",
-    title: "Cybersecurity & Payment Trust Boundaries",
+    title: "Cybersecurity & Trust Boundaries Internship Programme",
     subtitle:
-      "Harden webhook endpoints, raw-body HMAC SHA-256 verification, replay protection, and role access boundaries.",
+      "Harden webhook endpoints, raw-body HMAC SHA-256 verification, replay protection, and role access boundaries — bundled with a 6-week Cloud & Security internship.",
     category: "Infrastructure",
     level: "Intermediate",
     pricePaise: 119900,
@@ -622,18 +652,25 @@ export const SEED_COURSES: CourseDefinition[] = [
       "Verify webhook signatures against exact raw request bytes using constant-time comparison",
       "Prevent duplicate webhook replay attacks with idempotency ledgers",
       "Enforce server-side role claims and reject client-forged payment totals",
-      "Ship a hardened HMAC Webhook Verifier reviewed by a Security Engineer",
+      "Complete 6-week Cloud & Security Internship sprints with included completion certificate",
     ],
     includes: [
-      "3 security engineering modules with raw-body cryptographic notes",
-      "Curated backend & security engineering lectures",
+      "3 security engineering modules with raw-body cryptographic notes & video lectures",
       "1 applied Webhook Trust Boundary capstone with mentor audit",
-      "Preparation for the Cloud & Security Engineering Internship track",
+      "6-week Cloud & Security Engineering Internship with 2 hands-on security deliverables",
+      "Official Internship Completion Certificate included (₹0 extra after approval)",
     ],
     linkedInternshipSlug: "cloud-security-engineering",
     linkedInternshipTitle: "Cloud & Security Engineering Internship",
+    internshipDurationWeeks: 6,
+    includedCertificateTitle: "Cloud & Security Engineering Internship Completion Certificate",
+    completionRequirements: [
+      "Complete all 3 Cybersecurity modules & pass the webhook security quiz",
+      "Submit HMAC Webhook Verifier & pass Rhea Kulkarni's audit",
+      "Approve both 6-week Cloud & Security internship tasks and earn final sign-off",
+    ],
     internshipDisclosure:
-      "Course enrollment includes all written notes, curated video embeds, and mentor security review. Optional completion certificates carry a ₹299–₹599 INR fee once deliverables pass mentor critique.",
+      "One single Programme Enrolment includes all written notes, curated video embeds, mentor security review, the 6-week Cloud & Security Engineering Internship, and your completion certificate at ₹0 extra once deliverables pass review.",
     isPublished: true,
     modules: [
       {
@@ -762,9 +799,9 @@ export const SEED_COURSES: CourseDefinition[] = [
   {
     id: "course-product-ux",
     slug: "product-design-accessibility",
-    title: "Product Architecture & Accessible UI",
+    title: "Product Architecture & Accessible UI Internship Programme",
     subtitle:
-      "Turn dense feature sprawl into calm, responsive multi-role navigation and mobile-friendly touch ergonomics.",
+      "Turn dense feature sprawl into calm, responsive multi-role navigation and mobile-friendly touch ergonomics — bundled with internship tasks and included certification.",
     category: "Product & design",
     level: "Foundations",
     pricePaise: 49900,
@@ -776,18 +813,25 @@ export const SEED_COURSES: CourseDefinition[] = [
       "Audit sticky headers and bottom bars to stay compact (<15% height) on 390px viewports",
       "Design unboxed typographic metadata and high-contrast interactive controls",
       "Build synchronized keyboard and screen-reader alternatives for interactive visual tools",
-      "Complete an Accessible Multi-Role Interface Critique reviewed by a Design Systems Lead",
+      "Finish UX critique deliverables and internship sprints to unlock your included certificate",
     ],
     includes: [
       "3 concise modules on layout math, typography, and mobile touch ergonomics",
-      "Curated frontend craft lectures with creator attribution",
       "1 practical UX architecture critique & specification project",
-      "Connects into the Full-Stack Product Engineering Internship track",
+      "Included Full-Stack Product Engineering Internship track & task feedback",
+      "Official Internship Completion Certificate included (₹0 extra after approval)",
     ],
     linkedInternshipSlug: "full-stack-product-engineering",
     linkedInternshipTitle: "Full-Stack Product Engineering Internship",
+    internshipDurationWeeks: 8,
+    includedCertificateTitle: "Product Architecture & Engineering Internship Certificate",
+    completionRequirements: [
+      "Complete all 3 Product Architecture modules & pass the accessibility quiz",
+      "Submit Accessible Multi-Role Interface Critique and pass Tara Sengupta's review",
+      "Complete linked internship deliverables and receive final mentor approval",
+    ],
     internshipDisclosure:
-      "Course enrollment unlocks all notes, curated videos, and mentor design critique. Optional completion certificates carry a ₹299–₹599 INR fee after mentor approval.",
+      "One Programme Enrolment unlocks all notes, curated videos, mentor design critique, internship participation, and your official completion certificate at ₹0 extra once approved.",
     isPublished: true,
     modules: [
       {
@@ -915,9 +959,9 @@ export const SEED_COURSES: CourseDefinition[] = [
   {
     id: "course-cloud-devops",
     slug: "cloud-reliability-devops",
-    title: "Cloud Reliability & Zero-Downtime Delivery",
+    title: "Cloud Reliability & DevOps Internship Programme",
     subtitle:
-      "Containerize services, configure health checks, and ship reproducible CI gates for dependable deployments.",
+      "Containerize services, configure health checks, and ship reproducible CI gates — bundled with a 6-week Cloud & Security internship and included certificate.",
     category: "Infrastructure",
     level: "Advanced Studio",
     pricePaise: 199900,
@@ -929,18 +973,25 @@ export const SEED_COURSES: CourseDefinition[] = [
       "Package deterministic multi-stage Docker builds with minimal runtime attack surface",
       "Implement graceful degradation when external APIs or databases time out",
       "Enforce type checks, linting, and integration tests in automated CI gates",
-      "Ship a Resilient Service Architecture blueprint reviewed by a Platform Reliability Mentor",
+      "Complete 6-week Cloud & Security Internship milestones and earn an included certificate",
     ],
     includes: [
-      "3 production infrastructure modules with failure-mode study notes",
-      "Curated YouTube DevOps & containerization lectures",
+      "3 production infrastructure modules with failure-mode notes & video lectures",
       "1 applied Resilient Service Architecture capstone project",
-      "Direct alignment with the Cloud & Security Engineering Internship track",
+      "6-week Cloud & Security Engineering Internship participation & rollout tasks",
+      "Official Internship Completion Certificate included (₹0 extra after approval)",
     ],
     linkedInternshipSlug: "cloud-security-engineering",
     linkedInternshipTitle: "Cloud & Security Engineering Internship",
+    internshipDurationWeeks: 6,
+    includedCertificateTitle: "Cloud Reliability & Security Internship Certificate",
+    completionRequirements: [
+      "Complete all 3 Cloud Reliability modules & pass the rollout safety quiz",
+      "Earn mentor approval on Resilient Service Architecture & Rollback Runbook",
+      "Approve both 6-week Cloud & Security internship deliverables and receive final sign-off",
+    ],
     internshipDisclosure:
-      "Course enrollment includes full study notes, curated videos, and mentor review. Optional completion certificates carry a ₹299–₹599 INR fee upon verified completion.",
+      "One Programme Enrolment covers all study notes, curated videos, mentor review, the 6-week Cloud & Security Engineering Internship, and your official completion certificate at ₹0 extra once verified.",
     isPublished: true,
     modules: [
       {

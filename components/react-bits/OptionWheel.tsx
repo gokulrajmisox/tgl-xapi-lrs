@@ -93,7 +93,7 @@ export default function OptionWheel({
   const activeItem = items[selectedIndex] ?? items[0];
 
   const spokePositions = useMemo(() => {
-    const radiusPercent = 37;
+    const radiusPercent = 33;
     return items.map((item, idx) => {
       const deg = idx * stepDeg - 90;
       const rad = (deg * Math.PI) / 180;
@@ -175,7 +175,7 @@ export default function OptionWheel({
       <div
         role="listbox"
         tabIndex={0}
-        aria-label="Interactive course selector wheel. Use left or right arrow keys to rotate courses."
+        aria-label="Interactive programme selector wheel. Use left or right arrow keys to rotate programmes."
         aria-activedescendant={activeItem ? `wheel-opt-${activeItem.id}` : undefined}
         onKeyDown={handleKeyDown}
         style={{ '--wheel-size': `${size}px` } as CSSProperties}
@@ -217,17 +217,17 @@ export default function OptionWheel({
                   type="button"
                   onClick={() => onSelectIndex(idx)}
                   style={{ transform: `rotate(${-liveRotation}deg)` }}
-                  className={`flex min-w-[68px] flex-col items-center rounded-2xl border px-2.5 py-1.5 text-center transition-colors whitespace-nowrap sm:min-w-[78px] sm:px-3 sm:py-2 ${
+                  className={`flex min-w-[54px] max-w-[84px] flex-col items-center rounded-2xl border px-1.5 py-1 text-center transition-colors sm:min-w-[78px] sm:max-w-[110px] sm:px-3 sm:py-2 ${
                     isSelected
                       ? 'border-[#b9a9d6] bg-[#f4f3ef] text-[#111111] shadow-[0_10px_28px_rgba(185,169,214,0.28)]'
                       : 'border-white/15 bg-[#151515]/95 text-white/80 hover:border-white/40 hover:text-white'
                   }`}
                 >
-                  <span className="text-[10px] font-medium leading-tight sm:text-[11px]">
+                  <span className="truncate max-w-full text-[9px] font-medium leading-tight sm:text-[11px]">
                     {item.shortLabel ?? item.label}
                   </span>
                   <span
-                    className={`mt-0.5 font-mono text-[10px] tabular-nums ${
+                    className={`mt-0.5 font-mono text-[9px] tabular-nums sm:text-[10px] ${
                       isSelected ? 'text-black/70' : 'text-[#b9a9d6]'
                     }`}
                   >
@@ -241,24 +241,24 @@ export default function OptionWheel({
 
         {/* Stationary center hub readout */}
         {activeItem && (
-          <div className="pointer-events-none relative z-10 flex h-full w-full items-center justify-center p-16 sm:p-20">
-            <div className="pointer-events-auto flex w-44 flex-col items-center rounded-full border border-white/15 bg-[#101012]/95 px-4 py-5 text-center shadow-2xl backdrop-blur-md sm:w-48">
+          <div className="pointer-events-none relative z-10 flex h-full w-full items-center justify-center p-12 sm:p-20">
+            <div className="pointer-events-auto flex w-36 flex-col items-center rounded-full border border-white/15 bg-[#101012]/95 px-3 py-3.5 text-center shadow-2xl backdrop-blur-md sm:w-48 sm:px-4 sm:py-5">
               <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#b9a9d6]">
                 {String(selectedIndex + 1).padStart(2, '0')} / {String(count).padStart(2, '0')}
               </p>
-              <p className="mt-1.5 line-clamp-2 text-xs font-medium leading-4 text-[#f4f3ef]">
+              <p className="mt-1 line-clamp-2 text-[11px] font-medium leading-4 text-[#f4f3ef] sm:text-xs">
                 {activeItem.label}
               </p>
-              <p className="mt-1 font-mono text-sm font-semibold tabular-nums text-[#f4f3ef]">
+              <p className="mt-1 font-mono text-xs font-semibold tabular-nums text-[#f4f3ef] sm:text-sm">
                 {activeItem.priceLabel}
               </p>
-              <p className="mt-0.5 text-[10px] text-white/45">{activeItem.meta}</p>
-              <div className="mt-3 flex items-center gap-2">
+              <p className="mt-0.5 hidden text-[10px] text-white/45 sm:block">{activeItem.meta}</p>
+              <div className="mt-2.5 flex items-center gap-2 sm:mt-3">
                 <button
                   type="button"
                   onClick={() => stepBy(-1)}
                   aria-label="Previous course on wheel"
-                  className="grid size-8 place-items-center rounded-full border border-white/15 text-white/75 hover:border-white/40 hover:text-white"
+                  className="grid size-9 place-items-center rounded-full border border-white/15 text-white/75 hover:border-white/40 hover:text-white sm:size-10"
                 >
                   <ChevronLeft size={14} aria-hidden="true" />
                 </button>
@@ -266,7 +266,7 @@ export default function OptionWheel({
                   type="button"
                   onClick={() => stepBy(1)}
                   aria-label="Next course on wheel"
-                  className="grid size-8 place-items-center rounded-full border border-white/15 text-white/75 hover:border-white/40 hover:text-white"
+                  className="grid size-9 place-items-center rounded-full border border-white/15 text-white/75 hover:border-white/40 hover:text-white sm:size-10"
                 >
                   <ChevronRight size={14} aria-hidden="true" />
                 </button>

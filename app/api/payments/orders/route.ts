@@ -1,23 +1,22 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  createCertificationOrder,
   createCourseEnrollmentOrder,
   resolveCurrentActor,
 } from "@/lib/certifications/store";
 
-const CertificateOrderSchema = z.object({
-  orderKind: z.literal("certificate").optional(),
-  productId: z.string().uuid(),
-  internshipApplicationId: z.string().uuid().nullable().optional(),
-});
-
-const CourseOrderSchema = z.object({
-  orderKind: z.literal("course_enrollment"),
+const ProgrammeOrderSchema = z.object({
+  orderKind: z.enum(["programme_enrollment", "course_enrollment"]),
   courseId: z.string().trim().min(2).max(120),
 });
 
-const CreateOrderSchema = z.union([CourseOrderSchema, CertificateOrderSchema]);
+const LegacyCertificateOrderSchema = z.object({
+  orderKind: z.literal("certificate").optional(),
+  productId: z.string().uuid().optional(),
+  internshipApplicationId: z.string().uuid().nullable().optional(),
+});
+
+const CreateOrderSchema = z.union([ProgrammeOrderSchema, LegacyCertificateOrderSchema]);
 
 export async function POST(request: Request) {
   const actor = await resolveCurrentActor();
@@ -35,14 +34,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    if (body.data.orderKind === "course_enrollment") {
+    if ("courseId" in body.data) {
       const result = await createCourseEnrollmentOrder({
         user: actor.user,
         courseId: body.data.courseId,
+        orderKind: body.data.orderKind,
       });
       if (result.error || !result.order) {
         return NextResponse.json(
-          { error: result.error ?? "Unable to create course order." },
+          { error: result.error ?? "Unable to create programme enrolment order." },
           { status: result.status ?? 400 },
         );
       }
@@ -57,26 +57,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await createCertificationOrder({
-      user: actor.user,
-      productId: body.data.productId,
-      internshipApplicationId: body.data.internshipApplicationId ?? null,
-    });
-    if (result.error || !result.order) {
-      return NextResponse.json(
-        { error: result.error ?? "Unable to create order." },
-        { status: result.status ?? 400 },
-      );
-    }
-
     return NextResponse.json(
       {
-        order: result.order,
-        keyId: result.keyId ?? null,
-        isSimulated: Boolean(result.isSimulated),
-        product: result.product,
+        error:
+          "Separate certificate payments have been retired. Your official completion certificate is included at ₹0 extra inside Programme Enrolment once approved.",
       },
-      { status: 201, headers: { "Cache-Control": "no-store" } },
+      { status: 400 },
     );
   } catch (error) {
     return NextResponse.json(

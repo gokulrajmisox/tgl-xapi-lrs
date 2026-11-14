@@ -107,7 +107,7 @@ export type IssuanceGateInput = {
 
 export function canIssueCertificate(input: IssuanceGateInput): { allowed: boolean; reason?: string } {
   if (!input.productEnabled) {
-    return { allowed: false, reason: "This certification product is currently disabled." };
+    return { allowed: false, reason: "This certificate track is currently disabled." };
   }
   if (input.existingActiveCertificateId) {
     return {
@@ -118,14 +118,14 @@ export function canIssueCertificate(input: IssuanceGateInput): { allowed: boolea
   if (!input.eligibility.eligible) {
     return {
       allowed: false,
-      reason: `Eligibility requirements not met: ${input.eligibility.missingReasons.join("; ")}. Payment alone never issues a certificate.`,
+      reason: `Eligibility requirements not met: ${input.eligibility.missingReasons.join("; ")}. Enrolment or payment alone never issues a certificate.`,
     };
   }
   if (input.pricePaise > 0) {
     if (input.paymentStatus !== "captured" || !input.paymentVerified) {
       return {
         allowed: false,
-        reason: "Verified payment is required before issuing a paid certificate.",
+        reason: "Verified programme payment is required before issuing a certificate.",
       };
     }
   }

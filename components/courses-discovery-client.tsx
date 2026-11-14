@@ -50,11 +50,11 @@ export function CoursesDiscoveryClient({
   };
 
   return (
-    <div className="space-y-14">
+    <div className="space-y-14 overflow-x-clip">
       {/* Category Filters */}
       <div
         role="tablist"
-        aria-label="Filter courses by discipline"
+        aria-label="Filter programmes by discipline"
         className="flex flex-wrap items-center gap-2 border-b border-white/10 pb-5"
       >
         {CATEGORIES.map((category) => {
@@ -66,10 +66,10 @@ export function CoursesDiscoveryClient({
               type="button"
               aria-selected={active}
               onClick={() => handleCategoryChange(category)}
-              className={`rounded-full px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+              className={`min-h-11 rounded-full px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
                 active
                   ? "bg-[#f4f3ef] text-[#111111]"
-                  : "border border-white/10 bg-[#111111] text-white/65 hover:border-white/25 hover:text-white"
+                  : "border border-white/10 bg-[#111111] text-white/75 hover:border-white/25 hover:text-white"
               }`}
             >
               {category}
@@ -81,33 +81,34 @@ export function CoursesDiscoveryClient({
       {/* Interactive OptionWheel + Synchronized Spotlight */}
       {spotlight && (
         <section
-          aria-label="Interactive course selector"
-          className="grid items-center gap-10 overflow-x-clip rounded-3xl border border-white/10 bg-[#111111] p-5 sm:p-10 lg:grid-cols-[.9fr_1.1fr]"
+          aria-label="Interactive programme selector"
+          className="grid min-w-0 items-center gap-8 overflow-x-clip rounded-3xl border border-white/10 bg-[#111111] p-4 sm:p-10 lg:grid-cols-[.9fr_1.1fr]"
         >
-          <div className="flex flex-col items-center">
+          <div className="flex min-w-0 max-w-full flex-col items-center overflow-hidden">
             <OptionWheel
               items={wheelItems}
               selectedIndex={safeIndex}
               onSelectIndex={setWheelIndex}
-              size={380}
+              size={370}
             />
-            <p className="mt-4 text-center text-[11px] text-white/45">
-              Drag the wheel, click a course spoke, or use arrow keys to preview.
+            <p className="mt-3 text-center text-[11px] text-white/45">
+              Drag the wheel, click a programme spoke, or use arrow keys to compare.
             </p>
           </div>
 
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs text-[#b9a9d6]">
-                {spotlight.category} · {spotlight.level} · {spotlight.estimatedHours} hours
+                {spotlight.category} · {spotlight.estimatedHours}h course + {spotlight.internshipDurationWeeks}-wk internship
               </p>
               <span className="font-mono text-lg font-semibold tabular-nums text-[#f4f3ef]">
-                {formatInrFromPaise(spotlight.pricePaise)}
+                {formatInrFromPaise(spotlight.pricePaise)}{" "}
+                <span className="text-[11px] font-normal text-white/50">all-inclusive</span>
               </span>
             </div>
 
             <div>
-              <h2 className="text-3xl font-medium tracking-[-0.04em] text-[#f4f3ef] sm:text-4xl">
+              <h2 className="text-2xl font-medium tracking-[-0.04em] text-[#f4f3ef] sm:text-4xl">
                 {spotlight.title}
               </h2>
               <p className="mt-3 text-sm leading-6 text-white/65">
@@ -115,13 +116,13 @@ export function CoursesDiscoveryClient({
               </p>
             </div>
 
-            <div className="space-y-3 rounded-2xl border border-white/10 bg-black/30 p-5">
+            <div className="space-y-3 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
-                  Skills &amp; What You Will Build
+                  What This Single Fee Includes
                 </p>
                 <span className="text-[11px] text-[#b9a9d6]">
-                  {spotlight.assignmentCount} assignments · Graded quiz
+                  {spotlight.moduleCount} modules · {spotlight.assignmentCount} assignments · Certificate ₹0 extra
                 </span>
               </div>
               {spotlight.skills.length > 0 && (
@@ -146,27 +147,29 @@ export function CoursesDiscoveryClient({
                 {spotlight.mentorRole}
               </p>
               <p>
-                Linked project:{" "}
+                Practical project:{" "}
                 <strong className="font-medium text-white/90">{spotlight.projectTitle}</strong>
               </p>
               <p>
-                Related internship:{" "}
-                <strong className="font-medium text-[#d8cbea]">{spotlight.linkedInternshipTitle}</strong>
+                Included internship:{" "}
+                <strong className="font-medium text-[#d8cbea]">
+                  {spotlight.linkedInternshipTitle} ({spotlight.internshipDurationWeeks} weeks)
+                </strong>
               </p>
-              <p className="text-[11px] leading-5 text-white/45">
+              <p className="text-[11px] leading-5 text-emerald-300/90">
                 {spotlight.certificateInfo}
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 pt-1">
               <Link
-                href={`/courses/${spotlight.slug}`}
-                className="inline-flex items-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-3 text-xs font-medium text-[#111111] transition-colors hover:bg-white whitespace-nowrap shrink-0"
+                href={`/programmes/${spotlight.slug}`}
+                className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-3 text-xs font-medium text-[#111111] transition-colors hover:bg-white whitespace-nowrap shrink-0"
               >
                 {spotlight.enrolled ? (
                   <>
                     <CheckCircle2 size={14} aria-hidden="true" />
-                    Continue course ({spotlight.progressPercent}%)
+                    Continue Learning ({spotlight.progressPercent}%)
                   </>
                 ) : (
                   <>
@@ -177,46 +180,46 @@ export function CoursesDiscoveryClient({
               </Link>
               <Link
                 href="/internships"
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-4 py-3 text-xs text-white/80 hover:border-white/35 whitespace-nowrap shrink-0"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/15 px-4 py-3 text-xs text-white/85 hover:border-white/35 whitespace-nowrap shrink-0"
               >
-                Explore internship: {spotlight.linkedInternshipTitle}
+                Internship Workspace
               </Link>
             </div>
           </div>
         </section>
       )}
 
-      {/* Full Structured Course Catalog Grid */}
+      {/* Full Structured Programme Catalog Grid */}
       <section aria-labelledby="catalog-grid-heading" className="space-y-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-[11px] uppercase tracking-[0.2em] text-white/45">
-              Structured Curriculum · ₹499–₹1,999 INR
+              All-Inclusive Programmes · Single INR Fee (₹499–₹1,999)
             </p>
             <h2
               id="catalog-grid-heading"
               className="mt-2 text-2xl font-medium tracking-[-0.04em] sm:text-3xl"
             >
-              All published courses ({filtered.length})
+              All programmes ({filtered.length})
             </h2>
           </div>
-          <p className="max-w-md text-xs leading-5 text-white/50">
-            Inspect syllabus, skills, linked projects, and internship eligibility upfront. Study notes, curated YouTube embeds, quizzes, and capstone submission unlock immediately after verified INR checkout.
+          <p className="max-w-md text-xs leading-5 text-white/60">
+            One transparent payment unlocks the course modules, assignments, practical project, internship participation, and your Internship Completion Certificate (₹0 extra after mentor approval).
           </p>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid min-w-0 gap-5 md:grid-cols-2 lg:grid-cols-3">
           {filtered.map((course) => (
             <article
               key={course.id}
-              className="flex flex-col justify-between rounded-2xl border border-white/10 bg-[#111111] p-6 transition-colors hover:border-white/25"
+              className="flex min-w-0 flex-col justify-between rounded-2xl border border-white/10 bg-[#111111] p-5 transition-colors hover:border-white/25 sm:p-6"
             >
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center justify-between gap-3 text-xs">
-                  <span className="text-white/50">
-                    {course.category} · {course.estimatedHours}h · {course.level}
+                  <span className="truncate text-white/50">
+                    {course.category} · {course.estimatedHours}h + {course.internshipDurationWeeks}w
                   </span>
-                  <span className="font-mono font-semibold tabular-nums text-[#f4f3ef]">
+                  <span className="shrink-0 font-mono font-semibold tabular-nums text-[#f4f3ef]">
                     {formatInrFromPaise(course.pricePaise)}
                   </span>
                 </div>
@@ -234,20 +237,23 @@ export function CoursesDiscoveryClient({
                   </p>
                 )}
 
-                <div className="mt-3 space-y-1 border-t border-white/[0.08] pt-3 text-[11px] text-white/45">
+                <div className="mt-3 space-y-1 border-t border-white/[0.08] pt-3 text-[11px] text-white/50">
                   <p>
                     {course.moduleCount} modules · {course.lessonCount} lessons · {course.assignmentCount} assignments
                   </p>
                   <p className="truncate">
-                    Project: <span className="text-white/75">{course.projectTitle}</span>
+                    Project: <span className="text-white/80">{course.projectTitle}</span>
                   </p>
                   <p className="truncate">
-                    Internship: <span className="text-white/75">{course.linkedInternshipTitle}</span>
+                    Internship: <span className="text-white/80">{course.linkedInternshipTitle}</span>
+                  </p>
+                  <p className="text-emerald-300/90">
+                    Certificate: Included (₹0 extra)
                   </p>
                 </div>
               </div>
 
-              <div className="mt-6 flex items-center justify-between gap-3 border-t border-white/10 pt-4">
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
                 {course.enrolled ? (
                   <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-300">
                     <CheckCircle2 size={13} aria-hidden="true" />
@@ -256,16 +262,16 @@ export function CoursesDiscoveryClient({
                 ) : (
                   <span className="inline-flex items-center gap-1.5 text-xs text-white/50">
                     <Lock size={13} aria-hidden="true" />
-                    Notes locked · ₹{Math.round(course.pricePaise / 100)}
+                    All-inclusive · ₹{Math.round(course.pricePaise / 100)}
                   </span>
                 )}
 
                 <Link
-                  href={`/courses/${course.slug}`}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3.5 py-2 text-xs font-medium text-[#f4f3ef] hover:border-white/40 whitespace-nowrap shrink-0"
+                  href={`/programmes/${course.slug}`}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/15 px-4 py-2 text-xs font-medium text-[#f4f3ef] hover:border-white/40 whitespace-nowrap shrink-0"
                 >
                   <BookOpen size={12} aria-hidden="true" />
-                  {course.enrolled ? "Open workspace" : "Enrol Now"}
+                  {course.enrolled ? "Open Programme" : "Enrol Now"}
                 </Link>
               </div>
             </article>

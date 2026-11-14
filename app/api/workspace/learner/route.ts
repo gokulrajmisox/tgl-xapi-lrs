@@ -36,6 +36,17 @@ const ActionSchema = z.discriminatedUnion("action", [
       .optional()
       .or(z.literal("")),
     supportingEvidence: z.string().trim().max(1200).optional().default(""),
+    supportingFiles: z
+      .array(
+        z.object({
+          name: z.string().trim().min(1).max(160),
+          sizeBytes: z.number().int().min(0).max(50 * 1024 * 1024),
+          mimeType: z.string().trim().max(120).default("application/octet-stream"),
+        }),
+      )
+      .max(5)
+      .optional()
+      .default([]),
     summary: z.string().trim().min(10, "Include a brief summary of what you built").max(1200),
     reflection: z.string().trim().max(1200).default(""),
   }),
@@ -138,6 +149,7 @@ export async function POST(request: Request) {
       githubUrl,
       deploymentUrl: input.deploymentUrl || null,
       supportingEvidence: input.supportingEvidence || null,
+      supportingFiles: input.supportingFiles ?? [],
       artifactUrl: githubUrl,
       summary: input.summary,
       reflection: input.reflection,

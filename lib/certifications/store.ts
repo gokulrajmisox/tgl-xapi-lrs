@@ -65,6 +65,7 @@ export type InternshipApplicationRecord = {
   motivation: string;
   portfolio_url: string | null;
   status: "applied" | "accepted" | "in_progress" | "completed" | "withdrawn";
+  course_id?: string | null;
   submission_url: string | null;
   submission_summary: string | null;
   task_submissions?: InternshipTaskSubmission[];
@@ -96,7 +97,7 @@ export type CertificationProductRecord = {
 export type CertificationOrderRecord = {
   id: string;
   user_id: string;
-  order_kind?: "certificate" | "course_enrollment";
+  order_kind?: "certificate" | "course_enrollment" | "programme_enrollment";
   product_id: string | null;
   course_id?: string | null;
   internship_application_id: string | null;
@@ -362,11 +363,11 @@ function createSeedStore(): MemoryStore {
       {
         id: prodInternId,
         slug: "internship-certificate",
-        name: "Internship Certificate",
+        name: "Internship Completion Certificate",
         description:
-          "Official verified Internship Certificate confirming internship completion, project submission, and authorized mentor approval.",
+          "Official verified Internship Completion Certificate included in Programme Enrolment (₹0 extra) once learning, practical project, internship tasks, and mentor review are approved.",
         certificate_type: "internship",
-        price_paise: 49900,
+        price_paise: 0,
         currency: "INR",
         enabled: true,
         eligibility_rules: {
@@ -380,11 +381,11 @@ function createSeedStore(): MemoryStore {
       {
         id: prodCourseId,
         slug: "course-completion-certificate",
-        name: "Course Completion Certificate",
+        name: "Programme Completion Certificate",
         description:
-          "Official Course Completion Certificate recognizing verified completion of a structured TGL learning pathway.",
+          "Official Programme Completion Certificate included in your enrolment (₹0 extra) after finishing required modules, quiz, and mentor review.",
         certificate_type: "course_completion",
-        price_paise: 29900,
+        price_paise: 0,
         currency: "INR",
         enabled: true,
         eligibility_rules: {
@@ -401,9 +402,9 @@ function createSeedStore(): MemoryStore {
         slug: "project-completion-certificate",
         name: "Project Completion Certificate",
         description:
-          "Official Project Completion Certificate documenting an approved capstone build and technical review.",
+          "Official Project Completion Credential included with Programme Enrolment (₹0 extra) upon mentor capstone approval.",
         certificate_type: "project_completion",
-        price_paise: 39900,
+        price_paise: 0,
         currency: "INR",
         enabled: true,
         eligibility_rules: {
@@ -417,11 +418,11 @@ function createSeedStore(): MemoryStore {
       {
         id: prodSpecialId,
         slug: "special-achievement-certificate",
-        name: "Special Achievement Certificate",
+        name: "Special Achievement Distinction",
         description:
-          "Distinction credential awarded for exceptional technical craftsmanship, mentorship, or open-source impact.",
+          "Honours distinction credential awarded by administrators at ₹0 extra for exceptional craftsmanship.",
         certificate_type: "special_achievement",
-        price_paise: 59900,
+        price_paise: 0,
         currency: "INR",
         enabled: true,
         eligibility_rules: {
@@ -437,14 +438,19 @@ function createSeedStore(): MemoryStore {
       {
         id: "44444444-4444-4444-8444-444444444401",
         user_id: DEMO_GRADUATE_ID,
-        product_id: prodCourseId,
+        order_kind: "programme_enrollment",
+        product_id: null,
+        course_id: "course-web-architecture",
         internship_application_id: null,
-        razorpay_order_id: "order_seed_verified_299",
-        amount_paise: 29900,
+        razorpay_order_id: "order_seed_prog_web_1299",
+        amount_paise: 129900,
         currency: "INR",
         order_status: "paid",
         payment_mode: "razorpay_test",
-        metadata: { certificateType: "course_completion" },
+        metadata: {
+          programmeTitle: "Full Stack Web Architecture Internship Programme",
+          certificateIncluded: true,
+        },
         created_at: "2026-11-08T10:00:00.000Z",
         updated_at: "2026-11-08T10:03:00.000Z",
       },
@@ -454,7 +460,7 @@ function createSeedStore(): MemoryStore {
         id: "55555555-5555-4555-8555-555555555501",
         order_id: "44444444-4444-4444-8444-444444444401",
         user_id: DEMO_GRADUATE_ID,
-        razorpay_payment_id: "pay_seed_verified_299",
+        razorpay_payment_id: "pay_seed_prog_web_1299",
         razorpay_signature: "verified_seed_hmac",
         payment_status: "captured",
         payment_method: "upi",
@@ -900,7 +906,7 @@ export async function sendAndLogLifecycleEmail(params: {
   return record;
 }
 
-export async function createCertificationOrder(params: {
+export async function createCertificationOrder(_params: {
   user: SandboxUser;
   productId: string;
   internshipApplicationId?: string | null;
@@ -912,114 +918,122 @@ export async function createCertificationOrder(params: {
   error?: string;
   status?: number;
 }> {
-  const products = await listProducts(true);
-  const product = products.find((p) => p.id === params.productId);
-  if (!product) return { error: "Certification product not found.", status: 404 };
-  if (!product.enabled) return { error: "This certification product is currently disabled.", status: 400 };
+  void _params;
+  return {
+    error:
+      "Separate certificate payments have been retired. Internship and programme completion certificates are included at ₹0 extra with your Programme Enrolment once all completion and mentor approval requirements are met.",
+    status: 400,
+  };
+}
 
-  const { evaluation, matchedApplication, achievementTitle } = await evaluateProductEligibilityForUser({
-    userId: params.user.id,
-    product,
-    internshipApplicationId: params.internshipApplicationId,
-  });
-
-  if (!evaluation.eligible) {
-    return {
-      error: `Not eligible for ${product.name}. Missing: ${evaluation.missingReasons.join("; ")}.`,
-      status: 403,
-    };
-  }
-
-  const existingIssuance = await findActiveIssuanceForUserProduct(params.user.id, product.id);
-  if (existingIssuance) {
-    return {
-      error: `You already hold an active ${product.name} (${existingIssuance.certificate_id}). Duplicate issuance is not permitted.`,
-      status: 409,
-    };
-  }
-
-  if (product.price_paise === 0) {
-    return { error: "This certificate is free and does not require a payment order.", status: 400 };
-  }
-
-  const rpOrder = await createRazorpayOrder({
-    amountPaise: product.price_paise,
-    currency: "INR",
-    receipt: `tgl_${product.certificate_type}_${Date.now()}`,
-    notes: {
-      userId: params.user.id,
-      productId: product.id,
-      certificateType: product.certificate_type,
-      achievementTitle,
-    },
-  });
+export async function activateBundledProgrammeInternship(params: {
+  userId: string;
+  userName: string;
+  userEmail: string;
+  courseId: string;
+  courseSlug: string;
+  courseTitle: string;
+  linkedInternshipSlug: string;
+}): Promise<InternshipApplicationRecord | null> {
+  const internships = await listInternships();
+  const track =
+    internships.find((i) => i.slug === params.linkedInternshipSlug) ??
+    internships.find((i) => i.required_course_slug === params.courseSlug) ??
+    null;
+  if (!track) return null;
 
   const now = new Date().toISOString();
-  let order: CertificationOrderRecord;
-
   if (isSupabaseConfigured()) {
     const client = serviceClient();
-    const { data, error } = await client
-      .from("certification_orders")
-      .insert({
-        user_id: params.user.id,
-        product_id: product.id,
-        internship_application_id: matchedApplication?.id ?? null,
-        razorpay_order_id: rpOrder.razorpayOrderId,
-        amount_paise: rpOrder.amountPaise,
-        currency: "INR",
-        order_status: "created",
-        payment_mode: rpOrder.mode,
-        metadata: { achievementTitle, certificateType: product.certificate_type },
-      })
+    const { data: existing } = await client
+      .from("internship_applications")
+      .select("*")
+      .eq("user_id", params.userId)
+      .eq("internship_id", track.id)
+      .maybeSingle();
+
+    if (existing) {
+      if (existing.status === "completed") {
+        return existing as InternshipApplicationRecord;
+      }
+      const { data: updated } = await client
+        .from("internship_applications")
+        .update({
+          status: "in_progress",
+          course_id: params.courseId,
+          updated_at: now,
+        })
+        .eq("id", existing.id)
+        .select("*")
+        .single();
+      return (updated as InternshipApplicationRecord | null) ?? (existing as InternshipApplicationRecord);
+    }
+
+    const { data: created } = await client
+      .from("internship_applications")
+      .upsert(
+        {
+          user_id: params.userId,
+          internship_id: track.id,
+          course_id: params.courseId,
+          applicant_name: params.userName,
+          applicant_email: params.userEmail,
+          motivation: `Activated automatically with Programme Enrolment: ${params.courseTitle}`,
+          portfolio_url: null,
+          status: "in_progress",
+          updated_at: now,
+        },
+        { onConflict: "user_id,internship_id" },
+      )
       .select("*")
       .single();
-    if (error || !data) return { error: "Failed to persist order.", status: 500 };
-    order = data as CertificationOrderRecord;
-  } else {
-    order = {
-      id: randomUUID(),
-      user_id: params.user.id,
-      order_kind: "certificate",
-      product_id: product.id,
-      course_id: null,
-      internship_application_id: matchedApplication?.id ?? null,
-      razorpay_order_id: rpOrder.razorpayOrderId,
-      amount_paise: rpOrder.amountPaise,
-      currency: "INR",
-      order_status: "created",
-      payment_mode: rpOrder.mode,
-      metadata: { achievementTitle, certificateType: product.certificate_type },
-      created_at: now,
-      updated_at: now,
-    };
-    getMemoryStore().orders.unshift(order);
+    return (created as InternshipApplicationRecord | null) ?? null;
   }
 
-  await sendAndLogLifecycleEmail({
-    recipientEmail: params.user.email,
-    templateKey: "purchase_initiated",
-    variables: {
-      studentName: params.user.name,
-      certificateName: product.name,
-      amountFormatted: formatInrFromPaise(product.price_paise),
-      orderId: order.razorpay_order_id,
-      achievementTitle,
-    },
-    isSimulatedTransaction: rpOrder.isSimulated,
-  });
+  const store = getMemoryStore();
+  const existing = store.applications.find(
+    (a) => a.user_id === params.userId && a.internship_id === track.id,
+  );
+  if (existing) {
+    existing.course_id = params.courseId;
+    if (existing.status !== "completed") {
+      existing.status = "in_progress";
+    }
+    existing.updated_at = now;
+    return existing;
+  }
 
-  return {
-    order,
-    keyId: rpOrder.keyId,
-    isSimulated: rpOrder.isSimulated,
-    product,
+  const app: InternshipApplicationRecord = {
+    id: randomUUID(),
+    user_id: params.userId,
+    internship_id: track.id,
+    course_id: params.courseId,
+    applicant_name: params.userName,
+    applicant_email: params.userEmail,
+    motivation: `Activated automatically with Programme Enrolment: ${params.courseTitle}`,
+    portfolio_url: null,
+    status: "in_progress",
+    submission_url: null,
+    submission_summary: null,
+    task_submissions: [],
+    final_evaluation_notes: null,
+    final_score_label: null,
+    assessment_passed: false,
+    mentor_approved: false,
+    mentor_approved_by: null,
+    mentor_notes: null,
+    completed_at: null,
+    created_at: now,
+    updated_at: now,
   };
+  store.applications.unshift(app);
+  return app;
 }
 
 export async function createCourseEnrollmentOrder(params: {
   user: SandboxUser;
   courseId: string;
+  orderKind?: "programme_enrollment" | "course_enrollment";
 }): Promise<{
   order?: CertificationOrderRecord;
   keyId?: string | null;
@@ -1030,7 +1044,7 @@ export async function createCourseEnrollmentOrder(params: {
 }> {
   const course = await findCourseByIdOrSlug(params.courseId);
   if (!course || !course.isPublished) {
-    return { error: "Course not found or not published.", status: 404 };
+    return { error: "Programme not found or not published.", status: 404 };
   }
 
   const alreadyEnrolled = await hasActiveCourseEnrollment(params.user.id, course.id);
@@ -1041,15 +1055,18 @@ export async function createCourseEnrollmentOrder(params: {
     };
   }
 
+  const resolvedKind = params.orderKind ?? "programme_enrollment";
+
   const rpOrder = await createRazorpayOrder({
     amountPaise: course.pricePaise,
     currency: "INR",
-    receipt: `tgl_course_${course.slug.slice(0, 18)}_${Date.now()}`,
+    receipt: `tgl_prog_${course.slug.slice(0, 18)}_${Date.now()}`,
     notes: {
       userId: params.user.id,
-      orderKind: "course_enrollment",
+      orderKind: resolvedKind,
       courseId: course.id,
       courseSlug: course.slug,
+      linkedInternshipSlug: course.linkedInternshipSlug,
     },
   });
 
@@ -1062,7 +1079,7 @@ export async function createCourseEnrollmentOrder(params: {
       .from("certification_orders")
       .insert({
         user_id: params.user.id,
-        order_kind: "course_enrollment",
+        order_kind: resolvedKind,
         product_id: null,
         course_id: course.id,
         internship_application_id: null,
@@ -1071,19 +1088,25 @@ export async function createCourseEnrollmentOrder(params: {
         currency: "INR",
         order_status: "created",
         payment_mode: rpOrder.mode,
-        metadata: { courseId: course.id, courseSlug: course.slug, courseTitle: course.title },
+        metadata: {
+          courseId: course.id,
+          courseSlug: course.slug,
+          courseTitle: course.title,
+          linkedInternshipSlug: course.linkedInternshipSlug,
+          certificateIncluded: true,
+        },
       })
       .select("*")
       .single();
     if (error || !data) {
-      return { error: "Failed to persist course enrollment order.", status: 500 };
+      return { error: "Failed to persist programme enrolment order.", status: 500 };
     }
     order = data as CertificationOrderRecord;
   } else {
     order = {
       id: randomUUID(),
       user_id: params.user.id,
-      order_kind: "course_enrollment",
+      order_kind: resolvedKind,
       product_id: null,
       course_id: course.id,
       internship_application_id: null,
@@ -1092,7 +1115,13 @@ export async function createCourseEnrollmentOrder(params: {
       currency: "INR",
       order_status: "created",
       payment_mode: rpOrder.mode,
-      metadata: { courseId: course.id, courseSlug: course.slug, courseTitle: course.title },
+      metadata: {
+        courseId: course.id,
+        courseSlug: course.slug,
+        courseTitle: course.title,
+        linkedInternshipSlug: course.linkedInternshipSlug,
+        certificateIncluded: true,
+      },
       created_at: now,
       updated_at: now,
     };
@@ -1104,7 +1133,7 @@ export async function createCourseEnrollmentOrder(params: {
     templateKey: "purchase_initiated",
     variables: {
       studentName: params.user.name,
-      certificateName: `Course Enrollment: ${course.title}`,
+      certificateName: `Programme Enrolment: ${course.title}`,
       amountFormatted: formatInrFromPaise(course.pricePaise),
       orderId: order.razorpay_order_id,
       achievementTitle: course.title,
@@ -1123,21 +1152,52 @@ export async function createCourseEnrollmentOrder(params: {
 export async function findActiveIssuanceForUserProduct(
   userId: string,
   productId: string,
+  internshipApplicationId?: string | null,
 ): Promise<CertificateIssuanceRecord | null> {
   if (isSupabaseConfigured()) {
     const client = serviceClient();
-    const { data } = await client
+    let query = client
       .from("certificate_issuances")
       .select("*")
       .eq("user_id", userId)
       .eq("product_id", productId)
+      .neq("issuance_status", "revoked");
+    if (internshipApplicationId) {
+      query = query.eq("internship_application_id", internshipApplicationId);
+    }
+    const { data } = await query.maybeSingle();
+    return (data as CertificateIssuanceRecord | null) ?? null;
+  }
+  return (
+    getMemoryStore().issuances.find(
+      (i) =>
+        i.user_id === userId &&
+        i.product_id === productId &&
+        i.issuance_status !== "revoked" &&
+        (internshipApplicationId
+          ? i.internship_application_id === internshipApplicationId || i.internship_application_id === null
+          : true),
+    ) ?? null
+  );
+}
+
+export async function findActiveIssuanceForInternshipApplication(
+  internshipApplicationId: string,
+): Promise<CertificateIssuanceRecord | null> {
+  if (isSupabaseConfigured()) {
+    const { data } = await serviceClient()
+      .from("certificate_issuances")
+      .select("*")
+      .eq("internship_application_id", internshipApplicationId)
       .neq("issuance_status", "revoked")
       .maybeSingle();
     return (data as CertificateIssuanceRecord | null) ?? null;
   }
   return (
     getMemoryStore().issuances.find(
-      (i) => i.user_id === userId && i.product_id === productId && i.issuance_status !== "revoked",
+      (i) =>
+        i.internship_application_id === internshipApplicationId &&
+        i.issuance_status !== "revoked",
     ) ?? null
   );
 }
@@ -1267,6 +1327,7 @@ export async function verifyAndCaptureCheckoutPayment(params: {
   payment?: CertificationPaymentRecord;
   issuance?: CertificateIssuanceRecord;
   enrollment?: CourseEnrollmentRecord;
+  internshipApplication?: InternshipApplicationRecord | null;
   error?: string;
   status?: number;
 }> {
@@ -1356,7 +1417,9 @@ export async function verifyAndCaptureCheckoutPayment(params: {
   }
 
   const isCourseOrder =
-    order.order_kind === "course_enrollment" || Boolean(order.course_id);
+    order.order_kind === "programme_enrollment" ||
+    order.order_kind === "course_enrollment" ||
+    Boolean(order.course_id);
 
   if (isCourseOrder && order.course_id) {
     const course = await findCourseByIdOrSlug(order.course_id);
@@ -1366,12 +1429,24 @@ export async function verifyAndCaptureCheckoutPayment(params: {
       paymentId: payment.id,
     });
 
+    const internshipApplication = course
+      ? await activateBundledProgrammeInternship({
+          userId: params.user.id,
+          userName: params.user.name,
+          userEmail: params.user.email,
+          courseId: course.id,
+          courseSlug: course.slug,
+          courseTitle: course.title,
+          linkedInternshipSlug: course.linkedInternshipSlug,
+        })
+      : null;
+
     await sendAndLogLifecycleEmail({
       recipientEmail: params.user.email,
       templateKey: "payment_success",
       variables: {
         studentName: params.user.name,
-        certificateName: course ? `Course Enrollment: ${course.title}` : "Course Enrollment",
+        certificateName: course ? `Programme Enrolment: ${course.title}` : "Programme Enrolment",
         amountFormatted: formatInrFromPaise(order.amount_paise),
         paymentId: payment.razorpay_payment_id,
         orderId: order.razorpay_order_id,
@@ -1382,6 +1457,7 @@ export async function verifyAndCaptureCheckoutPayment(params: {
     return {
       payment,
       enrollment,
+      internshipApplication,
     };
   }
 
@@ -1578,12 +1654,31 @@ export async function processRazorpayWebhookEvent(params: {
           },
           { onConflict: "razorpay_payment_id" },
         ).select("id").single();
-        if (order.order_kind === "course_enrollment" && order.course_id) {
+        if (
+          (order.order_kind === "programme_enrollment" ||
+            order.order_kind === "course_enrollment" ||
+            Boolean(order.course_id)) &&
+          order.course_id
+        ) {
           await activateCourseEnrollment({
             userId: order.user_id as string,
             courseId: order.course_id as string,
             paymentId: (capPay?.id as string | undefined) ?? paymentEntity.id,
           });
+          const course = await findCourseByIdOrSlug(order.course_id as string);
+          if (course) {
+            await activateBundledProgrammeInternship({
+              userId: order.user_id as string,
+              userName:
+                (order.metadata?.studentName as string | undefined) ?? "TGL Learner",
+              userEmail:
+                (order.metadata?.studentEmail as string | undefined) ?? "learner@touchgrasslater.org",
+              courseId: course.id,
+              courseSlug: course.slug,
+              courseTitle: course.title,
+              linkedInternshipSlug: course.linkedInternshipSlug,
+            });
+          }
         }
       }
     } else if (eventType === "payment.failed" && paymentEntity?.order_id && paymentEntity.id) {
@@ -1623,7 +1718,12 @@ export async function processRazorpayWebhookEvent(params: {
           .eq("id", refPay.order_id)
           .select("order_kind,course_id,user_id")
           .maybeSingle();
-        if (refOrder?.order_kind === "course_enrollment" && refOrder.course_id) {
+        if (
+          (refOrder?.order_kind === "programme_enrollment" ||
+            refOrder?.order_kind === "course_enrollment" ||
+            Boolean(refOrder?.course_id)) &&
+          refOrder?.course_id
+        ) {
           await revokeCourseEnrollment({
             userId: refOrder.user_id as string,
             courseId: refOrder.course_id as string,
@@ -1691,12 +1791,29 @@ export async function processRazorpayWebhookEvent(params: {
         store.payments.unshift(createdPay);
         paymentIdRef = createdPay.id;
       }
-      if ((order.order_kind === "course_enrollment" || order.course_id) && order.course_id) {
+      if (
+        (order.order_kind === "programme_enrollment" ||
+          order.order_kind === "course_enrollment" ||
+          Boolean(order.course_id)) &&
+        order.course_id
+      ) {
         await activateCourseEnrollment({
           userId: order.user_id,
           courseId: order.course_id,
           paymentId: paymentIdRef ?? paymentEntity.id,
         });
+        const course = await findCourseByIdOrSlug(order.course_id);
+        if (course) {
+          await activateBundledProgrammeInternship({
+            userId: order.user_id,
+            userName: "TGL Learner",
+            userEmail: "learner@touchgrasslater.org",
+            courseId: course.id,
+            courseSlug: course.slug,
+            courseTitle: course.title,
+            linkedInternshipSlug: course.linkedInternshipSlug,
+          });
+        }
       }
     }
   } else if (eventType === "payment.failed" && paymentEntity?.order_id && paymentEntity.id) {
@@ -1728,7 +1845,12 @@ export async function processRazorpayWebhookEvent(params: {
       const order = store.orders.find((o) => o.id === pay.order_id);
       if (order) {
         order.order_status = "refunded";
-        if ((order.order_kind === "course_enrollment" || order.course_id) && order.course_id) {
+        if (
+          (order.order_kind === "programme_enrollment" ||
+            order.order_kind === "course_enrollment" ||
+            Boolean(order.course_id)) &&
+          order.course_id
+        ) {
           await revokeCourseEnrollment({
             userId: order.user_id,
             courseId: order.course_id,
@@ -1894,12 +2016,199 @@ export async function getCertificateByPublicId(
   return getMemoryStore().issuances.find((i) => i.certificate_id === certificateId) ?? null;
 }
 
+async function issueIncludedProgrammeCertificate(params: {
+  application: InternshipApplicationRecord;
+  internship: InternshipRecord | undefined;
+  adminId: string;
+}): Promise<{ issuance?: CertificateIssuanceRecord; error?: string }> {
+  const existing = await findActiveIssuanceForInternshipApplication(params.application.id);
+  if (existing) return { issuance: existing };
+
+  const products = await listProducts(true);
+  const internProduct =
+    products.find((p) => p.certificate_type === "internship") ?? products[0];
+  if (!internProduct) {
+    return { error: "Internship certificate configuration missing." };
+  }
+
+  const tasks = params.internship?.tasks ?? [];
+  const taskCheck = checkAllInternshipTasksApproved({
+    tasks,
+    submissions: params.application.task_submissions ?? [],
+  });
+  const submissionProvided =
+    Boolean(params.application.submission_url) ||
+    (params.application.task_submissions?.length ?? 0) > 0;
+
+  const evaluation = evaluateCertificateEligibility({
+    certificateType: internProduct.certificate_type,
+    rules: {
+      requiresInternshipCompletion: true,
+      requiresSubmission: true,
+      requiresMentorApproval: true,
+    },
+    internshipCompleted: params.application.status === "completed",
+    pathwayCompleted: true,
+    submissionProvided,
+    assessmentPassed: Boolean(params.application.assessment_passed),
+    mentorApproved: Boolean(params.application.mentor_approved),
+    adminDistinctionApproved: false,
+  });
+
+  const gate = canIssueCertificate({
+    productEnabled: internProduct.enabled,
+    pricePaise: 0,
+    eligibility: evaluation,
+    paymentStatus: "none",
+    paymentVerified: true,
+    existingActiveCertificateId: null,
+  });
+  if (!gate.allowed) {
+    return { error: gate.reason };
+  }
+  if (tasks.length > 0 && !taskCheck.readyForFinalApproval) {
+    return {
+      error: `All internship tasks must be approved first: ${taskCheck.pendingTaskTitles.join(", ")}.`,
+    };
+  }
+
+  const orders = await listOrders(params.application.user_id);
+  const payments = await listPayments(params.application.user_id);
+  const matchingCourseOrder = orders.find(
+    (o) =>
+      o.order_status === "paid" &&
+      (o.course_id === params.application.course_id ||
+        o.metadata?.linkedInternshipSlug === params.internship?.slug),
+  );
+  const matchingPayment = matchingCourseOrder
+    ? payments.find(
+        (p) => p.order_id === matchingCourseOrder.id && p.payment_status === "captured",
+      )
+    : undefined;
+
+  const achievementTitle =
+    params.internship?.title ?? internProduct.name;
+  const certificateId = `TGL-CERT-2026-${Math.floor(1000 + Math.random() * 9000)}-${randomUUID().slice(0, 4).toUpperCase()}`;
+  const now = new Date().toISOString();
+
+  let issuance: CertificateIssuanceRecord;
+  if (isSupabaseConfigured()) {
+    const { data, error } = await serviceClient()
+      .from("certificate_issuances")
+      .insert({
+        user_id: params.application.user_id,
+        product_id: internProduct.id,
+        payment_id: matchingPayment?.id ?? null,
+        internship_application_id: params.application.id,
+        certificate_id: certificateId,
+        recipient_name: params.application.applicant_name,
+        recipient_email: params.application.applicant_email,
+        achievement_title: achievementTitle,
+        certificate_type: "internship",
+        eligibility_status: "eligible",
+        issuance_status: "issued",
+        approved_by: params.adminId,
+        issued_at: now,
+      })
+      .select("*")
+      .single();
+    if (error || !data) {
+      return { error: error?.message ?? "Failed to issue included certificate." };
+    }
+    issuance = data as CertificateIssuanceRecord;
+  } else {
+    issuance = {
+      id: randomUUID(),
+      user_id: params.application.user_id,
+      product_id: internProduct.id,
+      payment_id: matchingPayment?.id ?? null,
+      internship_application_id: params.application.id,
+      certificate_id: certificateId,
+      recipient_name: params.application.applicant_name,
+      recipient_email: params.application.applicant_email,
+      achievement_title: achievementTitle,
+      certificate_type: "internship",
+      eligibility_status: "eligible",
+      issuance_status: "issued",
+      approved_by: params.adminId,
+      revocation_reason: null,
+      issued_at: now,
+      revoked_at: null,
+      created_at: now,
+    };
+    getMemoryStore().issuances.unshift(issuance);
+  }
+
+  const verificationUrl = `/verify/certificate/${issuance.certificate_id}`;
+  await sendAndLogLifecycleEmail({
+    recipientEmail: params.application.applicant_email,
+    templateKey: "certificate_issued",
+    variables: {
+      studentName: params.application.applicant_name,
+      certificateName: internProduct.name,
+      achievementTitle,
+      certificateId: issuance.certificate_id,
+      verificationUrl,
+    },
+  });
+
+  return { issuance };
+}
+
+export async function claimIncludedCertificate(params: {
+  user: SandboxUser;
+  internshipApplicationId?: string | null;
+}): Promise<{ issuance?: CertificateIssuanceRecord; error?: string; status?: number }> {
+  const applications = await listStudentApplications(params.user.id);
+  const targetApp =
+    (params.internshipApplicationId
+      ? applications.find((a) => a.id === params.internshipApplicationId)
+      : applications.find((a) => a.status === "completed" && a.mentor_approved)) ?? null;
+
+  if (!targetApp) {
+    return {
+      error: "Complete your programme, project, and internship tasks first to unlock your included certificate.",
+      status: 403,
+    };
+  }
+  if (targetApp.status !== "completed" || !targetApp.mentor_approved) {
+    return {
+      error: "Authorized mentor approval on all internship deliverables is required before issuing your included certificate. Enrolment alone never issues a certificate.",
+      status: 403,
+    };
+  }
+
+  const existing = await findActiveIssuanceForInternshipApplication(targetApp.id);
+  if (existing) {
+    return {
+      error: `Your certificate (${existing.certificate_id}) has already been issued. Duplicate issuance is not permitted.`,
+      status: 409,
+    };
+  }
+
+  const internships = await listInternships();
+  const internship = internships.find((i) => i.id === targetApp.internship_id);
+  const res = await issueIncludedProgrammeCertificate({
+    application: targetApp,
+    internship,
+    adminId: targetApp.mentor_approved_by ?? DEMO_ADMIN_ID,
+  });
+  if (res.error || !res.issuance) {
+    return { error: res.error ?? "Unable to issue included certificate.", status: 400 };
+  }
+  return { issuance: res.issuance };
+}
+
 export async function approveInternshipApplication(params: {
   applicationId: string;
   adminId: string;
   mentorNotes?: string;
   finalScoreLabel?: string;
-}): Promise<{ application?: InternshipApplicationRecord; error?: string }> {
+}): Promise<{
+  application?: InternshipApplicationRecord;
+  issuance?: CertificateIssuanceRecord;
+  error?: string;
+}> {
   const now = new Date().toISOString();
   if (isSupabaseConfigured()) {
     const client = serviceClient();
@@ -1922,7 +2231,14 @@ export async function approveInternshipApplication(params: {
     if (error || !data) return { error: "Could not approve internship application." };
     const app = data as InternshipApplicationRecord;
     const internships = await listInternships();
-    const title = internships.find((i) => i.id === app.internship_id)?.title ?? "TGL Internship";
+    const internship = internships.find((i) => i.id === app.internship_id);
+    const title = internship?.title ?? "TGL Internship";
+
+    const issuedRes = await issueIncludedProgrammeCertificate({
+      application: app,
+      internship,
+      adminId: params.adminId,
+    });
 
     await sendAndLogLifecycleEmail({
       recipientEmail: app.applicant_email,
@@ -1934,7 +2250,7 @@ export async function approveInternshipApplication(params: {
       templateKey: "internship_eligibility_confirmed",
       variables: { studentName: app.applicant_name, achievementTitle: title },
     });
-    return { application: app };
+    return { application: app, issuance: issuedRes.issuance };
   }
 
   const store = getMemoryStore();
@@ -1964,6 +2280,12 @@ export async function approveInternshipApplication(params: {
   app.completed_at = now;
   app.updated_at = now;
 
+  const issuedRes = await issueIncludedProgrammeCertificate({
+    application: app,
+    internship,
+    adminId: params.adminId,
+  });
+
   const title = internship?.title ?? "TGL Internship";
   await sendAndLogLifecycleEmail({
     recipientEmail: app.applicant_email,
@@ -1975,7 +2297,7 @@ export async function approveInternshipApplication(params: {
     templateKey: "internship_eligibility_confirmed",
     variables: { studentName: app.applicant_name, achievementTitle: title },
   });
-  return { application: app };
+  return { application: app, issuance: issuedRes.issuance };
 }
 
 export async function submitInternshipTaskWork(params: {

@@ -1,5 +1,5 @@
-export const MIN_PAID_CERTIFICATE_PAISE = 29900; // ₹299.00 INR
-export const MAX_PAID_CERTIFICATE_PAISE = 59900; // ₹599.00 INR
+export const MIN_PAID_CERTIFICATE_PAISE = 0; // Certificates are included in Programme Enrolment
+export const MAX_PAID_CERTIFICATE_PAISE = 0; // No separate certificate fee
 export const CERTIFICATE_CURRENCY = "INR" as const;
 
 export type CertificateType =
@@ -9,32 +9,31 @@ export type CertificateType =
   | "special_achievement";
 
 export const CERTIFICATE_TYPE_LABELS: Record<CertificateType, string> = {
-  internship: "Internship Certificate",
-  course_completion: "Course Completion Certificate",
+  internship: "Internship Completion Certificate",
+  course_completion: "Programme Completion Certificate",
   project_completion: "Project Completion Certificate",
-  special_achievement: "Special Achievement Certificate",
+  special_achievement: "Special Achievement Distinction",
 };
 
 export function validateProductPricePaise(pricePaise: number): { valid: boolean; error?: string } {
   if (!Number.isInteger(pricePaise) || pricePaise < 0) {
     return { valid: false, error: "Price must be a non-negative integer in paise." };
   }
-  if (pricePaise === 0) {
-    return { valid: true };
-  }
-  if (pricePaise < MIN_PAID_CERTIFICATE_PAISE || pricePaise > MAX_PAID_CERTIFICATE_PAISE) {
+  if (pricePaise !== 0) {
     return {
       valid: false,
-      error: `Paid certificate prices must be between ₹${MIN_PAID_CERTIFICATE_PAISE / 100} (${MIN_PAID_CERTIFICATE_PAISE} paise) and ₹${MAX_PAID_CERTIFICATE_PAISE / 100} (${MAX_PAID_CERTIFICATE_PAISE} paise).`,
+      error: "Certificates are included in Programme Enrolment at ₹0 extra. Separate certificate pricing is disabled.",
     };
   }
   return { valid: true };
 }
 
 export function formatInrFromPaise(pricePaise: number): string {
-  if (pricePaise === 0) return "Free";
+  if (pricePaise === 0) return "Included (₹0 extra)";
   const rupees = pricePaise / 100;
-  const formatted = Number.isInteger(rupees) ? rupees.toLocaleString("en-IN") : rupees.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatted = Number.isInteger(rupees)
+    ? rupees.toLocaleString("en-IN")
+    : rupees.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `₹${formatted}`;
 }
 

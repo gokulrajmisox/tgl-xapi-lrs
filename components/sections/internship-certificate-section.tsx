@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, CheckCircle2, CircleDashed, QrCode } from "lucide-react";
+import { ArrowUpRight, Award, CheckCircle2, CircleDashed, QrCode } from "lucide-react";
 import { CertificateDocument } from "@/components/certificate-document";
-import { RazorpayCheckoutButton } from "@/components/razorpay-checkout-button";
-import { formatInrFromPaise, isPaidCertificate } from "@/lib/certifications/pricing";
+import { formatInrFromPaise } from "@/lib/certifications/pricing";
 import type { EligibilityCheckItem } from "@/lib/certifications/eligibility";
 
 type ProductSummary = {
@@ -30,12 +29,6 @@ type ProductSummary = {
     issued_at: string | null;
     issuance_status: "issued" | "revoked" | "pending_approval";
   } | null;
-  latestOrder?: {
-    order_status: string;
-  } | null;
-  latestPayment?: {
-    payment_status: string;
-  } | null;
 };
 
 type UserSummary = {
@@ -47,47 +40,64 @@ type UserSummary = {
 export function InternshipCertificateSection() {
   const [internshipProduct, setInternshipProduct] = useState<ProductSummary | null>(null);
   const [user, setUser] = useState<UserSummary>(null);
-  const [loading, setLoading] = useState(true);
+  const [claiming, setClaiming] = useState(false);
+  const [claimNotice, setClaimNotice] = useState("");
+  const [claimError, setClaimError] = useState("");
 
   const load = useCallback(async () => {
-    try {
-      const res = await fetch("/api/certifications/products", { cache: "no-store" });
-      if (!res.ok) return;
-      const data = await res.json();
-      const found = (data.products ?? []).find(
-        (p: ProductSummary) => p.certificate_type === "internship",
-      );
-      setInternshipProduct(found ?? null);
-      setUser(data.user ?? null);
-    } finally {
-      setLoading(false);
-    }
+    const res = await fetch("/api/certifications/products", { cache: "no-store" });
+    if (!res.ok) return;
+    const data = await res.json();
+    const found = (data.products ?? []).find(
+      (p: ProductSummary) => p.certificate_type === "internship",
+    );
+    setInternshipProduct(found ?? null);
+    setUser(data.user ?? null);
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const pricePaise = internshipProduct?.price_paise ?? null;
-  const isPaid = pricePaise !== null ? isPaidCertificate(pricePaise) : true;
+  const handleClaimIncluded = async () => {
+    setClaiming(true);
+    setClaimNotice("");
+    setClaimError("");
+    try {
+      const res = await fetch("/api/certificates/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          internshipApplicationId: internshipProduct?.matchedApplicationId ?? null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setClaimError(data.error ?? "Unable to claim included certificate.");
+        return;
+      }
+      setClaimNotice(
+        `Included certificate ${data.issuance?.certificate_id ?? ""} issued at ₹0 extra.`,
+      );
+      await load();
+    } finally {
+      setClaiming(false);
+    }
+  };
+
   const eligible = Boolean(internshipProduct?.eligibility?.eligible);
   const activeIssuance = internshipProduct?.activeIssuance ?? null;
-
-  const paymentStatusLabel = internshipProduct?.latestPayment?.payment_status
-    ? internshipProduct.latestPayment.payment_status
-    : internshipProduct?.latestOrder?.order_status
-      ? internshipProduct.latestOrder.order_status
-      : "Not initiated";
+  const issued = activeIssuance?.issuance_status === "issued";
 
   const issuanceStatusLabel = activeIssuance
-    ? activeIssuance.issuance_status === "issued"
+    ? issued
       ? "Issued & verifiable"
       : activeIssuance.issuance_status === "revoked"
         ? "Revoked"
         : "Pending approval"
     : eligible
-      ? "Eligible — awaiting checkout"
-      : "Pending completion & mentor approval";
+      ? "Eligible — ready to claim (₹0 extra)"
+      : "Unlocks upon mentor approval";
 
   const checks: EligibilityCheckItem[] = internshipProduct?.eligibility?.checks ?? [
     { key: "internship_completed", label: "Internship completion record confirmed", satisfied: false },
@@ -105,7 +115,7 @@ export function InternshipCertificateSection() {
         <div className="grid gap-10 border-b border-white/10 pb-10 lg:grid-cols-[1.15fr_.85fr] lg:items-end">
           <div>
             <p className="text-[11px] uppercase tracking-[0.22em] text-white/45">
-              Optional Credential · Verified Completion Only
+              Included Credential · Verified Completion Only
             </p>
             <h2
               id="internship-certificate-heading"
@@ -120,21 +130,23 @@ export function InternshipCertificateSection() {
 
           <div className="space-y-5">
             <p className="text-sm leading-7 text-white/60">
-              Earn an official QR-verified <strong className="font-medium text-white">INTERNSHIP CERTIFICATE</strong> once your internship work is submitted and approved by an authorized mentor. Internship participation itself is completely free—no student is ever required to purchase a certificate.
+              Every TGL Programme includes an official QR-verified{" "}
+              <strong className="font-medium text-white">INTERNSHIP CERTIFICATE</strong>{" "}
+              at zero extra cost once your lessons, project, internship tasks, and mentor evaluation are approved.
             </p>
             <dl className="grid gap-4 border-t border-white/10 pt-4 text-xs sm:grid-cols-3">
               <div>
-                <dt className="text-[10px] uppercase tracking-[0.14em] text-white/40">Issuance fee</dt>
-                <dd className="mt-1 font-semibold tabular-nums text-[#f4f3ef]">
-                  {loading || pricePaise === null ? "Loading…" : formatInrFromPaise(pricePaise)}{" "}
-                  <span className="font-normal text-white/45">
-                    ({isPaid ? "Paid · INR" : "Free"})
+                <dt className="text-[10px] uppercase tracking-[0.14em] text-white/40">Certificate fee</dt>
+                <dd className="mt-1 font-semibold tabular-nums text-emerald-300">
+                  {formatInrFromPaise(0)}{" "}
+                  <span className="block font-normal text-white/50">
+                    Bundled with Programme
                   </span>
                 </dd>
               </div>
               <div>
-                <dt className="text-[10px] uppercase tracking-[0.14em] text-white/40">Payment status</dt>
-                <dd className="mt-1 font-medium capitalize text-white/85">{paymentStatusLabel}</dd>
+                <dt className="text-[10px] uppercase tracking-[0.14em] text-white/40">Enrolment coverage</dt>
+                <dd className="mt-1 font-medium text-white/85">All-inclusive single fee</dd>
               </div>
               <div>
                 <dt className="text-[10px] uppercase tracking-[0.14em] text-white/40">Issuance status</dt>
@@ -156,7 +168,7 @@ export function InternshipCertificateSection() {
                 </span>
               </div>
               <p className="mt-2 text-xs leading-5 text-white/50">
-                Payment alone never creates a valid certificate. Issuance requires every criterion below:
+                Enrolment payment unlocks learning &amp; internship access, never an automatic certificate. Issuance requires every criterion below:
               </p>
 
               <ul className="mt-5 space-y-3">
@@ -182,25 +194,47 @@ export function InternshipCertificateSection() {
                 ))}
               </ul>
 
+              {claimNotice && (
+                <p role="status" className="mt-4 rounded-xl border border-emerald-400/25 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-200">
+                  {claimNotice}
+                </p>
+              )}
+              {claimError && (
+                <p role="alert" className="mt-4 rounded-xl border border-rose-400/30 bg-rose-950/20 px-3 py-2 text-xs text-rose-200">
+                  {claimError}
+                </p>
+              )}
+
               <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-white/10 pt-5">
-                {internshipProduct && (
-                  <RazorpayCheckoutButton
-                    productId={internshipProduct.id}
-                    productName={internshipProduct.name}
-                    pricePaise={internshipProduct.price_paise}
-                    eligible={eligible}
-                    alreadyIssued={Boolean(activeIssuance && activeIssuance.issuance_status === "issued")}
-                    internshipApplicationId={internshipProduct.matchedApplicationId}
-                    studentName={user?.name}
-                    studentEmail={user?.email}
-                    onSuccess={() => void load()}
-                  />
+                {issued && activeIssuance ? (
+                  <Link
+                    href={`/verify/certificate/${encodeURIComponent(activeIssuance.certificate_id)}`}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111]"
+                  >
+                    <Award size={14} aria-hidden="true" /> Open Verified Certificate
+                  </Link>
+                ) : user && eligible ? (
+                  <button
+                    type="button"
+                    disabled={claiming}
+                    onClick={() => void handleClaimIncluded()}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111] disabled:opacity-50"
+                  >
+                    {claiming ? "Issuing Certificate…" : "Claim Included Certificate (₹0 extra)"}
+                  </button>
+                ) : (
+                  <Link
+                    href="/programmes"
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111]"
+                  >
+                    Explore Programmes <ArrowUpRight size={13} aria-hidden="true" />
+                  </Link>
                 )}
                 <Link
                   href="/internships"
-                  className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2.5 text-xs text-white/80 transition-colors hover:border-white/35 hover:text-white whitespace-nowrap shrink-0"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 px-4 py-2.5 text-xs text-white/80 transition-colors hover:border-white/35 hover:text-white whitespace-nowrap shrink-0"
                 >
-                  Apply for free internship <ArrowUpRight size={13} aria-hidden="true" />
+                  Open Internship Workspace <ArrowUpRight size={13} aria-hidden="true" />
                 </Link>
               </div>
             </div>

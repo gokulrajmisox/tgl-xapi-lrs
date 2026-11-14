@@ -133,7 +133,10 @@ export async function POST(request: Request) {
       finalScoreLabel: data.finalScoreLabel,
     });
     if (result.error) return NextResponse.json({ error: result.error }, { status: 400 });
-    return NextResponse.json({ application: result.application });
+    return NextResponse.json({
+      application: result.application,
+      issuance: result.issuance ?? null,
+    });
   }
 
   if (data.action === "revoke_certificate") {

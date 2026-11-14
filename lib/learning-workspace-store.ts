@@ -17,6 +17,12 @@ export type ProjectSubmissionStatus =
   | "approved"
   | "revision_required";
 
+export type SupportingFileMeta = {
+  name: string;
+  sizeBytes: number;
+  mimeType: string;
+};
+
 export type ProjectSubmissionRecord = {
   id: string;
   userId: string;
@@ -29,6 +35,7 @@ export type ProjectSubmissionRecord = {
   githubUrl: string;
   deploymentUrl: string | null;
   supportingEvidence: string | null;
+  supportingFiles?: SupportingFileMeta[];
   artifactUrl: string;
   summary: string;
   reflection: string;
@@ -408,6 +415,7 @@ export function startLearnerProjectWork(params: {
     githubUrl: "",
     deploymentUrl: null,
     supportingEvidence: null,
+    supportingFiles: [],
     artifactUrl: "",
     summary: "Project started — preparing deliverables and repository.",
     reflection: "",
@@ -438,6 +446,7 @@ export function submitLearnerProjectWork(params: {
   githubUrl?: string;
   deploymentUrl?: string | null;
   supportingEvidence?: string | null;
+  supportingFiles?: SupportingFileMeta[];
   artifactUrl?: string;
   summary: string;
   reflection: string;
@@ -464,6 +473,7 @@ export function submitLearnerProjectWork(params: {
     existingDraft.githubUrl = resolvedGithub;
     existingDraft.deploymentUrl = params.deploymentUrl?.trim() || null;
     existingDraft.supportingEvidence = params.supportingEvidence?.trim() || null;
+    existingDraft.supportingFiles = params.supportingFiles ?? existingDraft.supportingFiles ?? [];
     existingDraft.artifactUrl = resolvedGithub;
     existingDraft.summary = params.summary;
     existingDraft.reflection = params.reflection;
@@ -483,6 +493,7 @@ export function submitLearnerProjectWork(params: {
       githubUrl: resolvedGithub,
       deploymentUrl: params.deploymentUrl?.trim() || null,
       supportingEvidence: params.supportingEvidence?.trim() || null,
+      supportingFiles: params.supportingFiles ?? [],
       artifactUrl: resolvedGithub,
       summary: params.summary,
       reflection: params.reflection,

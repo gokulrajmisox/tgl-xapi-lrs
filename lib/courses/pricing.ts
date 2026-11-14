@@ -9,13 +9,13 @@ export function validateCoursePricePaise(pricePaise: number): {
   if (!Number.isInteger(pricePaise) || pricePaise <= 0) {
     return {
       valid: false,
-      error: "Course price must be a positive integer amount in paise.",
+      error: "Programme price must be a positive integer amount in paise.",
     };
   }
   if (pricePaise < MIN_COURSE_PRICE_PAISE || pricePaise > MAX_COURSE_PRICE_PAISE) {
     return {
       valid: false,
-      error: `Course prices must be between ₹${MIN_COURSE_PRICE_PAISE / 100} (${MIN_COURSE_PRICE_PAISE} paise) and ₹${MAX_COURSE_PRICE_PAISE / 100} (${MAX_COURSE_PRICE_PAISE} paise).`,
+      error: `Programme prices must be between ₹${MIN_COURSE_PRICE_PAISE / 100} (${MIN_COURSE_PRICE_PAISE} paise) and ₹${MAX_COURSE_PRICE_PAISE / 100} (${MAX_COURSE_PRICE_PAISE} paise).`,
     };
   }
   return { valid: true };

@@ -290,10 +290,73 @@ const FluxLines = ({
       depth: false,
       stencil: false,
     });
-    if (!container || !canvas || !gl) return undefined;
+    if (!container || !canvas) return undefined;
 
-    const program = link(gl);
-    if (!program) return undefined;
+    const program = gl && !gl.isContextLost() ? link(gl) : null;
+    if (!gl || !program) {
+      const ctx2d = canvas.getContext('2d');
+      if (!ctx2d) return undefined;
+      const reduce2d = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+      let raf2d = 0;
+      let start2d = performance.now();
+      let visible2d = true;
+      const draw2d = (now: number) => {
+        raf2d = 0;
+        if (!visible2d || document.hidden) return;
+        const s = settingsRef.current;
+        const w = Math.max(1, container.clientWidth);
+        const h = Math.max(1, container.clientHeight);
+        const ratio = Math.min(s.dpr || window.devicePixelRatio || 1, 2);
+        const cw = Math.round(w * ratio);
+        const ch = Math.round(h * ratio);
+        if (canvas.width !== cw || canvas.height !== ch) {
+          canvas.width = cw;
+          canvas.height = ch;
+        }
+        ctx2d.clearRect(0, 0, cw, ch);
+        const t = ((now - start2d) / 1000) * (s.paused || reduce2d ? 0 : s.speed);
+        const lines = 11;
+        ctx2d.save();
+        ctx2d.scale(ratio, ratio);
+        ctx2d.lineWidth = Math.max(1, s.lineWidth);
+        for (let i = 0; i < lines; i++) {
+          const color = s.colors[i % s.colors.length] ?? '#b9a9d6';
+          ctx2d.strokeStyle = color;
+          ctx2d.globalAlpha = clamp(s.opacity * 0.42, 0.08, 0.75);
+          ctx2d.beginPath();
+          const baseY = ((i + 0.5) / lines) * h;
+          for (let x = 0; x <= w + 24; x += 24) {
+            const wave =
+              Math.sin(x * 0.0055 * s.scale + t * 1.4 + i * 0.75) * 34 * s.turbulence +
+              Math.cos(x * 0.0028 - t * 0.9 + i * 1.1) * 22 * s.turbulence;
+            const y = baseY + wave;
+            if (x === 0) ctx2d.moveTo(x, y);
+            else ctx2d.lineTo(x, y);
+          }
+          ctx2d.stroke();
+        }
+        ctx2d.restore();
+        if (!reduce2d && !s.paused) {
+          raf2d = requestAnimationFrame(draw2d);
+        }
+      };
+      const ro2d = new ResizeObserver(() => {
+        if (!raf2d) raf2d = requestAnimationFrame(draw2d);
+      });
+      ro2d.observe(container);
+      const io2d = new IntersectionObserver((entries) => {
+        visible2d = entries.some((e) => e.isIntersecting);
+        if (visible2d && !raf2d) raf2d = requestAnimationFrame(draw2d);
+      });
+      io2d.observe(container);
+      raf2d = requestAnimationFrame(draw2d);
+      return () => {
+        cancelAnimationFrame(raf2d);
+        ro2d.disconnect();
+        io2d.disconnect();
+      };
+    }
+
     const u = program.uniforms;
 
     const buffer = gl.createBuffer();
@@ -336,11 +399,14 @@ const FluxLines = ({
     let visible = true;
 
     const render = () => {
+      if (gl.isContextLost()) return;
       const s = settingsRef.current;
       const ratio = canvas.width / Math.max(1, container.clientWidth);
       s.colors.forEach((value, index) => palette.set(parse(value, [1, 1, 1]), index * 3));
       const introProgress = Math.min(1, reveal);
       gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
       gl.useProgram(program.program);
       gl.bindVertexArray(vao);
       gl.uniform2f(u.uResolution, canvas.width, canvas.height);
@@ -499,10 +565,11 @@ const FluxLines = ({
       window.removeEventListener('pointercancel', onPointerUp);
       document.documentElement.removeEventListener('pointerleave', onPointerLeave);
       document.removeEventListener('visibilitychange', onVisibility);
-      gl.deleteProgram(program.program);
-      gl.deleteBuffer(buffer);
-      gl.deleteVertexArray(vao);
-      gl.getExtension('WEBGL_lose_context')?.loseContext();
+      if (!gl.isContextLost()) {
+        gl.deleteProgram(program.program);
+        gl.deleteBuffer(buffer);
+        gl.deleteVertexArray(vao);
+      }
     };
   }, []);
 

@@ -87,7 +87,7 @@ test("Razorpay course checkout: rejects invalid signatures, unlocks notes/videos
   });
   assert.ok(orderRes.order);
   assert.equal(orderRes.order.amount_paise, 139900);
-  assert.equal(orderRes.order.order_kind, "course_enrollment");
+  assert.equal(orderRes.order.order_kind, "programme_enrollment");
 
   // 2. Simulate failure and retry cleanly
   const failRes = await recordFailedOrCancelledPayment({

@@ -48,7 +48,7 @@ export const COURSE_EXTRAS_BY_SLUG: Record<string, CourseExtras> = {
       "PostgreSQL RLS",
     ],
     certificateInfo:
-      "Course Completion Certificate (₹299 INR) and Internship Certificate (₹499 INR) become optionally available after mentor-approved project and internship completion.",
+      "Internship Completion Certificate is included in your Programme Enrolment at ₹0 extra once modules, quiz, project, and internship tasks pass mentor approval.",
     announcements: [
       {
         id: "ann-web-1",
@@ -140,7 +140,7 @@ export const COURSE_EXTRAS_BY_SLUG: Record<string, CourseExtras> = {
       "CLI Exit Codes",
     ],
     certificateInfo:
-      "Complete lessons, pass the systems quiz, and earn mentor approval on CLI Telemetry Analyzer to unlock eligibility for the Full-Stack Engineering Internship track.",
+      "Included at ₹0 extra: complete all modules, pass the systems quiz, earn mentor approval on CLI Telemetry Analyzer, and finish internship deliverables.",
     announcements: [
       {
         id: "ann-py-1",
@@ -217,7 +217,7 @@ export const COURSE_EXTRAS_BY_SLUG: Record<string, CourseExtras> = {
       "Failure Categorization",
     ],
     certificateInfo:
-      "Qualifies enrolled learners for the Applied AI & Data Systems Internship once lessons, quiz, and Structured AI Evaluation Harness are approved.",
+      "Included at ₹0 extra upon completing modules, passing the quiz, and earning mentor approval on your AI Evaluation Harness project and internship tasks.",
     announcements: [
       {
         id: "ann-ai-1",
@@ -294,7 +294,7 @@ export const COURSE_EXTRAS_BY_SLUG: Record<string, CourseExtras> = {
       "Replay Protection",
     ],
     certificateInfo:
-      "Prepares learners for the Cloud & Security Engineering Internship track with optional mentor-approved certification.",
+      "Included at ₹0 extra once your Webhook Trust Boundary project and Cloud & Security Internship deliverables pass mentor review.",
     announcements: [
       {
         id: "ann-sec-1",
@@ -371,7 +371,7 @@ export const COURSE_EXTRAS_BY_SLUG: Record<string, CourseExtras> = {
       "Responsive Mobile Budgets",
     ],
     certificateInfo:
-      "Connects directly to the Full-Stack Product Engineering Internship track upon passing the accessibility critique capstone.",
+      "Included at ₹0 extra: your verified Internship Completion Certificate unlocks automatically once your project and internship tasks are approved.",
     announcements: [
       {
         id: "ann-ux-1",
@@ -448,7 +448,7 @@ export const COURSE_EXTRAS_BY_SLUG: Record<string, CourseExtras> = {
       "Rollback Runbooks",
     ],
     certificateInfo:
-      "Leads into the Cloud & Security Engineering Internship track once your resilient architecture blueprint is reviewed by mentors.",
+      "Included at ₹0 extra once your resilient architecture blueprint and Cloud & Security Internship tasks pass mentor evaluation.",
     announcements: [
       {
         id: "ann-cloud-1",
@@ -523,7 +523,7 @@ export function getCourseExtras(slug: string): CourseExtras {
     COURSE_EXTRAS_BY_SLUG[slug] ?? {
       skills: ["Practical Engineering", "Project Craft", "Mentor Review"],
       certificateInfo:
-        "Complete lessons, assignments, quiz, and linked project to unlock internship eligibility and optional certification (₹299–₹599 INR).",
+        "Complete all programme lessons, assignments, quiz, practical project, and internship tasks to earn your included Internship Completion Certificate (₹0 extra).",
       announcements: [],
       assignments: [
         {
