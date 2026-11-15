@@ -1,4 +1,5 @@
 import type { User } from "@supabase/supabase-js";
+import { isPrivilegedStaffEmail } from "@/lib/auth/access";
 import { isSupabaseConfigured, serviceClient } from "@/lib/supabase/service";
 
 export type AuthUserLike = {
@@ -64,7 +65,9 @@ export function deriveStudentProfileSeed(user: AuthUserLike | User): StudentProf
     !explicitFalse &&
     Boolean(user.email_confirmed_at || metadata.email_verified === true);
 
-  const role = appMeta.role === "admin" ? "admin" : "student";
+  // Roles are derived server-side. Only the two verified allowlisted emails
+  // can ever receive the privileged admin/mentor role in this application.
+  const role = isPrivilegedStaffEmail(email) ? "admin" : "student";
 
   return {
     userId: user.id,

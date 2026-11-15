@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { isPrivilegedStaffEmail } from "@/lib/auth/access";
 import { isSupabaseConfigured, resolveCurrentActor } from "@/lib/certifications/store";
 import {
   getMentorConsoleData,
@@ -33,7 +34,7 @@ async function checkMentorAccess() {
   if (configured && !user) {
     return { allowed: false, status: 401, error: "Sign in required." };
   }
-  if (configured && user?.role !== "admin") {
+  if (configured && (!user || user.role !== "admin" || !isPrivilegedStaffEmail(user.email))) {
     return { allowed: false, status: 403, error: "Mentor or administrator claim required." };
   }
   return { allowed: true, user };

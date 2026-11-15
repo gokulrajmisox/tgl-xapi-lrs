@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { RoleShell } from "@/components/role-shell";
 import { MentorConsoleClient } from "@/components/mentor-console-client";
 import { getMentorConsoleData } from "@/lib/learning-workspace-store";
+import { isPrivilegedStaffEmail } from "@/lib/auth/access";
 import { isSupabaseConfigured, resolveCurrentActor } from "@/lib/certifications/store";
 
 export const metadata = {
@@ -19,7 +20,7 @@ export default async function MentorPage() {
     redirect("/auth/login?next=/mentor");
   }
 
-  if (configured && user?.role !== "admin") {
+  if (configured && (!user || user.role !== "admin" || !isPrivilegedStaffEmail(user.email))) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
         <section className="tgl-glass max-w-lg rounded-2xl p-8">

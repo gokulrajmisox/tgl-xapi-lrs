@@ -1,7 +1,21 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import Razorpay from "razorpay";
 
-export type RazorpayMode = "test" | "live" | "unconfigured";
+export type RazorpayMode = "test" | "unconfigured";
+
+function isRazorpayTestKey(keyId: string): boolean {
+  return keyId.startsWith("rzp_test_");
+}
+
+function assertRazorpayTestMode(keyId: string): void {
+  if (keyId && !isRazorpayTestKey(keyId)) {
+    throw new RazorpayGatewayError(
+      "Live Razorpay credentials are blocked. Configure an rzp_test_ key for test mode.",
+      503,
+      "RAZORPAY_TEST_MODE_ONLY",
+    );
+  }
+}
 
 export type RazorpayPublicConfig = {
   keyId: string | null;
@@ -27,19 +41,18 @@ export function getRazorpayPublicConfig(): RazorpayPublicConfig {
     process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim() ||
     null;
   const hasSecret = Boolean(process.env.RAZORPAY_KEY_SECRET?.trim());
-  if (!keyId || !hasSecret) {
+  if (!keyId || !hasSecret || !isRazorpayTestKey(keyId)) {
     return { keyId: null, mode: "unconfigured", configured: false };
   }
-  const mode: RazorpayMode = keyId.startsWith("rzp_live_") ? "live" : "test";
-  return { keyId, mode, configured: true };
+  return { keyId, mode: "test", configured: true };
 }
 
 export function getRazorpayKeyIdPublic(): string | null {
-  return (
+  const keyId =
     process.env.RAZORPAY_KEY_ID?.trim() ||
     process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim() ||
-    null
-  );
+    null;
+  return keyId && isRazorpayTestKey(keyId) ? keyId : null;
 }
 
 function getRazorpaySecrets() {
@@ -168,6 +181,8 @@ export async function createRazorpayOrder(params: {
   const { keyId, keySecret } = getRazorpaySecrets();
   const currency = params.currency ?? "INR";
 
+  if (keyId) assertRazorpayTestMode(keyId);
+
   if (!keyId || !keySecret) {
     // Explicit sandbox simulation when Razorpay credentials are not yet configured in environment.
     return {
@@ -193,7 +208,7 @@ export async function createRazorpayOrder(params: {
       razorpayOrderId: order.id,
       amountPaise: Number(order.amount),
       currency: "INR",
-      mode: keyId.startsWith("rzp_live_") ? "razorpay_live" : "razorpay_test",
+      mode: "razorpay_test",
       isSimulated: false,
       keyId,
     };
@@ -209,6 +224,8 @@ export async function refundRazorpayPayment(params: {
   isSimulated?: boolean;
 }): Promise<{ refundId: string; status: string; isSimulated: boolean }> {
   const { keyId, keySecret } = getRazorpaySecrets();
+
+  if (keyId) assertRazorpayTestMode(keyId);
 
   if (params.isSimulated || params.razorpayPaymentId.startsWith("pay_sim_") || !keyId || !keySecret) {
     return {

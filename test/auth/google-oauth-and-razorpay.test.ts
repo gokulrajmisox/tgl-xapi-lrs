@@ -6,6 +6,7 @@ import {
   sanitizeRedirectPath,
 } from "../../lib/auth/redirects";
 import { deriveStudentProfileSeed } from "../../lib/auth/profile-sync";
+import { isPrivilegedStaffEmail } from "../../lib/auth/access";
 import {
   computeSignatureForTest,
   createRazorpayOrder,
@@ -168,4 +169,44 @@ test("Google OAuth profile seed populates first-time Google names without overwr
   });
   assert.equal(unverifiedUser.emailVerified, false);
   assert.equal(unverifiedUser.role, "student");
+});
+
+
+test("privileged access is restricted to the two exact verified staff emails", () => {
+  assert.equal(isPrivilegedStaffEmail("gokulrajmisox@gmail.com"), true);
+  assert.equal(isPrivilegedStaffEmail("GOKULRAJMATHSMATHS@GMAIL.COM"), true);
+  assert.equal(isPrivilegedStaffEmail("admin@touchgrasslater.org"), false);
+  assert.equal(isPrivilegedStaffEmail("gokulrajmisox+spoof@gmail.com"), false);
+
+  const allowedUser = deriveStudentProfileSeed({
+    id: "allowed-admin",
+    email: "gokulrajmisox@gmail.com",
+    email_confirmed_at: "2026-11-15T06:00:00Z",
+    app_metadata: { provider: "google" },
+    user_metadata: { email_verified: true },
+  });
+  assert.equal(allowedUser.role, "admin");
+});
+
+test("Razorpay live credentials are blocked before any gateway request", async () => {
+  const original = {
+    keyId: process.env.RAZORPAY_KEY_ID,
+    keySecret: process.env.RAZORPAY_KEY_SECRET,
+  };
+  process.env.RAZORPAY_KEY_ID = "rzp_live_should_never_be_used";
+  process.env.RAZORPAY_KEY_SECRET = "not-a-live-secret";
+  try {
+    await assert.rejects(
+      () => createRazorpayOrder({ amountPaise: 49900, currency: "INR", receipt: "live_block" }),
+      (err: unknown) =>
+        err instanceof RazorpayGatewayError &&
+        err.statusCode === 503 &&
+        err.code === "RAZORPAY_TEST_MODE_ONLY",
+    );
+  } finally {
+    if (original.keyId === undefined) delete process.env.RAZORPAY_KEY_ID;
+    else process.env.RAZORPAY_KEY_ID = original.keyId;
+    if (original.keySecret === undefined) delete process.env.RAZORPAY_KEY_SECRET;
+    else process.env.RAZORPAY_KEY_SECRET = original.keySecret;
+  }
 });

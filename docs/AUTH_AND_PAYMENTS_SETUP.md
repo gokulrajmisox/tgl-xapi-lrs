@@ -20,8 +20,8 @@ SUPABASE_SERVICE_ROLE_KEY=<your-supabase-service-role-key>
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 
 # Razorpay Standard Web Checkout
-RAZORPAY_KEY_ID=<your-razorpay-key-id>
-RAZORPAY_KEY_SECRET=<your-razorpay-key-secret>
+RAZORPAY_KEY_ID=rzp_test_<your-test-key-id>
+RAZORPAY_KEY_SECRET=<your-test-key-secret>
 NEXT_PUBLIC_RAZORPAY_KEY_ID=<your-razorpay-key-id>
 RAZORPAY_WEBHOOK_SECRET=<optional-razorpay-webhook-secret>
 ```
@@ -29,6 +29,10 @@ RAZORPAY_WEBHOOK_SECRET=<optional-razorpay-webhook-secret>
 ---
 
 ## 2. Razorpay Standard Web Checkout
+
+This application is test-mode-only. The server rejects live Razorpay keys (`rzp_live_*`) and will not create or refund live transactions. Use only Razorpay Test Mode credentials and test payment details.
+
+Mentor and administrator access is restricted server-side to `gokulrajmisox@gmail.com` and `gokulrajmathsmaths@gmail.com`; both the verified email and the privileged role check are required.
 
 ### Endpoints
 - `POST /api/payments/orders` & `POST /api/create-order`: Creates an INR Razorpay order using the official `razorpay` Node SDK (`minimum 100 paise` / `₹1`). Returns `{ order_id, amount, currency, keyId, isSimulated }`.
