@@ -1,51 +1,85 @@
-import React from "react"
-import type { Metadata, Viewport } from 'next'
-import { Inter } from 'next/font/google'
-import './globals.css'
+import React from "react";
+import type { Metadata, Viewport } from "next";
+import Script from "next/script";
+import { Inter, JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { ThemeProvider } from "@/components/theme-provider";
+import "./globals.css";
 
-const Analytics = () => null
+const Analytics = () => null;
 
-const inter = Inter({ subsets: ["latin"], variable: '--font-inter' });
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  variable: "--font-jakarta",
+  display: "swap",
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: 'Touch Grass Later — Learn. Build. Grow.',
-  description: 'Learn beyond the classroom. Build beyond the tutorials. Explore free learning resources, personalized pathways, and real progress tracking with Touch Grass Later.',
-  generator: 'v0.app',
+  title: "Touch Grass Later — Learn. Build. Grow.",
+  description:
+    "Unified online learning, practical projects, guided internships, and QR-verified credentials with Touch Grass Later.",
+  generator: "v0.app",
   icons: {
     icon: [
       {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
+        url: "/icon-light-32x32.png",
+        media: "(prefers-color-scheme: light)",
       },
       {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
+        url: "/icon-dark-32x32.png",
+        media: "(prefers-color-scheme: dark)",
       },
       {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
+        url: "/icon.svg",
+        type: "image/svg+xml",
       },
     ],
-    apple: '/apple-icon.png',
+    apple: "/apple-icon.png",
   },
-}
+};
 
 export const viewport: Viewport = {
-  themeColor: '#090909',
-  colorScheme: 'dark',
-}
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F5F5F7" },
+    { media: "(prefers-color-scheme: dark)", color: "#090909" },
+  ],
+};
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode
+  children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${inter.variable} font-sans antialiased`}>
-        {children}
-        <Analytics />
+    <html lang="en" suppressHydrationWarning>
+      <body
+        className={`${plusJakarta.variable} ${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}
+      >
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+          <Analytics />
+        </ThemeProvider>
+        <Script
+          src="https://checkout.razorpay.com/v1/checkout.js"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
-  )
+  );
 }

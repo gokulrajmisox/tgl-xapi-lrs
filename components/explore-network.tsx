@@ -115,10 +115,10 @@ export function ExploreNetwork({
             </div>
             <div className="pointer-events-auto flex flex-wrap gap-2">
               <Link
-                href="/courses"
+                href="/programmes"
                 className="inline-flex items-center gap-1.5 rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111] transition-colors hover:bg-white whitespace-nowrap shrink-0"
               >
-                Browse paid courses <ArrowUpRight size={13} aria-hidden="true" />
+                Explore programmes <ArrowUpRight size={13} aria-hidden="true" />
               </Link>
               <Link
                 href="/projects/accessible-learning-portfolio"
@@ -132,13 +132,13 @@ export function ExploreNetwork({
       </section>
 
       {/* Search & Filters */}
-      <div className="space-y-4 rounded-2xl border border-white/10 bg-[#111111] p-5">
+      <div className="tgl-glass space-y-4 rounded-2xl p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <label className="relative flex-1">
             <span className="sr-only">Search pathways, projects, and concepts</span>
             <Search
               size={15}
-              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40"
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
               aria-hidden="true"
             />
             <input
@@ -146,14 +146,14 @@ export function ExploreNetwork({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search pathways, projects, skills, or concepts..."
-              className="h-10 w-full rounded-xl border border-white/10 bg-black/35 pl-10 pr-4 text-xs text-white placeholder:text-white/40"
+              className="h-10 w-full rounded-xl border border-border bg-input pl-10 pr-4 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
             />
           </label>
 
           <div
             role="group"
             aria-label="Filter by content type"
-            className="flex flex-wrap gap-1 rounded-xl border border-white/10 bg-black/30 p-1"
+            className="tgl-subsurface flex flex-wrap gap-1 rounded-xl p-1"
           >
             {(["all", "pathways", "projects", "concepts"] as const).map((k) => (
               <button
@@ -162,8 +162,8 @@ export function ExploreNetwork({
                 onClick={() => setKindFilter(k)}
                 className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors whitespace-nowrap shrink-0 ${
                   kindFilter === k
-                    ? "bg-[#f4f3ef] text-[#111111]"
-                    : "text-white/55 hover:text-white"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {k}
@@ -172,7 +172,7 @@ export function ExploreNetwork({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
           <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by domain">
             {categories.map((cat) => (
               <button
@@ -181,23 +181,23 @@ export function ExploreNetwork({
                 onClick={() => setCategoryFilter(cat)}
                 className={`rounded-full px-3 py-1.5 text-xs transition-colors whitespace-nowrap shrink-0 ${
                   categoryFilter === cat
-                    ? "bg-[#b9a9d6] font-medium text-[#111111]"
-                    : "border border-white/10 text-white/60 hover:border-white/30"
+                    ? "bg-[var(--accent)] font-medium text-white dark:text-[#111111]"
+                    : "border border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground"
                 }`}
               >
                 {cat}
               </button>
             ))}
           </div>
-          <p className="font-mono text-[11px] tabular-nums text-white/45">
+          <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
             {totalCount} matching items
           </p>
         </div>
       </div>
 
       {totalCount === 0 && (
-        <div className="rounded-2xl border border-dashed border-white/15 p-10 text-center">
-          <p className="text-sm text-white/70">No pathways, projects, or concepts match your search.</p>
+        <div className="tgl-glass rounded-2xl border-dashed p-10 text-center">
+          <p className="text-sm text-muted-foreground">No pathways, projects, or concepts match your search.</p>
           <button
             type="button"
             onClick={() => {
@@ -205,7 +205,7 @@ export function ExploreNetwork({
               setKindFilter("all");
               setCategoryFilter("All");
             }}
-            className="mt-4 rounded-full border border-white/20 px-4 py-2 text-xs text-white/80"
+            className="mt-4 rounded-full border border-border px-4 py-2 text-xs text-foreground hover:bg-black/5 dark:hover:bg-white/5"
           >
             Clear all filters
           </button>
@@ -216,8 +216,8 @@ export function ExploreNetwork({
       {filteredProjects.length > 0 && (
         <section className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-base font-medium">
-              <FolderGit2 size={16} className="text-[#b9a9d6]" aria-hidden="true" />
+            <h2 className="flex items-center gap-2 text-base font-medium text-foreground">
+              <FolderGit2 size={16} className="text-[var(--accent)]" aria-hidden="true" />
               <span>Applied projects ({filteredProjects.length})</span>
             </h2>
           </div>
@@ -227,40 +227,40 @@ export function ExploreNetwork({
               return (
                 <article
                   key={project.slug}
-                  className="flex flex-col justify-between rounded-2xl border border-white/10 bg-[#111111] p-6"
+                  className="tgl-glass flex flex-col justify-between rounded-2xl p-6 transition-colors hover:border-foreground/20"
                 >
                   <div>
-                    <div className="flex items-center justify-between gap-2 text-xs text-white/45">
-                      <span>{project.category} · {project.estimatedHours}h</span>
+                    <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                      <span>{project.category} · <span className="tabular-nums">{project.estimatedHours}h</span></span>
                       <button
                         type="button"
                         onClick={() => void toggleSave(`project:${project.slug}`)}
                         aria-label={saved ? `Unsave ${project.title}` : `Save ${project.title}`}
-                        className="inline-flex items-center gap-1 text-[11px] text-white/60 hover:text-white"
+                        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
                       >
                         <Bookmark size={12} aria-hidden="true" />
                         {saved ? "Saved" : "Save"}
                       </button>
                     </div>
-                    <h3 className="mt-3 text-lg font-medium tracking-[-0.03em] text-[#f4f3ef]">
+                    <h3 className="mt-3 text-lg font-medium tracking-[-0.03em] text-foreground">
                       {project.title}
                     </h3>
-                    <p className="mt-2 text-xs leading-5 text-white/55">{project.summary}</p>
-                    <p className="mt-3 text-[11px] text-white/40">
+                    <p className="mt-2 text-xs leading-5 text-muted-foreground">{project.summary}</p>
+                    <p className="mt-3 text-[11px] text-muted-foreground/80">
                       Mentor: {project.mentorName} · {project.peerWork.length} peer showcase
                     </p>
                   </div>
 
-                  <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-4 text-xs">
+                  <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4 text-xs">
                     <Link
                       href={`/projects/${project.slug}`}
-                      className="inline-flex items-center gap-1.5 font-medium text-[#b9a9d6] hover:text-white"
+                      className="inline-flex items-center gap-1.5 font-medium text-[var(--accent)] hover:underline"
                     >
                       Open project <ArrowUpRight size={13} aria-hidden="true" />
                     </Link>
                     <Link
                       href={`/pathways/${project.pathwaySlug}`}
-                      className="text-white/50 hover:text-white"
+                      className="text-muted-foreground hover:text-foreground"
                     >
                       Pathway map
                     </Link>
@@ -275,8 +275,8 @@ export function ExploreNetwork({
       {/* Pathways Section */}
       {filteredPathways.length > 0 && (
         <section className="space-y-4">
-          <h2 className="flex items-center gap-2 text-base font-medium">
-            <Network size={16} className="text-[#b9a9d6]" aria-hidden="true" />
+          <h2 className="flex items-center gap-2 text-base font-medium text-foreground">
+            <Network size={16} className="text-[var(--accent)]" aria-hidden="true" />
             <span>Interactive pathway maps ({filteredPathways.length})</span>
           </h2>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -285,35 +285,35 @@ export function ExploreNetwork({
               return (
                 <article
                   key={pathway.number}
-                  className="flex flex-col justify-between rounded-2xl border border-white/10 bg-[#111111] p-6"
+                  className="tgl-glass flex flex-col justify-between rounded-2xl p-6 transition-colors hover:border-foreground/20"
                 >
                   <div>
-                    <div className="flex items-center justify-between text-xs text-white/45">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>{pathway.number} · {pathway.category}</span>
                       <button
                         type="button"
                         onClick={() => void toggleSave(`pathway:${pathway.slug}`)}
                         aria-label={saved ? `Unsave ${pathway.title}` : `Save ${pathway.title}`}
-                        className="inline-flex items-center gap-1 text-[11px] text-white/60 hover:text-white"
+                        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
                       >
                         <Bookmark size={12} aria-hidden="true" />
                         {saved ? "Saved" : "Save"}
                       </button>
                     </div>
-                    <h3 className="mt-3 text-lg font-medium tracking-[-0.03em] text-[#f4f3ef]">
+                    <h3 className="mt-3 text-lg font-medium tracking-[-0.03em] text-foreground">
                       {pathway.title}
                     </h3>
-                    <p className="mt-2 text-xs leading-5 text-white/55">{pathway.description}</p>
-                    <p className="mt-3 text-[11px] text-white/40">
+                    <p className="mt-2 text-xs leading-5 text-muted-foreground">{pathway.description}</p>
+                    <p className="mt-3 text-[11px] text-muted-foreground/80">
                       {pathway.skills.join(" · ")}
                     </p>
                   </div>
 
-                  <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-4 text-xs">
-                    <span className="text-white/45">{pathway.cohortName}</span>
+                  <div className="mt-5 flex items-center justify-between border-t border-border pt-4 text-xs">
+                    <span className="text-muted-foreground">{pathway.cohortName}</span>
                     <Link
                       href={`/pathways/${pathway.slug}`}
-                      className="inline-flex items-center gap-1.5 font-medium text-[#f4f3ef] hover:text-[#b9a9d6]"
+                      className="inline-flex items-center gap-1.5 font-medium text-foreground hover:text-[var(--accent)]"
                     >
                       Open map <ArrowUpRight size={13} aria-hidden="true" />
                     </Link>
@@ -328,26 +328,26 @@ export function ExploreNetwork({
       {/* Concepts & Touchpoints */}
       {filteredConcepts.length > 0 && (
         <section className="space-y-4">
-          <h2 className="flex items-center gap-2 text-base font-medium">
-            <Compass size={16} className="text-[#b9a9d6]" aria-hidden="true" />
+          <h2 className="flex items-center gap-2 text-base font-medium text-foreground">
+            <Compass size={16} className="text-[var(--accent)]" aria-hidden="true" />
             <span>Concepts &amp; mentor touchpoints ({filteredConcepts.length})</span>
           </h2>
           <div className="grid gap-3 md:grid-cols-2">
             {filteredConcepts.map((node) => (
               <article
                 key={node.id}
-                className="flex items-start justify-between gap-4 rounded-2xl border border-white/10 bg-[#111111] p-5"
+                className="tgl-glass flex items-start justify-between gap-4 rounded-2xl p-5"
               >
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.12em] text-white/45">
-                    {node.kind} · {node.estimatedMinutes} min
+                  <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                    {node.kind} · <span className="tabular-nums">{node.estimatedMinutes} min</span>
                   </p>
-                  <h3 className="mt-1.5 text-sm font-medium text-[#f4f3ef]">{node.title}</h3>
-                  <p className="mt-1 text-xs leading-5 text-white/55">{node.summary}</p>
+                  <h3 className="mt-1.5 text-sm font-medium text-foreground">{node.title}</h3>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{node.summary}</p>
                 </div>
                 <Link
                   href={`/pathways/${node.pathwaySlug}`}
-                  className="rounded-full border border-white/15 px-3 py-1.5 text-[11px] text-white/80 hover:border-white/35 whitespace-nowrap shrink-0"
+                  className="rounded-full border border-border px-3 py-1.5 text-[11px] text-foreground hover:border-foreground/35 whitespace-nowrap shrink-0"
                 >
                   View on map
                 </Link>

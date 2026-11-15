@@ -21,16 +21,16 @@ export default async function MentorPage() {
 
   if (configured && user?.role !== "admin") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#090909] px-6 text-[#f4f3ef]">
-        <section className="max-w-lg rounded-2xl border border-white/10 bg-white/[0.025] p-8">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-white/40">TGL / Mentor</p>
+      <main className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
+        <section className="tgl-glass max-w-lg rounded-2xl p-8">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">TGL / Mentor</p>
           <h1 className="mt-4 text-3xl font-medium tracking-[-0.06em]">
             Mentor or administrator claim required.
           </h1>
-          <p className="mt-4 text-sm leading-6 text-white/50">
+          <p className="mt-4 text-sm leading-6 text-muted-foreground">
             This account does not hold the server-managed mentor/admin role claim required to review cohort submissions.
           </p>
-          <Link href="/learn" className="mt-6 inline-flex text-xs text-white/70 underline underline-offset-4">
+          <Link href="/learn" className="mt-6 inline-flex text-xs text-[var(--accent)] underline underline-offset-4">
             Return to Student Workspace
           </Link>
         </section>

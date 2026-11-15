@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import Razorpay from "razorpay";
 
 export type RazorpayMode = "test" | "live" | "unconfigured";
 
@@ -8,8 +9,23 @@ export type RazorpayPublicConfig = {
   configured: boolean;
 };
 
+export class RazorpayGatewayError extends Error {
+  statusCode: number;
+  code?: string;
+
+  constructor(message: string, statusCode = 500, code?: string) {
+    super(message);
+    this.name = "RazorpayGatewayError";
+    this.statusCode = statusCode;
+    this.code = code;
+  }
+}
+
 export function getRazorpayPublicConfig(): RazorpayPublicConfig {
-  const keyId = process.env.RAZORPAY_KEY_ID?.trim() || null;
+  const keyId =
+    process.env.RAZORPAY_KEY_ID?.trim() ||
+    process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim() ||
+    null;
   const hasSecret = Boolean(process.env.RAZORPAY_KEY_SECRET?.trim());
   if (!keyId || !hasSecret) {
     return { keyId: null, mode: "unconfigured", configured: false };
@@ -18,12 +34,36 @@ export function getRazorpayPublicConfig(): RazorpayPublicConfig {
   return { keyId, mode, configured: true };
 }
 
+export function getRazorpayKeyIdPublic(): string | null {
+  return (
+    process.env.RAZORPAY_KEY_ID?.trim() ||
+    process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim() ||
+    null
+  );
+}
+
 function getRazorpaySecrets() {
   return {
     keyId: process.env.RAZORPAY_KEY_ID?.trim() || "",
     keySecret: process.env.RAZORPAY_KEY_SECRET?.trim() || "",
     webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET?.trim() || "",
   };
+}
+
+export function validateRazorpayOrderAmountPaise(amountPaise: number): {
+  valid: boolean;
+  reason?: string;
+} {
+  if (!Number.isInteger(amountPaise)) {
+    return { valid: false, reason: "Order amount must be an integer in paise." };
+  }
+  if (amountPaise < 100) {
+    return {
+      valid: false,
+      reason: "Minimum Razorpay order amount is 100 paise (₹1).",
+    };
+  }
+  return { valid: true };
 }
 
 export function verifyRazorpayPaymentSignature(params: {
@@ -78,12 +118,53 @@ export type CreateOrderResult = {
   keyId: string | null;
 };
 
+function parseRazorpaySdkError(err: unknown, fallbackMessage: string): RazorpayGatewayError {
+  if (err instanceof RazorpayGatewayError) {
+    return err;
+  }
+  if (typeof err === "object" && err !== null) {
+    const record = err as {
+      statusCode?: number;
+      error?: { description?: string; code?: string };
+      message?: string;
+    };
+    const statusCode = typeof record.statusCode === "number" ? record.statusCode : 500;
+    const description =
+      record.error?.description ||
+      record.message ||
+      fallbackMessage;
+    const code = record.error?.code;
+
+    if (statusCode === 401) {
+      return new RazorpayGatewayError(
+        "Razorpay API authentication failed. Verify RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.",
+        401,
+        code ?? "RAZORPAY_AUTH_FAILED",
+      );
+    }
+    if (statusCode === 400) {
+      return new RazorpayGatewayError(description, 400, code ?? "RAZORPAY_BAD_REQUEST");
+    }
+    return new RazorpayGatewayError(description, 500, code ?? "RAZORPAY_GATEWAY_ERROR");
+  }
+  return new RazorpayGatewayError(fallbackMessage, 500, "RAZORPAY_GATEWAY_ERROR");
+}
+
 export async function createRazorpayOrder(params: {
   amountPaise: number;
   currency?: "INR";
   receipt: string;
   notes?: Record<string, string>;
 }): Promise<CreateOrderResult> {
+  const amountCheck = validateRazorpayOrderAmountPaise(params.amountPaise);
+  if (!amountCheck.valid) {
+    throw new RazorpayGatewayError(
+      amountCheck.reason ?? "Invalid order amount.",
+      400,
+      "INVALID_AMOUNT",
+    );
+  }
+
   const { keyId, keySecret } = getRazorpaySecrets();
   const currency = params.currency ?? "INR";
 
@@ -99,35 +180,26 @@ export async function createRazorpayOrder(params: {
     };
   }
 
-  const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
-  const response = await fetch("https://api.razorpay.com/v1/orders", {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  try {
+    const client = new Razorpay({ key_id: keyId, key_secret: keySecret });
+    const order = await client.orders.create({
       amount: params.amountPaise,
       currency,
       receipt: params.receipt.slice(0, 40),
       notes: params.notes ?? {},
-    }),
-  });
+    });
 
-  if (!response.ok) {
-    const errText = await response.text().catch(() => "Unknown Razorpay error");
-    throw new Error(`Razorpay order creation failed (${response.status}): ${errText}`);
+    return {
+      razorpayOrderId: order.id,
+      amountPaise: Number(order.amount),
+      currency: "INR",
+      mode: keyId.startsWith("rzp_live_") ? "razorpay_live" : "razorpay_test",
+      isSimulated: false,
+      keyId,
+    };
+  } catch (err) {
+    throw parseRazorpaySdkError(err, "Razorpay order creation failed.");
   }
-
-  const order = (await response.json()) as { id: string; amount: number; currency: string };
-  return {
-    razorpayOrderId: order.id,
-    amountPaise: order.amount,
-    currency: "INR",
-    mode: keyId.startsWith("rzp_live_") ? "razorpay_live" : "razorpay_test",
-    isSimulated: false,
-    keyId,
-  };
 }
 
 export async function refundRazorpayPayment(params: {
@@ -146,26 +218,20 @@ export async function refundRazorpayPayment(params: {
     };
   }
 
-  const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
-  const response = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(params.razorpayPaymentId)}/refund`, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  try {
+    const client = new Razorpay({ key_id: keyId, key_secret: keySecret });
+    const refund = await client.payments.refund(params.razorpayPaymentId, {
       amount: params.amountPaise,
       notes: params.reason ? { reason: params.reason } : undefined,
-    }),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text().catch(() => "Unknown Razorpay refund error");
-    throw new Error(`Razorpay refund failed (${response.status}): ${errText}`);
+    });
+    return {
+      refundId: refund.id,
+      status: refund.status || "processed",
+      isSimulated: false,
+    };
+  } catch (err) {
+    throw parseRazorpaySdkError(err, "Razorpay refund failed.");
   }
-
-  const data = (await response.json()) as { id: string; status: string };
-  return { refundId: data.id, status: data.status || "processed", isSimulated: false };
 }
 
 export function computeSignatureForTest(orderId: string, paymentId: string, secret: string): string {

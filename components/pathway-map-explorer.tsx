@@ -164,17 +164,17 @@ export function PathwayMapExplorer({
   return (
     <div className="space-y-6">
       {/* Controls Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
         <div>
-          {heading && <h2 className="text-lg font-medium tracking-[-0.03em]">{heading}</h2>}
-          {subheading && <p className="mt-1 text-xs text-white/50">{subheading}</p>}
+          {heading && <h2 className="text-lg font-medium tracking-[-0.03em] text-foreground">{heading}</h2>}
+          {subheading && <p className="mt-1 text-xs text-muted-foreground">{subheading}</p>}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <div
             role="group"
             aria-label="Filter nodes by progress"
-            className="flex items-center gap-1 rounded-xl border border-white/10 bg-[#111111] p-1"
+            className="tgl-subsurface flex items-center gap-1 rounded-xl p-1"
           >
             {(["all", "completed", "active", "not_started"] as const).map((status) => (
               <button
@@ -183,8 +183,8 @@ export function PathwayMapExplorer({
                 onClick={() => setStatusFilter(status)}
                 className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors whitespace-nowrap shrink-0 ${
                   statusFilter === status
-                    ? "bg-[#f4f3ef] text-[#111111]"
-                    : "text-white/55 hover:text-white"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {status === "not_started" ? "Suggested" : status}
@@ -195,7 +195,7 @@ export function PathwayMapExplorer({
           <div
             role="group"
             aria-label="Switch map or list view"
-            className="flex items-center gap-1 rounded-xl border border-white/10 bg-[#111111] p-1"
+            className="tgl-subsurface flex items-center gap-1 rounded-xl p-1"
           >
             <button
               type="button"
@@ -203,8 +203,8 @@ export function PathwayMapExplorer({
               aria-pressed={viewMode === "map"}
               className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
                 viewMode === "map"
-                  ? "bg-[#b9a9d6] text-[#111111]"
-                  : "text-white/60 hover:text-white"
+                  ? "bg-[var(--accent)] text-white dark:text-[#111111]"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               <Network size={13} aria-hidden="true" /> Spatial map
@@ -215,8 +215,8 @@ export function PathwayMapExplorer({
               aria-pressed={viewMode === "list"}
               className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
                 viewMode === "list"
-                  ? "bg-[#b9a9d6] text-[#111111]"
-                  : "text-white/60 hover:text-white"
+                  ? "bg-[var(--accent)] text-white dark:text-[#111111]"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               <List size={13} aria-hidden="true" /> Accessible list
@@ -228,7 +228,7 @@ export function PathwayMapExplorer({
       {feedbackBanner && (
         <p
           role="status"
-          className="rounded-xl border border-emerald-400/25 bg-emerald-950/20 px-4 py-3 text-xs text-emerald-200"
+          className="rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-700 dark:text-emerald-200"
         >
           {feedbackBanner}
         </p>
@@ -239,20 +239,20 @@ export function PathwayMapExplorer({
         {viewMode === "map" ? (
           <div
             aria-label="Interactive learning node map"
-            className="relative min-h-[460px] overflow-hidden rounded-2xl border border-white/10 bg-[#101012] p-4"
+            className="tgl-glass relative min-h-[460px] overflow-hidden rounded-2xl p-4"
           >
-            <p className="mb-3 text-[11px] text-white/45">
+            <p className="mb-3 text-[11px] text-muted-foreground">
               Open any concept, project, or mentor touchpoint in any order. Use Tab or Arrow keys to navigate nodes.
             </p>
 
             {filteredNodes.length === 0 ? (
               <div className="grid h-80 place-items-center text-center">
                 <div className="space-y-2">
-                  <p className="text-sm text-white/70">No nodes match this filter.</p>
+                  <p className="text-sm text-muted-foreground">No nodes match this filter.</p>
                   <button
                     type="button"
                     onClick={() => setStatusFilter("all")}
-                    className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/80"
+                    className="rounded-full border border-border px-4 py-2 text-xs text-foreground"
                   >
                     Reset filter
                   </button>
@@ -273,7 +273,7 @@ export function PathwayMapExplorer({
                       y1={from.y}
                       x2={to.x}
                       y2={to.y}
-                      stroke="rgba(185,169,214,0.28)"
+                      stroke="rgba(128,128,128,0.35)"
                       strokeWidth="0.45"
                       strokeDasharray={from.kind === "touchpoint" || to.kind === "touchpoint" ? "1.2 1.2" : undefined}
                     />
@@ -295,17 +295,17 @@ export function PathwayMapExplorer({
                         left: `${Math.min(82, Math.max(8, node.x))}%`,
                         top: `${Math.min(84, Math.max(10, node.y))}%`,
                       }}
-                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-xl border px-3.5 py-2.5 text-left transition-all focus-visible:outline-2 focus-visible:outline-[#b9a9d6] ${
+                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-xl border px-3.5 py-2.5 text-left backdrop-blur-md transition-all focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${
                         selected
-                          ? "z-20 border-[#b9a9d6] bg-[#1e1b24] shadow-lg"
+                          ? "z-20 border-[var(--accent)] bg-white/95 shadow-lg dark:bg-[#1e1b24]"
                           : state === "completed"
-                            ? "z-10 border-emerald-400/35 bg-[#121a16] hover:border-emerald-300"
+                            ? "z-10 border-emerald-500/40 bg-emerald-500/12 hover:border-emerald-500 dark:bg-[#121a16]"
                             : state === "active"
-                              ? "z-10 border-[#b9a9d6]/45 bg-[#17151c] hover:border-[#b9a9d6]"
-                              : "z-10 border-white/15 bg-[#141416] hover:border-white/35"
+                              ? "z-10 border-[var(--accent)]/45 bg-white/85 hover:border-[var(--accent)] dark:bg-[#17151c]"
+                              : "z-10 border-border bg-white/75 hover:border-foreground/35 dark:bg-[#141416]"
                       }`}
                     >
-                      <span className="block text-[10px] uppercase tracking-[0.12em] text-white/45">
+                      <span className="block text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                         {node.kind} ·{" "}
                         {state === "completed"
                           ? "Done"
@@ -313,7 +313,7 @@ export function PathwayMapExplorer({
                             ? "Active"
                             : "Suggested"}
                       </span>
-                      <span className="mt-0.5 block max-w-[165px] truncate text-xs font-medium text-[#f4f3ef]">
+                      <span className="mt-0.5 block max-w-[165px] truncate text-xs font-medium text-foreground">
                         {node.title}
                       </span>
                     </button>
@@ -325,7 +325,7 @@ export function PathwayMapExplorer({
         ) : (
           <div className="space-y-2.5">
             {filteredNodes.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-xs text-white/50">
+              <div className="tgl-glass rounded-2xl border-dashed p-8 text-center text-xs text-muted-foreground">
                 No nodes match this filter.{" "}
                 <button
                   type="button"
@@ -346,30 +346,30 @@ export function PathwayMapExplorer({
                     onClick={() => setSelectedId(node.id)}
                     className={`flex w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition-colors ${
                       selected
-                        ? "border-[#b9a9d6] bg-[#191620]"
-                        : "border-white/10 bg-[#111111] hover:border-white/25"
+                        ? "border-[var(--accent)] bg-[var(--accent)]/10 dark:bg-[#191620]"
+                        : "tgl-glass hover:border-foreground/25"
                     }`}
                   >
                     <div className="min-w-0">
-                      <p className="text-[11px] text-white/45">
-                        {node.kind.toUpperCase()} · {node.estimatedMinutes} min ·{" "}
+                      <p className="text-[11px] text-muted-foreground">
+                        {node.kind.toUpperCase()} · <span className="tabular-nums">{node.estimatedMinutes} min</span> ·{" "}
                         <span
                           className={
                             state === "completed"
-                              ? "text-emerald-300"
+                              ? "text-emerald-600 dark:text-emerald-300"
                               : state === "active"
-                                ? "text-[#b9a9d6]"
-                                : "text-white/50"
+                                ? "text-[var(--accent)]"
+                                : "text-muted-foreground"
                           }
                         >
                           {state === "not_started" ? "Suggested" : state}
                         </span>
                       </p>
-                      <p className="mt-1 truncate text-sm font-medium text-[#f4f3ef]">
+                      <p className="mt-1 truncate text-sm font-medium text-foreground">
                         {node.title}
                       </p>
                     </div>
-                    <ArrowUpRight size={14} className="shrink-0 text-white/45" aria-hidden="true" />
+                    <ArrowUpRight size={14} className="shrink-0 text-muted-foreground" aria-hidden="true" />
                   </button>
                 );
               })
@@ -378,29 +378,29 @@ export function PathwayMapExplorer({
         )}
 
         {/* Right: Non-Linear Action Deck (Related Concept, Apply in Project, Ask Mentor, Peer Work) */}
-        <aside className="rounded-2xl border border-white/10 bg-[#111111] p-6">
+        <aside className="tgl-glass rounded-2xl p-6">
           {selectedNode ? (
             <div className="space-y-6">
               <div>
                 <div className="flex items-start justify-between gap-3">
-                  <p className="text-[11px] uppercase tracking-[0.15em] text-[#b9a9d6]">
-                    {selectedNode.kind} · {selectedNode.estimatedMinutes} min
+                  <p className="text-[11px] uppercase tracking-[0.15em] text-[var(--accent)]">
+                    {selectedNode.kind} · <span className="tabular-nums">{selectedNode.estimatedMinutes} min</span>
                   </p>
                   <button
                     type="button"
                     disabled={busyId === `node:${selectedNode.id}`}
                     onClick={() => void toggleSave(`node:${selectedNode.id}`)}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1 text-[11px] text-white/75 hover:border-white/35 whitespace-nowrap shrink-0"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-[11px] text-foreground hover:border-foreground/35 whitespace-nowrap shrink-0"
                   >
                     <Bookmark size={12} aria-hidden="true" />
                     {savedItems.includes(`node:${selectedNode.id}`) ? "Saved" : "Save"}
                   </button>
                 </div>
 
-                <h3 className="mt-2 text-xl font-medium tracking-[-0.03em] text-[#f4f3ef]">
+                <h3 className="mt-2 text-xl font-medium tracking-[-0.03em] text-foreground">
                   {selectedNode.title}
                 </h3>
-                <p className="mt-2 text-xs leading-6 text-white/60">
+                <p className="mt-2 text-xs leading-6 text-muted-foreground">
                   {selectedNode.summary}
                 </p>
 
@@ -417,8 +417,8 @@ export function PathwayMapExplorer({
                         onClick={() => void setNodeState(selectedNode.id, state)}
                         className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
                           isCurrent
-                            ? "bg-[#f4f3ef] text-[#111111]"
-                            : "border border-white/15 text-white/75 hover:border-white/35"
+                            ? "bg-primary text-primary-foreground"
+                            : "border border-border text-foreground hover:border-foreground/35"
                         }`}
                       >
                         {state === "completed" ? (
@@ -438,34 +438,34 @@ export function PathwayMapExplorer({
               </div>
 
               {/* Multi-choice Non-Linear Next Paths */}
-              <div className="space-y-3 border-t border-white/10 pt-5">
-                <p className="text-[11px] uppercase tracking-[0.15em] text-white/40">
+              <div className="space-y-3 border-t border-border pt-5">
+                <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
                   Connected actions
                 </p>
 
                 {linkedProject && (
                   <Link
                     href={`/projects/${linkedProject.slug}`}
-                    className="flex items-center justify-between rounded-xl border border-[#b9a9d6]/30 bg-black/25 p-3.5 text-xs hover:border-[#b9a9d6]"
+                    className="tgl-subsurface flex items-center justify-between rounded-xl border border-[var(--accent)]/35 p-3.5 text-xs hover:border-[var(--accent)]"
                   >
                     <div className="flex items-center gap-2.5">
-                      <FolderGit2 size={15} className="text-[#b9a9d6]" aria-hidden="true" />
+                      <FolderGit2 size={15} className="text-[var(--accent)]" aria-hidden="true" />
                       <div>
-                        <p className="font-medium text-[#f4f3ef]">
+                        <p className="font-medium text-foreground">
                           Apply in project: {linkedProject.title}
                         </p>
-                        <p className="text-[11px] text-white/45">
+                        <p className="text-[11px] text-muted-foreground">
                           Submit work &amp; inspect {linkedProject.peerWork.length} peer showcase
                         </p>
                       </div>
                     </div>
-                    <ArrowUpRight size={14} className="text-[#b9a9d6]" aria-hidden="true" />
+                    <ArrowUpRight size={14} className="text-[var(--accent)]" aria-hidden="true" />
                   </Link>
                 )}
 
                 {relatedNodes.length > 0 && (
                   <div className="space-y-1.5">
-                    <p className="text-[11px] text-white/45">Related concepts &amp; touchpoints:</p>
+                    <p className="text-[11px] text-muted-foreground">Related concepts &amp; touchpoints:</p>
                     <div className="flex flex-wrap gap-2">
                       {relatedNodes.map((rel) => {
                         const inCurrentMap = nodes.some((n) => n.id === rel.id);
@@ -474,7 +474,7 @@ export function PathwayMapExplorer({
                             key={rel.id}
                             type="button"
                             onClick={() => setSelectedId(rel.id)}
-                            className="inline-flex items-center gap-1 rounded-full border border-white/15 px-3 py-1.5 text-[11px] text-white/80 hover:border-white/35"
+                            className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-[11px] text-foreground hover:border-foreground/35"
                           >
                             <Compass size={11} aria-hidden="true" /> {rel.title}
                           </button>
@@ -482,7 +482,7 @@ export function PathwayMapExplorer({
                           <Link
                             key={rel.id}
                             href={`/pathways/${rel.pathwaySlug}`}
-                            className="inline-flex items-center gap-1 rounded-full border border-white/15 px-3 py-1.5 text-[11px] text-white/80 hover:border-white/35"
+                            className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-[11px] text-foreground hover:border-foreground/35"
                           >
                             <Compass size={11} aria-hidden="true" /> {rel.title}
                           </Link>
@@ -494,32 +494,32 @@ export function PathwayMapExplorer({
               </div>
 
               {/* Ask Mentor Inline Touchpoint */}
-              <form onSubmit={askMentor} className="space-y-3 border-t border-white/10 pt-5">
+              <form onSubmit={askMentor} className="space-y-3 border-t border-border pt-5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1.5 font-medium text-white/85">
-                    <MessageSquare size={14} className="text-[#b9a9d6]" aria-hidden="true" />
+                  <span className="flex items-center gap-1.5 font-medium text-foreground">
+                    <MessageSquare size={14} className="text-[var(--accent)]" aria-hidden="true" />
                     Ask mentor ({selectedNode.mentorName})
                   </span>
-                  <span className="text-[11px] text-white/45">{selectedNode.mentorRole}</span>
+                  <span className="text-[11px] text-muted-foreground">{selectedNode.mentorRole}</span>
                 </div>
                 <textarea
                   rows={2}
                   value={questionText}
                   onChange={(e) => setQuestionText(e.target.value)}
                   placeholder={`Ask ${selectedNode.mentorName} about ${selectedNode.title}...`}
-                  className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-white placeholder:text-white/35"
+                  className="w-full rounded-xl border border-border bg-input px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
                 />
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <button
                     type="submit"
                     disabled={busyId === "ask-mentor" || questionText.trim().length < 5}
-                    className="rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111] disabled:opacity-45"
+                    className="rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground disabled:opacity-45"
                   >
                     {busyId === "ask-mentor" ? "Sending…" : "Send to mentor"}
                   </button>
                   <Link
                     href="/learn/portfolio"
-                    className="inline-flex items-center gap-1 text-[11px] text-white/55 hover:text-white"
+                    className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
                   >
                     <Users size={12} aria-hidden="true" /> View portfolio &amp; evidence
                   </Link>
@@ -527,7 +527,7 @@ export function PathwayMapExplorer({
               </form>
             </div>
           ) : (
-            <p className="text-xs text-white/50">Select a node on the map to inspect resources, linked projects, and mentor support.</p>
+            <p className="text-xs text-muted-foreground">Select a node on the map to inspect resources, linked projects, and mentor support.</p>
           )}
         </aside>
       </div>

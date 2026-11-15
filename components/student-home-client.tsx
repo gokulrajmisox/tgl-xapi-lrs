@@ -1,18 +1,18 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  AlertCircle,
   ArrowRight,
   ArrowUpRight,
   Award,
   BookOpen,
   Briefcase,
   CheckCircle2,
-  Clock3,
   FolderGit2,
   Lock,
   MessageSquare,
+  PlayCircle,
   Sparkles,
 } from "lucide-react";
 import { formatInrFromPaise } from "@/lib/certifications/pricing";
@@ -31,8 +31,10 @@ import type {
   InternshipApplicationRecord,
   InternshipRecord,
 } from "@/lib/certifications/store";
-import { StudentJourneyTracker, type JourneyStageState } from "@/components/student-journey-tracker";
+import { computeUnifiedProgrammeProgression } from "@/lib/learning/progression";
 import Magnet from "@/components/react-bits/Magnet";
+
+type StatusFilter = "all" | "in_progress" | "completed";
 
 export function StudentHomeClient({
   learnerName,
@@ -40,6 +42,7 @@ export function StudentHomeClient({
   internships,
   applications,
   issuances,
+  claimedCertIds = [],
   submissions,
   messages,
 }: {
@@ -50,6 +53,7 @@ export function StudentHomeClient({
   orders: CertificationOrderRecord[];
   payments: CertificationPaymentRecord[];
   issuances: CertificateIssuanceRecord[];
+  claimedCertIds?: string[];
   products: CertificationProductRecord[];
   nodeStates: Record<string, NodeProgressState>;
   savedItems: string[];
@@ -57,628 +61,497 @@ export function StudentHomeClient({
   messages: MentorMessageRecord[];
   evidence: LearningEvidenceRecord[];
 }) {
-  const enrolledCourses = courses.filter((c) => c.enrolled);
-  const starterCourses = courses.filter((c) => !c.enrolled).slice(0, 3);
-  const completedLessonsTotal = enrolledCourses.reduce(
-    (sum, c) => sum + c.completedLessonCount,
-    0,
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("All");
+
+  const claimedSet = useMemo(() => new Set(claimedCertIds), [claimedCertIds]);
+
+  const enrolledItems = useMemo(() => {
+    return courses
+      .filter((c) => c.enrolled)
+      .map((course) => {
+        const track =
+          internships.find((i) => i.slug === course.linkedInternshipSlug) ?? null;
+        const app = track
+          ? applications.find((a) => a.internship_id === track.id) ?? null
+          : null;
+        const sub =
+          submissions.find((s) => s.projectSlug === course.projectSlug) ?? null;
+        const cert = app
+          ? issuances.find(
+              (i) =>
+                i.internship_application_id === app.id &&
+                i.issuance_status !== "revoked",
+            ) ?? null
+          : null;
+
+        const tasks = track?.tasks ?? [];
+        const approvedTasks = tasks.filter(
+          (t) =>
+            app?.task_submissions?.find((ts) => ts.taskId === t.id)?.status ===
+            "approved",
+        ).length;
+
+        const progression = computeUnifiedProgrammeProgression({
+          enrolled: true,
+          completedLessonCount: course.completedLessonCount,
+          totalLessonCount: course.lessonCount,
+          quizPassed: course.quizPassed,
+          projectStatus: sub?.status ?? "not_started",
+          hasInternshipTrack: Boolean(track),
+          totalInternshipTasks: tasks.length,
+          approvedInternshipTasksCount: approvedTasks,
+          internshipFinalApproved: Boolean(
+            app?.status === "completed" && app?.mentor_approved,
+          ),
+          certificateStatus: cert?.issuance_status ?? "none",
+          certificateClaimed: cert ? claimedSet.has(cert.certificate_id) : false,
+        });
+
+        return {
+          course,
+          track,
+          app,
+          sub,
+          cert,
+          progression,
+        };
+      });
+  }, [courses, internships, applications, submissions, issuances, claimedSet]);
+
+  const categories = useMemo(() => {
+    const set = new Set<string>(["All"]);
+    enrolledItems.forEach((item) => set.add(item.course.category));
+    return Array.from(set);
+  }, [enrolledItems]);
+
+  const filteredEnrolled = useMemo(() => {
+    return enrolledItems.filter((item) => {
+      if (categoryFilter !== "All" && item.course.category !== categoryFilter) {
+        return false;
+      }
+      const isDone = item.progression.programCompleted;
+      if (statusFilter === "completed") return isDone;
+      if (statusFilter === "in_progress") return !isDone;
+      return true;
+    });
+  }, [enrolledItems, categoryFilter, statusFilter]);
+
+  const exploreProgrammes = useMemo(
+    () => courses.filter((c) => !c.enrolled).slice(0, 3),
+    [courses],
   );
-  const totalLessonsAcrossEnrolled = enrolledCourses.reduce(
-    (sum, c) => sum + c.lessonCount,
-    0,
-  );
-  const passedQuizzes = enrolledCourses.filter((c) => c.quizPassed).length;
-  const approvedProjects = submissions.filter((s) => s.status === "approved").length;
-  const latestProject = submissions[0] ?? null;
 
-  const completedInternships = applications.filter(
-    (a) => a.status === "completed" && a.mentor_approved,
-  );
-  const issuedCerts = issuances.filter((i) => i.issuance_status === "issued");
+  // Also show any standalone internship applications whose course isn't already enrolled
+  const standaloneApplications = useMemo(() => {
+    const enrolledCourseSlugs = new Set(enrolledItems.map((i) => i.course.slug));
+    return applications
+      .map((app) => {
+        const track = internships.find((i) => i.id === app.internship_id);
+        if (!track) return null;
+        if (
+          track.required_course_slug &&
+          enrolledCourseSlugs.has(track.required_course_slug)
+        ) {
+          return null;
+        }
+        const matchedCourse = track.required_course_slug
+          ? courses.find((c) => c.slug === track.required_course_slug) ?? null
+          : null;
+        return { app, track, matchedCourse };
+      })
+      .filter(Boolean) as Array<{
+      app: InternshipApplicationRecord;
+      track: InternshipRecord;
+      matchedCourse: PublicCourseSummary | null;
+    }>;
+  }, [applications, internships, courses, enrolledItems]);
 
-  const pendingInternshipTasks = applications.flatMap((app) => {
-    const track = internships.find((i) => i.id === app.internship_id);
-    if (!track?.tasks) return [];
-    const subs = app.task_submissions ?? [];
-    return track.tasks
-      .filter((t) => subs.find((s) => s.taskId === t.id)?.status !== "approved")
-      .map((t) => ({
-        internshipTitle: track.title,
-        task: t,
-        submission: subs.find((s) => s.taskId === t.id) ?? null,
-      }));
-  });
-
-  const approvedTaskCount = applications.reduce((acc, app) => {
-    const subs = app.task_submissions ?? [];
-    return acc + subs.filter((s) => s.status === "approved").length;
-  }, 0);
-
-  // Determine the single best "What should I do next?" prompt for ordinary students
-  const nextPrompt: {
-    heading: string;
-    reason: string;
-    ctaLabel: string;
-    href: string;
-  } = (() => {
-    if (enrolledCourses.length === 0) {
+  // Top primary recommendation
+  const primaryFocus = enrolledItems.find((i) => !i.progression.programCompleted) ?? enrolledItems[0] ?? null;
+  const nextRecommendation = (() => {
+    if (!primaryFocus) {
       return {
-        heading: "Enrol in your first internship programme",
+        heading: "Start your first learning & internship programme",
         reason:
-          "Browse Programmes to view the complete syllabus, practical project, internship track, and included certificate before paying one all-inclusive INR fee.",
+          "Browse Programmes to view modules, practical projects, internship sprints, and included certificates covered by one single INR enrolment fee.",
         ctaLabel: "Explore Programmes",
         href: "/programmes",
       };
     }
-
-    const activeCourse =
-      enrolledCourses.find((c) => c.progressPercent < 100 || !c.quizPassed) ??
-      enrolledCourses[0];
-
-    if (activeCourse && (activeCourse.progressPercent < 100 || !activeCourse.quizPassed)) {
-      return {
-        heading: `Continue ${activeCourse.title}`,
-        reason:
-          activeCourse.progressPercent < 100
-            ? `You have finished ${activeCourse.completedLessonCount} of ${activeCourse.lessonCount} lessons. Pick up right where you left off.`
-            : "You finished the lessons! Complete the graded assessment to prepare for mentor approval.",
-        ctaLabel: "Continue Learning",
-        href: `/programmes/${activeCourse.slug}`,
-      };
-    }
-
-    if (approvedProjects === 0) {
-      const targetProjectSlug =
-        latestProject?.projectSlug ?? activeCourse?.projectSlug ?? "";
-      return {
-        heading:
-          latestProject?.status === "revision_required"
-            ? "Update your project with mentor feedback"
-            : latestProject
-              ? `Check your project: ${latestProject.projectTitle}`
-              : "Start your practical project",
-        reason:
-          latestProject?.status === "revision_required"
-            ? "Your mentor left comments to help you pass. Review the notes and resubmit."
-            : "Build the practical project included in your programme and send it to your mentor for approval.",
-        ctaLabel: latestProject ? "Submit Project" : "Start Project",
-        href: targetProjectSlug ? `/projects/${targetProjectSlug}` : "/explore",
-      };
-    }
-
-    if (pendingInternshipTasks.length > 0 && completedInternships.length === 0) {
-      const firstPending = pendingInternshipTasks[0];
-      return {
-        heading: `Complete your internship task: ${firstPending.task.title}`,
-        reason: `Due ${firstPending.task.deadlineLabel}. Finish all tasks to unlock final mentor completion approval and your included certificate.`,
-        ctaLabel: "Complete Task",
-        href: "/internships",
-      };
-    }
-
-    if (completedInternships.length > 0 && issuedCerts.length === 0) {
-      return {
-        heading: "Your included Internship Certificate is unlocked",
-        reason:
-          "Your mentor approved all internship tasks! Claim your included official certificate (₹0 extra) with a QR verification link.",
-        ctaLabel: "Download Certificate",
-        href: "/certificates",
-      };
-    }
-
-    if (issuedCerts.length > 0) {
-      return {
-        heading: "Open or download your Internship Completion Certificate",
-        reason: `Certificate ${issuedCerts[0].certificate_id} is active (₹0 extra, included with your programme) and ready to share.`,
-        ctaLabel: "Open Certificate",
-        href: `/verify/certificate/${encodeURIComponent(issuedCerts[0].certificate_id)}`,
-      };
-    }
-
+    const { course, progression } = primaryFocus;
     return {
-      heading: "Keep building with Touch Grass Later",
-      reason: "Explore more programmes, practical projects, and internship tracks at any time.",
-      ctaLabel: "Explore Programmes",
-      href: "/programmes",
+      heading: course.title,
+      reason: `Active step ${progression.currentStep.stepNumber}/9 (${progression.currentStep.title}): ${progression.nextRequirement}`,
+      ctaLabel: progression.certificateState === "issued" || progression.certificateState === "eligible"
+        ? "Open Certificate Workspace"
+        : "Continue Learning",
+      href: `/programmes/${course.slug}`,
     };
   })();
 
-  const hasEnrolled = enrolledCourses.length > 0;
-  const learningDone = enrolledCourses.some((c) => c.progressPercent >= 100 && c.quizPassed);
-  const projectDone = approvedProjects > 0;
-  const internshipDone = completedInternships.length > 0;
-  const certIssued = issuedCerts.length > 0;
-
-  const stages: JourneyStageState[] = [
-    {
-      step: 1,
-      key: "enrolled",
-      label: "Enrolled",
-      detail: hasEnrolled
-        ? `${enrolledCourses.length} programme active`
-        : "Choose & enrol in a programme",
-      status: hasEnrolled ? "completed" : "active",
-      href: enrolledCourses[0] ? `/programmes/${enrolledCourses[0].slug}` : "/programmes",
-    },
-    {
-      step: 2,
-      key: "learning",
-      label: "Learning",
-      detail: hasEnrolled
-        ? `${completedLessonsTotal}/${totalLessonsAcrossEnrolled || completedLessonsTotal} lessons · ${passedQuizzes} quiz`
-        : "Notes, curated videos & quiz",
-      status: learningDone ? "completed" : hasEnrolled ? "active" : "upcoming",
-      href: enrolledCourses[0] ? `/programmes/${enrolledCourses[0].slug}` : "/programmes",
-    },
-    {
-      step: 3,
-      key: "project",
-      label: "Project",
-      detail: projectDone
-        ? `${approvedProjects} project approved`
-        : latestProject
-          ? `Status: ${latestProject.status.replaceAll("_", " ")}`
-          : "Build your practical project",
-      status: projectDone ? "completed" : hasEnrolled ? "active" : "upcoming",
-      href: latestProject
-        ? `/projects/${latestProject.projectSlug}`
-        : enrolledCourses[0]?.projectSlug
-          ? `/projects/${enrolledCourses[0].projectSlug}`
-          : "/explore",
-    },
-    {
-      step: 4,
-      key: "internship",
-      label: "Internship",
-      detail: internshipDone
-        ? "All internship tasks approved"
-        : applications.length > 0
-          ? `${pendingInternshipTasks.length} task${pendingInternshipTasks.length === 1 ? "" : "s"} remaining`
-          : "Included with programme enrolment",
-      status: internshipDone
-        ? "completed"
-        : applications.length > 0 || projectDone
-          ? "active"
-          : "upcoming",
-      href: "/internships",
-    },
-    {
-      step: 5,
-      key: "completed",
-      label: "Completed",
-      detail: internshipDone
-        ? "Mentor final approval complete"
-        : "Awaiting task & mentor review",
-      status: internshipDone ? "completed" : applications.length > 0 ? "active" : "upcoming",
-      href: "/internships",
-    },
-    {
-      step: 6,
-      key: "certificate",
-      label: "Certificate Issued",
-      detail: certIssued
-        ? `${issuedCerts[0].certificate_id}`
-        : internshipDone
-          ? "Ready at ₹0 extra"
-          : "Included (₹0 extra) on completion",
-      status: certIssued ? "completed" : internshipDone ? "active" : "upcoming",
-      href: certIssued
-        ? `/verify/certificate/${encodeURIComponent(issuedCerts[0].certificate_id)}`
-        : "/certificates",
-    },
-  ];
+  const activeCertsCount = issuances.filter((i) => i.issuance_status === "issued").length;
+  const completedProgrammesCount = enrolledItems.filter((i) => i.progression.programCompleted).length;
 
   return (
     <div className="space-y-8">
-      {/* Top Single "What should I do next?" Guidance Card */}
+      {/* Top Hero / Continue Card */}
       <section
-        aria-labelledby="next-step-heading"
-        className="flex flex-col justify-between gap-5 rounded-3xl border border-[#b9a9d6]/40 bg-[#15121d] p-6 sm:flex-row sm:items-center sm:p-7"
+        aria-labelledby="my-learning-next"
+        className="tgl-glass flex flex-col justify-between gap-5 rounded-3xl p-6 sm:flex-row sm:items-center sm:p-7"
       >
-        <div className="space-y-1.5">
-          <p className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-[#b9a9d6]">
+        <div className="space-y-2">
+          <p className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-accent">
             <Sparkles size={13} aria-hidden="true" />
-            What should I do next?
+            Continue Your Journey
           </p>
-          <h2 id="next-step-heading" className="text-xl font-medium tracking-[-0.03em] text-[#f4f3ef] sm:text-2xl">
-            {nextPrompt.heading}
+          <h2
+            id="my-learning-next"
+            className="text-xl font-semibold tracking-[-0.03em] text-foreground sm:text-2xl"
+          >
+            {nextRecommendation.heading}
           </h2>
-          <p className="max-w-2xl text-xs leading-6 text-white/70 sm:text-sm">
-            {nextPrompt.reason}
+          <p className="max-w-2xl text-xs leading-6 text-muted-foreground sm:text-sm">
+            {nextRecommendation.reason}
           </p>
         </div>
 
         <Magnet padding={60} magnetStrength={2.8} maxOffset={7}>
           <Link
-            href={nextPrompt.href}
-            className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#f4f3ef] px-6 py-3 text-xs font-medium text-[#111111] transition-colors hover:bg-white whitespace-nowrap shrink-0"
+            href={nextRecommendation.href}
+            className="inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-accent px-6 py-3 text-xs font-medium text-accent-foreground shadow-sm transition-opacity hover:opacity-90"
           >
-            {nextPrompt.ctaLabel}
-            <ArrowRight size={14} aria-hidden="true" />
+            <PlayCircle size={15} aria-hidden="true" />
+            {nextRecommendation.ctaLabel}
           </Link>
         </Magnet>
       </section>
 
-      {/* Clean 4-Stage Progress Tracker */}
-      <StudentJourneyTracker stages={stages} />
+      {/* Clean KPI Strip */}
+      <section aria-label="Learning summary metrics" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="tgl-glass rounded-2xl p-5">
+          <p className="text-xs text-muted-foreground">Enrolled programmes</p>
+          <p className="mt-2 font-mono text-2xl font-semibold tabular-nums text-foreground">
+            {enrolledItems.length}
+          </p>
+        </div>
+        <div className="tgl-glass rounded-2xl p-5">
+          <p className="text-xs text-muted-foreground">Active internship tracks</p>
+          <p className="mt-2 font-mono text-2xl font-semibold tabular-nums text-accent">
+            {applications.length}
+          </p>
+        </div>
+        <div className="tgl-glass rounded-2xl p-5">
+          <p className="text-xs text-muted-foreground">Completed programmes</p>
+          <p className="mt-2 font-mono text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-300">
+            {completedProgrammesCount}
+          </p>
+        </div>
+        <div className="tgl-glass rounded-2xl p-5">
+          <p className="text-xs text-muted-foreground">Verified certificates</p>
+          <p className="mt-2 font-mono text-2xl font-semibold tabular-nums text-foreground">
+            {activeCertsCount}
+          </p>
+        </div>
+      </section>
 
-      {/* Main Scannable Workspace Grid */}
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_.8fr]">
-        <div className="space-y-6">
-          {/* 1. Continue your course */}
-          <section className="rounded-2xl border border-white/10 bg-[#111111] p-6">
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="flex items-center gap-2 text-base font-medium">
-                <BookOpen size={16} className="text-[#b9a9d6]" aria-hidden="true" />
-                <span>Your active programmes</span>
-              </h2>
-              <Link href="/programmes" className="text-xs text-[#b9a9d6] hover:text-white">
-                Explore Programmes
-              </Link>
-            </div>
+      {/* Enrolled Programmes & Internship Workspaces */}
+      <section aria-labelledby="enrolled-list-heading" className="space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2
+              id="enrolled-list-heading"
+              className="text-lg font-semibold tracking-[-0.03em] text-foreground"
+            >
+              Enrolled programmes &amp; internships
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Open any item to enter its unified 9-step workspace — lessons, project assignment, internship tasks, and certificate in one view.
+            </p>
+          </div>
 
-            <div className="mt-4 space-y-3 text-xs">
-              {enrolledCourses.length > 0 ? (
-                enrolledCourses.map((course) => (
-                  <div
-                    key={course.id}
-                    className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-400/25 bg-black/25 p-4"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-medium text-emerald-300">
-                        Enrolled · {course.completedLessonCount}/{course.lessonCount} lessons ({course.progressPercent}%) · Quiz:{" "}
-                        {course.quizPassed ? "Passed" : "Pending"}
-                      </p>
-                      <p className="mt-1 text-sm font-medium text-[#f4f3ef]">
-                        {course.title}
-                      </p>
-                      <div className="mt-2 h-1.5 max-w-xs overflow-hidden rounded-full bg-white/10">
-                        <div
-                          className="h-full rounded-full bg-[#b9a9d6]"
-                          style={{ width: `${course.progressPercent}%` }}
-                        />
-                      </div>
-                    </div>
-                    <Link
-                      href={`/programmes/${course.slug}`}
-                      className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111] whitespace-nowrap shrink-0"
-                    >
-                      Continue Learning
-                      <ArrowRight size={13} aria-hidden="true" />
-                    </Link>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-xl border border-dashed border-white/15 p-5 text-white/60">
-                  <p>You have not enrolled in a programme yet, {learnerName}.</p>
-                  <p className="mt-1 text-white/50">
-                    Pick a programme below to see its syllabus, project, internship tasks, and included certificate before paying.
-                  </p>
-                </div>
-              )}
+          <div className="flex flex-wrap items-center gap-2">
+            {(["all", "in_progress", "completed"] as StatusFilter[]).map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setStatusFilter(f)}
+                className={`min-h-9 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
+                  statusFilter === f
+                    ? "bg-primary text-primary-foreground"
+                    : "border border-border bg-card text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {f === "all" ? "All" : f === "in_progress" ? "In Progress" : "Completed"}
+              </button>
+            ))}
 
-              {starterCourses.length > 0 && (
-                <div className="space-y-2.5 pt-2">
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-white/45">
-                    {enrolledCourses.length > 0 ? "More programmes to explore" : "Available internship programmes"}
-                  </p>
-                  {starterCourses.map((course) => (
-                    <div
-                      key={course.id}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-4"
-                    >
-                      <div>
-                        <p className="inline-flex items-center gap-1.5 text-[11px] text-white/55">
-                          <Lock size={11} aria-hidden="true" />
-                          {course.category} · {formatInrFromPaise(course.pricePaise)} INR all-inclusive
-                        </p>
-                        <p className="mt-1 text-sm font-medium text-[#f4f3ef]">
-                          {course.title}
-                        </p>
-                        <p className="mt-0.5 text-white/50">
-                          {course.skills.slice(0, 3).join(" · ")}
-                        </p>
-                      </div>
-                      <Link
-                        href={`/programmes/${course.slug}`}
-                        className="inline-flex min-h-11 items-center rounded-full border border-white/15 px-4 py-2 text-xs text-white/85 hover:border-white/35 whitespace-nowrap shrink-0"
-                      >
-                        Enrol Now
-                      </Link>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* 2. Your learning progress */}
-          <section className="rounded-2xl border border-white/10 bg-[#111111] p-6">
-            <h2 className="text-base font-medium">Your learning progress</h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-xl border border-white/10 bg-black/25 p-4">
-                <p className="text-[11px] text-white/50">Lessons finished</p>
-                <p className="mt-1.5 font-mono text-xl font-medium text-[#f4f3ef]">
-                  {completedLessonsTotal}
-                </p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/25 p-4">
-                <p className="text-[11px] text-white/50">Course quizzes passed</p>
-                <p className="mt-1.5 font-mono text-xl font-medium text-[#f4f3ef]">
-                  {passedQuizzes}
-                </p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/25 p-4">
-                <p className="text-[11px] text-white/50">Approved projects</p>
-                <p className="mt-1.5 font-mono text-xl font-medium text-emerald-300">
-                  {approvedProjects}
-                </p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/25 p-4">
-                <p className="text-[11px] text-white/50">Internship tasks done</p>
-                <p className="mt-1.5 font-mono text-xl font-medium text-[#b9a9d6]">
-                  {approvedTaskCount}
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* 3. Your current project */}
-          <section className="rounded-2xl border border-white/10 bg-[#111111] p-6">
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="flex items-center gap-2 text-base font-medium">
-                <FolderGit2 size={16} className="text-[#b9a9d6]" aria-hidden="true" />
-                <span>Your current project</span>
-              </h2>
-              <Link href="/explore" className="text-xs text-white/65 hover:text-white">
-                All projects
-              </Link>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {submissions.length > 0 ? (
-                submissions.map((sub) => (
-                  <article
-                    key={sub.id}
-                    className="rounded-xl border border-white/10 bg-black/25 p-4 text-xs"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <Link
-                        href={`/projects/${sub.projectSlug}`}
-                        className="text-sm font-medium text-[#f4f3ef] hover:text-[#b9a9d6]"
-                      >
-                        {sub.projectTitle}
-                      </Link>
-                      <span
-                        className={`inline-flex items-center gap-1 capitalize font-medium ${
-                          sub.status === "approved"
-                            ? "text-emerald-300"
-                            : sub.status === "revision_required"
-                              ? "text-amber-300"
-                              : "text-[#b9a9d6]"
-                        }`}
-                      >
-                        {sub.status === "approved" ? (
-                          <CheckCircle2 size={12} aria-hidden="true" />
-                        ) : sub.status === "revision_required" ? (
-                          <AlertCircle size={12} aria-hidden="true" />
-                        ) : (
-                          <Clock3 size={12} aria-hidden="true" />
-                        )}
-                        {sub.status.replaceAll("_", " ")}
-                      </span>
-                    </div>
-                    <p className="mt-1.5 text-white/65">
-                      {sub.summary || "Work started — add your GitHub link when ready to submit."}
-                    </p>
-                    {sub.mentorFeedback && (
-                      <p className="mt-2 rounded-lg border border-emerald-400/20 bg-emerald-950/20 p-2.5 text-emerald-200/95">
-                        Mentor ({sub.mentorName}): {sub.mentorFeedback}
-                      </p>
-                    )}
-                    <div className="mt-3">
-                      <Link
-                        href={`/projects/${sub.projectSlug}`}
-                        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/15 px-4 py-2 text-xs text-white/90 hover:border-white/35"
-                      >
-                        {sub.status === "in_progress"
-                          ? "Submit Project"
-                          : sub.status === "revision_required"
-                            ? "Resubmit Project"
-                            : "Open Project"}
-                        <ArrowRight size={12} aria-hidden="true" />
-                      </Link>
-                    </div>
-                  </article>
-                ))
-              ) : (
-                <div className="rounded-xl border border-dashed border-white/15 p-5 text-xs text-white/60">
-                  <p>No active project yet. Pick a course to start your practical project.</p>
-                  <Link
-                    href={enrolledCourses[0]?.projectSlug ? `/projects/${enrolledCourses[0].projectSlug}` : "/explore"}
-                    className="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111]"
-                  >
-                    Start Project <ArrowRight size={12} aria-hidden="true" />
-                  </Link>
-                </div>
-              )}
-            </div>
-          </section>
+            {categories.length > 2 && (
+              <select
+                aria-label="Filter by discipline"
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="min-h-9 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs text-foreground outline-none"
+              >
+                {categories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
 
-        {/* Right Column: Internship Status, Certificate Progress & Mentor Notes */}
-        <div className="space-y-6">
-          {/* 4. Your internship status & next task */}
-          <section className="rounded-2xl border border-[#b9a9d6]/25 bg-[#131118] p-6">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="flex items-center gap-2 text-base font-medium">
-                <Briefcase size={15} className="text-[#b9a9d6]" aria-hidden="true" />
-                <span>Your internship status &amp; next task</span>
-              </h2>
-              <Link href="/internships" className="text-xs text-[#b9a9d6] hover:text-white">
-                View Internship
-              </Link>
-            </div>
+        {filteredEnrolled.length > 0 ? (
+          <div className="grid gap-5 md:grid-cols-2">
+            {filteredEnrolled.map(({ course, track, app, progression }) => (
+              <article
+                key={course.id}
+                className="tgl-glass flex flex-col justify-between gap-5 rounded-3xl p-6 transition-transform duration-200 hover:-translate-y-0.5"
+              >
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                    <span className="font-medium text-accent">
+                      {course.category} · {course.estimatedHours}h + {course.internshipDurationWeeks}wk internship
+                    </span>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-medium ${
+                        progression.programCompleted
+                          ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                          : "bg-accent/12 text-accent"
+                      }`}
+                    >
+                      {progression.programCompleted ? (
+                        <CheckCircle2 size={12} aria-hidden="true" />
+                      ) : (
+                        <BookOpen size={12} aria-hidden="true" />
+                      )}
+                      {progression.currentStep.title}
+                    </span>
+                  </div>
 
-            <div className="mt-4 space-y-3 text-xs">
-              {applications.map((app) => {
-                const track = internships.find((i) => i.id === app.internship_id);
-                return (
-                  <div
-                    key={app.id}
-                    className="rounded-xl border border-white/10 bg-black/30 p-3.5"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="font-medium text-[#f4f3ef]">
-                        {track?.title ?? "Internship"}
-                      </p>
-                      <span
-                        className={`inline-flex items-center gap-1 capitalize text-[11px] font-medium ${
-                          app.status === "completed" && app.mentor_approved
-                            ? "text-emerald-300"
-                            : "text-[#b9a9d6]"
-                        }`}
-                      >
-                        {app.status === "completed" && app.mentor_approved ? (
-                          <CheckCircle2 size={12} aria-hidden="true" />
-                        ) : (
-                          <Clock3 size={12} aria-hidden="true" />
-                        )}
-                        {app.status.replaceAll("_", " ")}
+                  <div>
+                    <h3 className="text-lg font-semibold tracking-[-0.03em] text-foreground">
+                      {course.title}
+                    </h3>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                      {course.subtitle}
+                    </p>
+                  </div>
+
+                  {/* Unified 9-step progress bar */}
+                  <div className="tgl-subsurface rounded-2xl p-4 text-xs">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium text-foreground">
+                        Roadmap Progress ({progression.completedStepsCount}/
+                        {progression.totalStepsCount} steps)
+                      </span>
+                      <span className="font-mono font-semibold tabular-nums text-accent">
+                        {progression.overallProgressPercent}%
                       </span>
                     </div>
-                    {app.mentor_notes && (
-                      <p className="mt-1.5 text-[11px] text-white/65">{app.mentor_notes}</p>
-                    )}
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-foreground/10">
+                      <div
+                        className="h-full rounded-full bg-accent transition-all"
+                        style={{ width: `${progression.overallProgressPercent}%` }}
+                      />
+                    </div>
+                    <p className="mt-2.5 text-[11px] leading-4 text-muted-foreground">
+                      Next: <span className="text-foreground">{progression.nextRequirement}</span>
+                    </p>
                   </div>
-                );
-              })}
 
-              {pendingInternshipTasks.length > 0 && (
-                <div className="space-y-2 border-t border-white/10 pt-3">
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-white/50">
-                    Next task to complete
-                  </p>
-                  {pendingInternshipTasks.map((item) => (
-                    <Link
-                      key={item.task.id}
-                      href="/internships"
-                      className="flex min-h-11 items-start justify-between gap-3 rounded-xl border border-white/10 bg-black/25 p-3.5 hover:border-white/30"
-                    >
-                      <div>
-                        <p className="font-medium text-[#f4f3ef]">{item.task.title}</p>
-                        <p className="mt-0.5 text-[11px] text-[#b9a9d6]">
-                          Due {item.task.deadlineLabel} ·{" "}
-                          {item.submission ? item.submission.status.replaceAll("_", " ") : "Action needed"}
-                        </p>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-[#f4f3ef] px-3 py-1 text-[11px] font-medium text-[#111111]">
-                        Complete Task
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              )}
-
-              {applications.length === 0 && (
-                <div className="space-y-3 text-white/60">
-                  <p>
-                    Once your course quiz and project are approved, you can join a matching internship for free.
-                  </p>
-                  <Link
-                    href="/internships"
-                    className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/15 px-4 py-2 text-xs text-white/90 hover:border-white/35"
-                  >
-                    View Internship <ArrowUpRight size={12} aria-hidden="true" />
-                  </Link>
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* 5. Your certificate progress */}
-          <section className="rounded-2xl border border-white/10 bg-[#111111] p-6">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="flex items-center gap-2 text-base font-medium">
-                <Award size={16} className="text-[#b9a9d6]" aria-hidden="true" />
-                <span>Included Internship Certificate</span>
-              </h2>
-              <Link href="/certificates" className="text-xs text-[#b9a9d6] hover:text-white">
-                {issuedCerts.length > 0 ? "Download Certificate" : "Check eligibility"}
-              </Link>
-            </div>
-
-            <div className="mt-4 space-y-3 text-xs">
-              {issuedCerts.length > 0 ? (
-                issuedCerts.map((cert) => (
-                  <div
-                    key={cert.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-400/25 bg-emerald-950/20 p-4"
-                  >
-                    <div>
-                      <p className="font-mono text-[11px] text-emerald-300">
-                        {cert.certificate_id}
-                      </p>
-                      <p className="mt-1 font-medium text-[#f4f3ef]">
-                        {cert.achievement_title}
+                  <div className="grid grid-cols-3 gap-2 text-[11px]">
+                    <div className="tgl-subsurface rounded-xl px-3 py-2">
+                      <span className="text-muted-foreground">Lessons</span>
+                      <p className="mt-0.5 font-mono font-medium tabular-nums text-foreground">
+                        {course.completedLessonCount}/{course.lessonCount}
                       </p>
                     </div>
-                    <Link
-                      href={`/verify/certificate/${encodeURIComponent(cert.certificate_id)}`}
-                      className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[#f4f3ef] px-4 py-2 font-medium text-[#111111]"
-                    >
-                      Download Certificate <ArrowUpRight size={12} aria-hidden="true" />
-                    </Link>
+                    <div className="tgl-subsurface rounded-xl px-3 py-2">
+                      <span className="text-muted-foreground">Project</span>
+                      <p className="mt-0.5 truncate font-medium capitalize text-foreground">
+                        {progression.projectStageStatus.replaceAll("_", " ")}
+                      </p>
+                    </div>
+                    <div className="tgl-subsurface rounded-xl px-3 py-2">
+                      <span className="text-muted-foreground">Certificate</span>
+                      <p className="mt-0.5 truncate font-medium capitalize text-foreground">
+                        {progression.certificateState}
+                      </p>
+                    </div>
                   </div>
-                ))
-              ) : (
-                <div className="rounded-xl border border-white/10 bg-black/25 p-4 text-white/70">
-                  <p className="font-medium text-white">
-                    {completedInternships.length > 0
-                      ? "You are eligible for your included Internship Certificate (₹0 extra)!"
-                      : "Included automatically on programme & internship approval."}
-                  </p>
-                  <p className="mt-1 leading-5 text-white/55">
-                    Every programme includes your official QR-verified Internship Completion Certificate at ₹0 extra once learning, project, and internship tasks pass mentor approval.
-                  </p>
+
+                  {track && (
+                    <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <Briefcase size={12} className="shrink-0 text-accent" aria-hidden="true" />
+                      <span>
+                        Included Internship: <strong className="text-foreground">{track.title}</strong> (
+                        {app ? app.status.replaceAll("_", " ") : "included"})
+                      </span>
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+                  <span className="text-[11px] text-muted-foreground">
+                    Mentor: {course.mentorName}
+                  </span>
                   <Link
-                    href="/certificates"
-                    className="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[#f4f3ef] px-4 py-2 font-medium text-[#111111]"
+                    href={`/programmes/${course.slug}`}
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 whitespace-nowrap shrink-0"
                   >
-                    {completedInternships.length > 0 ? "Download Certificate" : "Check Eligibility"}{" "}
-                    <ArrowUpRight size={12} aria-hidden="true" />
+                    Open Learning Workspace
+                    <ArrowRight size={13} aria-hidden="true" />
                   </Link>
                 </div>
-              )}
-            </div>
-          </section>
+              </article>
+            ))}
 
-          {/* Mentor Replies */}
-          <section className="rounded-2xl border border-white/10 bg-[#111111] p-6">
-            <h2 className="flex items-center gap-2 text-base font-medium">
-              <MessageSquare size={15} className="text-[#b9a9d6]" aria-hidden="true" />
-              <span>Mentor messages ({messages.length})</span>
-            </h2>
-            <div className="mt-4 space-y-2.5 text-xs">
-              {messages.slice(0, 3).map((m) => (
-                <div
-                  key={m.id}
-                  className="rounded-xl border border-white/10 bg-black/25 p-3.5"
+            {standaloneApplications.map(({ app, track, matchedCourse }) => (
+              <article
+                key={app.id}
+                className="tgl-glass flex flex-col justify-between gap-5 rounded-3xl p-6"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="font-medium text-accent">
+                      Internship Track · {track.duration_weeks} weeks
+                    </span>
+                    <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 font-medium capitalize text-emerald-700 dark:text-emerald-300">
+                      {app.status.replaceAll("_", " ")}
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-semibold tracking-[-0.03em] text-foreground">
+                    {track.title}
+                  </h3>
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    {track.description}
+                  </p>
+                </div>
+                <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+                  <span className="text-[11px] text-muted-foreground">
+                    {(track.tasks ?? []).length} sprint tasks included
+                  </span>
+                  <Link
+                    href={matchedCourse ? `/programmes/${matchedCourse.slug}` : "/internships"}
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+                  >
+                    {matchedCourse ? "Open Unified Workspace" : "Open Internship"}
+                    <ArrowRight size={13} aria-hidden="true" />
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="tgl-glass rounded-3xl p-8 text-center text-xs text-muted-foreground">
+            <p className="text-sm font-medium text-foreground">
+              {enrolledItems.length === 0
+                ? `Welcome, ${learnerName}. You haven't enrolled in a programme yet.`
+                : "No programmes match your active filter."}
+            </p>
+            <p className="mt-1">
+              {enrolledItems.length === 0
+                ? "Explore available programmes to see modules, projects, and included certificates."
+                : "Clear or switch filters above to see your active programmes."}
+            </p>
+            <div className="mt-4 flex justify-center gap-3">
+              {enrolledItems.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter("all");
+                    setCategoryFilter("All");
+                  }}
+                  className="rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
                 >
-                  <p className="font-medium text-[#f4f3ef]">
-                    {m.authorName} · {m.topic}
-                  </p>
-                  <p className="mt-1 text-white/65">{m.body}</p>
+                  Show all enrolled
+                </button>
+              ) : (
+                <Link
+                  href="/programmes"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-accent px-5 py-2.5 text-xs font-medium text-accent-foreground"
+                >
+                  Explore Programmes <ArrowUpRight size={13} />
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Bottom Row: Available Catalog Preview + Mentor Feedback */}
+      <div className="grid gap-6 lg:grid-cols-[1.2fr_.8fr]">
+        {exploreProgrammes.length > 0 && (
+          <section className="tgl-glass rounded-3xl p-6">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+                <FolderGit2 size={16} className="text-accent" aria-hidden="true" />
+                <span>Recommended programmes to unlock</span>
+              </h2>
+              <Link href="/programmes" className="text-xs font-medium text-accent hover:underline">
+                View catalog
+              </Link>
+            </div>
+            <div className="mt-4 space-y-3">
+              {exploreProgrammes.map((course) => (
+                <div
+                  key={course.id}
+                  className="tgl-subsurface flex flex-wrap items-center justify-between gap-4 rounded-2xl p-4 text-xs"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <Lock size={11} aria-hidden="true" />
+                      {course.category} · {formatInrFromPaise(course.pricePaise)} INR all-inclusive
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">
+                      {course.title}
+                    </p>
+                    <p className="mt-0.5 truncate text-muted-foreground">
+                      {course.skills.slice(0, 3).join(" · ")}
+                    </p>
+                  </div>
+                  <Link
+                    href={`/programmes/${course.slug}`}
+                    className="inline-flex min-h-10 items-center rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30 whitespace-nowrap shrink-0"
+                  >
+                    Preview &amp; Enrol
+                  </Link>
                 </div>
               ))}
-              {messages.length === 0 && (
-                <p className="text-white/50">
-                  Ask your mentor a question anytime from your project workspace.
-                </p>
-              )}
             </div>
           </section>
-        </div>
+        )}
+
+        <section className="tgl-glass rounded-3xl p-6">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+              <MessageSquare size={15} className="text-accent" aria-hidden="true" />
+              <span>Recent mentor messages ({messages.length})</span>
+            </h2>
+            <Link href="/certificates" className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline">
+              <Award size={13} aria-hidden="true" />
+              Certificates
+            </Link>
+          </div>
+          <div className="mt-4 space-y-2.5 text-xs">
+            {messages.slice(0, 3).map((m) => (
+              <div key={m.id} className="tgl-subsurface rounded-2xl p-3.5">
+                <p className="font-semibold text-foreground">
+                  {m.authorName} · {m.topic}
+                </p>
+                <p className="mt-1 leading-5 text-muted-foreground">{m.body}</p>
+              </div>
+            ))}
+            {messages.length === 0 && (
+              <p className="text-muted-foreground">
+                Ask a mentor question directly inside your unified programme workspace.
+              </p>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );

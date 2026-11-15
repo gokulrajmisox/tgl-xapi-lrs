@@ -43,21 +43,21 @@ export function StudentJourneyTracker({ stages }: { stages: JourneyStageState[] 
   return (
     <section
       aria-labelledby="journey-tracker-heading"
-      className="rounded-3xl border border-white/10 bg-[#111111] p-5 sm:p-7"
+      className="tgl-glass rounded-3xl p-5 sm:p-7"
     >
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-4">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.18em] text-[#b9a9d6]">
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-accent">
             Your Programme Journey
           </p>
           <h2
             id="journey-tracker-heading"
-            className="mt-1.5 text-lg font-medium tracking-[-0.03em] text-[#f4f3ef] sm:text-xl"
+            className="mt-1.5 text-lg font-semibold tracking-[-0.03em] text-foreground sm:text-xl"
           >
             Enrolled → Learning → Project → Internship → Completed → Certificate Issued
           </h2>
         </div>
-        <span className="font-mono text-xs tabular-nums text-[#b9a9d6]">
+        <span className="font-mono text-xs tabular-nums text-accent">
           {completedCount} of {stages.length} stages completed
         </span>
       </div>
@@ -78,26 +78,26 @@ export function StudentJourneyTracker({ stages }: { stages: JourneyStageState[] 
             >
               <Link
                 href={stage.href}
-                className={`flex min-h-[136px] h-full flex-col justify-between rounded-2xl border p-4 transition-colors ${
+                className={`flex h-full min-h-[136px] flex-col justify-between rounded-2xl border p-4 transition-colors ${
                   isCompleted
-                    ? "border-emerald-400/35 bg-emerald-950/20 hover:border-emerald-400/60"
+                    ? "border-emerald-500/35 bg-emerald-500/10 hover:border-emerald-500/60"
                     : isActive
-                      ? "border-[#b9a9d6]/55 bg-[#b9a9d6]/12 hover:border-[#b9a9d6]"
-                      : "border-white/10 bg-black/25 hover:border-white/25"
+                      ? "border-accent/55 bg-accent/10 hover:border-accent"
+                      : "border-border bg-background/50 hover:border-foreground/25"
                 }`}
               >
                 <div>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-[11px] text-white/55">
+                    <span className="font-mono text-[11px] text-muted-foreground">
                       0{stage.step}
                     </span>
                     <span
                       className={`inline-flex items-center gap-1 text-[11px] font-medium ${
                         isCompleted
-                          ? "text-emerald-300"
+                          ? "text-emerald-600 dark:text-emerald-300"
                           : isActive
-                            ? "text-[#b9a9d6]"
-                            : "text-white/55"
+                            ? "text-accent"
+                            : "text-muted-foreground"
                       }`}
                     >
                       {isCompleted ? (
@@ -119,20 +119,20 @@ export function StudentJourneyTracker({ stages }: { stages: JourneyStageState[] 
                     </span>
                   </div>
 
-                  <p className="mt-2.5 flex items-center gap-2 text-sm font-medium text-[#f4f3ef]">
-                    <Icon size={14} className="shrink-0 text-[#b9a9d6]" aria-hidden="true" />
+                  <p className="mt-2.5 flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Icon size={14} className="shrink-0 text-accent" aria-hidden="true" />
                     <span className="truncate">{stage.label}</span>
                   </p>
-                  <p className="mt-1 text-xs leading-5 text-white/65">{stage.detail}</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{stage.detail}</p>
                 </div>
 
                 <span
                   className={`mt-3 inline-flex items-center gap-1 text-xs font-medium ${
                     isCompleted
-                      ? "text-emerald-300"
+                      ? "text-emerald-600 dark:text-emerald-300"
                       : isActive
-                        ? "text-[#b9a9d6]"
-                        : "text-white/70"
+                        ? "text-accent"
+                        : "text-foreground/75"
                   }`}
                 >
                   {isCompleted ? "View" : isActive ? "Open" : "Preview"}

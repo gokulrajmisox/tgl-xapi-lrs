@@ -57,6 +57,15 @@ export function createMockSupabaseClient(): any {
         data: { user: null, session: null },
         error: { message: "Supabase is not configured.", code: "not_configured", status: 503 },
       }),
+      signInWithOAuth: async () => ({
+        data: { provider: "google", url: null },
+        error: {
+          message:
+            "Google Sign-In requires NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY in your environment.",
+          code: "not_configured",
+          status: 503,
+        },
+      }),
       signUp: async () => ({
         data: { user: null, session: null },
         error: { message: "Supabase is not configured.", code: "not_configured", status: 503 },
@@ -70,6 +79,9 @@ export function createMockSupabaseClient(): any {
         error: { message: "Supabase is not configured." },
       }),
       signOut: async () => ({ error: null }),
+      onAuthStateChange: () => ({
+        data: { subscription: { unsubscribe: () => {} } },
+      }),
     },
     from: () => createQueryBuilder(false),
     rpc: async () => ({

@@ -57,7 +57,7 @@ type Actor = {
 function TaskStatusPill({ status }: { status?: InternshipTaskSubmission["status"] }) {
   if (status === "approved") {
     return (
-      <span className="inline-flex items-center gap-1.5 font-medium text-emerald-300">
+      <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-300">
         <CheckCircle2 size={13} aria-hidden="true" />
         Approved
       </span>
@@ -65,7 +65,7 @@ function TaskStatusPill({ status }: { status?: InternshipTaskSubmission["status"
   }
   if (status === "revision_required") {
     return (
-      <span className="inline-flex items-center gap-1.5 font-medium text-amber-300">
+      <span className="inline-flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-300">
         <AlertCircle size={13} aria-hidden="true" />
         Revision Required
       </span>
@@ -73,14 +73,14 @@ function TaskStatusPill({ status }: { status?: InternshipTaskSubmission["status"
   }
   if (status === "submitted") {
     return (
-      <span className="inline-flex items-center gap-1.5 font-medium text-[#b9a9d6]">
+      <span className="inline-flex items-center gap-1.5 font-medium text-[var(--accent)]">
         <Clock3 size={13} aria-hidden="true" />
         Waiting for mentor review
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 font-medium text-white/60">
+    <span className="inline-flex items-center gap-1.5 font-medium text-muted-foreground">
       <Clock3 size={13} aria-hidden="true" />
       Ready to complete
     </span>
@@ -213,51 +213,51 @@ export function InternshipsWorkspace() {
 
   return (
     <div className="space-y-12">
-      <div className="rounded-2xl border border-white/10 bg-[#111111] p-6 sm:p-8">
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-5">
+      <div className="tgl-glass rounded-2xl p-6 sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-5">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.18em] text-[#b9a9d6]">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--accent)]">
               Bundled Practical Internships · Included with Programme Enrolment
             </p>
-            <h2 className="mt-2 text-2xl font-medium tracking-[-0.04em]">
+            <h2 className="mt-2 text-2xl font-medium tracking-[-0.04em] text-foreground">
               Submit internship tasks and earn your included completion certificate
             </h2>
           </div>
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-300">
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-300">
             <CheckCircle2 size={14} aria-hidden="true" />
             Included · ₹0 Extra Fee
           </span>
         </div>
-        <p className="mt-4 max-w-3xl text-sm leading-6 text-white/65">
+        <p className="mt-4 max-w-3xl text-sm leading-6 text-muted-foreground">
           When you enrol in a{" "}
-          <Link href="/programmes" className="text-[#b9a9d6] underline underline-offset-4 hover:text-white">
+          <Link href="/programmes" className="font-medium text-[var(--accent)] underline underline-offset-4 hover:opacity-80">
             TGL Internship Programme (₹499–₹1,999 INR all-inclusive)
           </Link>
-          , your linked internship workspace is activated automatically. Complete the course, project, and tasks below to receive your official{" "}
-          <strong className="text-white">INTERNSHIP CERTIFICATE</strong> at ₹0 additional cost.
+          , your linked internship workspace is activated inside your unified learning page. Complete the course, project, and tasks below to receive your official{" "}
+          <strong className="text-foreground">INTERNSHIP CERTIFICATE</strong> at ₹0 additional cost.
         </p>
       </div>
 
       {notice && (
-        <p role="status" className="rounded-xl border border-emerald-400/25 bg-emerald-400/10 p-4 text-xs text-emerald-200">
+        <p role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-700 dark:text-emerald-200">
           {notice}
         </p>
       )}
       {error && (
-        <p role="alert" className="rounded-xl border border-rose-400/25 bg-rose-400/10 p-4 text-xs text-rose-200">
+        <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-700 dark:text-rose-200">
           {error}
         </p>
       )}
 
       {loading ? (
         <div className="grid gap-6 lg:grid-cols-[1.2fr_.8fr]">
-          <div className="h-80 animate-pulse rounded-2xl border border-white/10 bg-white/[0.03]" />
-          <div className="h-80 animate-pulse rounded-2xl border border-white/10 bg-white/[0.03]" />
+          <div className="tgl-glass h-80 rounded-2xl opacity-60" />
+          <div className="tgl-glass h-80 rounded-2xl opacity-60" />
         </div>
       ) : (
         <div className="grid gap-8 lg:grid-cols-[1.2fr_.8fr]">
           <section className="space-y-4">
-            <h3 className="text-lg font-medium tracking-[-0.03em]">
+            <h3 className="text-lg font-medium tracking-[-0.03em] text-foreground">
               Available internships &amp; tasks
             </h3>
             <div className="grid gap-5">
@@ -267,67 +267,73 @@ export function InternshipsWorkspace() {
                 const tasks = track.tasks ?? [];
                 const taskSubs = existingApp?.task_submissions ?? [];
                 const requiredCourseName =
-                  eligibility?.requiredCourseTitle ?? "Required Course";
+                  eligibility?.requiredCourseTitle ?? "Required Programme";
                 const requiredProjectName =
                   eligibility?.requiredProjectTitle ?? "Required Project";
+                const courseReady = Boolean(
+                  eligibility?.courseEnrolled && eligibility?.quizPassed,
+                );
 
                 return (
                   <article
                     key={track.id}
-                    className={`rounded-2xl border bg-[#111111] p-6 transition-colors ${
+                    className={`tgl-glass rounded-2xl p-6 transition-colors ${
                       selectedInternshipId === track.id
-                        ? "border-[#b9a9d6]/50"
-                        : "border-white/10"
+                        ? "border-[var(--accent)]/55"
+                        : ""
                     }`}
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-white/55">
+                    <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
                       <span>{track.track}</span>
-                      <span>
+                      <span className="tabular-nums">
                         {track.duration_weeks} weeks · {tasks.length} tasks · Included in programme
                       </span>
                     </div>
-                    <h4 className="mt-2 text-lg font-medium tracking-[-0.03em] text-[#f4f3ef]">
+                    <h4 className="mt-2 text-lg font-medium tracking-[-0.03em] text-foreground">
                       {track.title}
                     </h4>
-                    <p className="mt-2 text-xs leading-6 text-white/65">{track.description}</p>
+                    <p className="mt-2 text-xs leading-6 text-muted-foreground">{track.description}</p>
 
                     {eligibility?.requiredSkills && eligibility.requiredSkills.length > 0 && (
-                      <p className="mt-3 text-xs text-[#b9a9d6]">
+                      <p className="mt-3 text-xs text-[var(--accent)]">
                         Required skills:{" "}
-                        <span className="text-white/85">
+                        <span className="text-foreground">
                           {eligibility.requiredSkills.join(" · ")}
                         </span>
                       </p>
                     )}
 
-                    {/* Eligibility Checklist Box — Plain Course & Project Titles, Zero Slugs */}
-                    <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-4 text-xs">
-                      <p className="font-medium text-white/90">What you need before applying</p>
+                    <div className="tgl-subsurface mt-4 rounded-xl p-4 text-xs">
+                      <p className="font-medium text-foreground">What you need before applying</p>
                       <div className="mt-2.5 flex flex-wrap items-center gap-4 text-xs">
                         {track.required_course_slug && (
                           <Link
-                            href={`/courses/${track.required_course_slug}`}
+                            href={`/programmes/${track.required_course_slug}`}
                             className={`inline-flex items-center gap-1.5 ${
-                              eligibility?.courseEnrolled && eligibility?.quizPassed
-                                ? "text-emerald-300"
-                                : "text-[#b9a9d6] hover:underline"
+                              courseReady
+                                ? "text-emerald-600 dark:text-emerald-300"
+                                : "text-[var(--accent)] hover:underline"
                             }`}
                           >
-                            {eligibility?.courseEnrolled && eligibility?.quizPassed ? (
+                            {courseReady ? (
                               <CheckCircle2 size={13} aria-hidden="true" />
                             ) : (
                               <Lock size={13} aria-hidden="true" />
                             )}
-                            Course &amp; quiz: {requiredCourseName}
+                            Modules &amp; quiz: {requiredCourseName}
                           </Link>
                         )}
                         {track.required_project_slug && track.require_project_approval && (
                           <Link
-                            href={`/projects/${track.required_project_slug}`}
+                            href={
+                              track.required_course_slug
+                                ? `/programmes/${track.required_course_slug}`
+                                : `/projects/${track.required_project_slug}`
+                            }
                             className={`inline-flex items-center gap-1.5 ${
                               eligibility?.projectApproved
-                                ? "text-emerald-300"
-                                : "text-white/75 hover:underline"
+                                ? "text-emerald-600 dark:text-emerald-300"
+                                : "text-muted-foreground hover:text-foreground hover:underline"
                             }`}
                           >
                             {eligibility?.projectApproved ? (
@@ -342,24 +348,26 @@ export function InternshipsWorkspace() {
                     </div>
 
                     {existingApp ? (
-                      <div className="mt-5 space-y-5 border-t border-white/10 pt-5">
+                      <div className="mt-5 space-y-5 border-t border-border pt-5">
                         <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-                          <span className="inline-flex items-center gap-1.5 text-[#b9a9d6]">
+                          <span className="inline-flex items-center gap-1.5 text-[var(--accent)]">
                             {existingApp.mentor_approved ? (
-                              <CheckCircle2 size={14} className="text-emerald-300" aria-hidden="true" />
+                              <CheckCircle2 size={14} className="text-emerald-600 dark:text-emerald-300" aria-hidden="true" />
                             ) : (
                               <Clock3 size={14} aria-hidden="true" />
                             )}
                             Application status:{" "}
-                            <strong className="capitalize text-white">
+                            <strong className="capitalize text-foreground">
                               {existingApp.status.replaceAll("_", " ")}
                             </strong>
                           </span>
-                          <span className="text-white/70">
+                          <span className="text-muted-foreground">
                             Final review:{" "}
                             <strong
                               className={
-                                existingApp.mentor_approved ? "text-emerald-300" : "text-white/85"
+                                existingApp.mentor_approved
+                                  ? "text-emerald-600 dark:text-emerald-300"
+                                  : "text-foreground"
                               }
                             >
                               {existingApp.mentor_approved
@@ -369,9 +377,8 @@ export function InternshipsWorkspace() {
                           </span>
                         </div>
 
-                        {/* Assigned Tasks & Individual Task Submissions */}
                         <div className="space-y-3">
-                          <p className="text-[11px] uppercase tracking-[0.16em] text-white/55">
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground tabular-nums">
                             Tasks &amp; Deadlines ({taskSubs.filter((t) => t.status === "approved").length}/{tasks.length} approved)
                           </p>
                           {tasks.map((task) => {
@@ -382,32 +389,32 @@ export function InternshipsWorkspace() {
                             return (
                               <div
                                 key={task.id}
-                                className="rounded-xl border border-white/10 bg-black/30 p-4 text-xs"
+                                className="tgl-subsurface rounded-xl p-4 text-xs"
                               >
                                 <div className="flex flex-wrap items-start justify-between gap-3">
                                   <div>
-                                    <p className="font-medium text-[#f4f3ef]">{task.title}</p>
-                                    <p className="mt-1 text-[11px] text-[#b9a9d6]">
+                                    <p className="font-medium text-foreground">{task.title}</p>
+                                    <p className="mt-1 text-[11px] text-[var(--accent)]">
                                       Due: {task.deadlineLabel} · How to submit: {task.deliverableFormat}
                                     </p>
                                   </div>
                                   <TaskStatusPill status={sub?.status} />
                                 </div>
-                                <p className="mt-2 leading-5 text-white/65">{task.brief}</p>
+                                <p className="mt-2 leading-5 text-muted-foreground">{task.brief}</p>
 
                                 {sub && (
-                                  <div className="mt-3 rounded-lg border border-white/10 bg-black/40 p-3 text-xs">
+                                  <div className="mt-3 rounded-lg border border-border bg-background/60 p-3 text-xs">
                                     <a
                                       href={sub.submissionUrl}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="font-mono text-[11px] text-[#b9a9d6] underline"
+                                      className="font-mono text-[11px] text-[var(--accent)] underline"
                                     >
                                       {sub.submissionUrl}
                                     </a>
-                                    <p className="mt-1 text-white/75">{sub.summary}</p>
+                                    <p className="mt-1 text-foreground/85">{sub.summary}</p>
                                     {sub.mentorFeedback && (
-                                      <p className="mt-1.5 text-emerald-200">
+                                      <p className="mt-1.5 text-emerald-700 dark:text-emerald-200">
                                         Mentor feedback ({sub.scoreLabel ?? sub.status}): {sub.mentorFeedback}
                                       </p>
                                     )}
@@ -415,7 +422,7 @@ export function InternshipsWorkspace() {
                                 )}
 
                                 {needsWork && (
-                                  <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
+                                  <div className="mt-3 space-y-2 border-t border-border pt-3">
                                     <input
                                       type="url"
                                       placeholder="Paste your link (GitHub, doc, or demo URL)"
@@ -426,7 +433,7 @@ export function InternshipsWorkspace() {
                                           [fieldKey]: e.target.value,
                                         }))
                                       }
-                                      className="h-11 w-full rounded-lg border border-white/10 bg-[#151515] px-3 text-xs text-white"
+                                      className="h-11 w-full rounded-lg border border-border bg-input px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                     />
                                     <div className="flex flex-wrap gap-2">
                                       <input
@@ -439,13 +446,13 @@ export function InternshipsWorkspace() {
                                             [fieldKey]: e.target.value,
                                           }))
                                         }
-                                        className="h-11 min-w-[200px] flex-1 rounded-lg border border-white/10 bg-[#151515] px-3 text-xs text-white"
+                                        className="h-11 min-w-[200px] flex-1 rounded-lg border border-border bg-input px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                       />
                                       <button
                                         type="button"
                                         disabled={busy}
                                         onClick={() => void handleSubmitTask(existingApp.id, task.id)}
-                                        className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[#f4f3ef] px-5 py-2 text-xs font-medium text-[#111111] disabled:opacity-45 whitespace-nowrap shrink-0"
+                                        className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-primary px-5 py-2 text-xs font-medium text-primary-foreground disabled:opacity-45"
                                       >
                                         {sub?.status === "revision_required" ? (
                                           <RotateCcw size={13} aria-hidden="true" />
@@ -465,39 +472,39 @@ export function InternshipsWorkspace() {
                         </div>
 
                         {existingApp.mentor_approved && existingApp.status === "completed" ? (
-                          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-400/30 bg-emerald-950/20 p-4 text-xs">
+                          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs">
                             <div>
-                              <p className="flex items-center gap-1.5 font-medium text-emerald-200">
+                              <p className="flex items-center gap-1.5 font-medium text-emerald-700 dark:text-emerald-200">
                                 <ShieldCheck size={14} aria-hidden="true" />
                                 Internship Completed &amp; Mentor Approved
                               </p>
-                              <p className="mt-1 text-white/75">
+                              <p className="mt-1 text-foreground/85">
                                 {existingApp.final_evaluation_notes || existingApp.mentor_notes}
                               </p>
                             </div>
                             <Link
                               href="/certificates"
-                              className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[#f4f3ef] px-5 py-2.5 font-medium text-[#111111] whitespace-nowrap shrink-0"
+                              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-primary px-5 py-2.5 font-medium text-primary-foreground"
                             >
                               <Award size={14} aria-hidden="true" />
                               Open Included Certificate <ArrowUpRight size={13} aria-hidden="true" />
                             </Link>
                           </div>
                         ) : (
-                          <p className="text-xs text-white/55">
+                          <p className="text-xs text-muted-foreground">
                             Submit every task above. Once mentors approve all tasks, your included completion certificate is issued at ₹0 extra.
                           </p>
                         )}
                       </div>
                     ) : (
-                      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
+                      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
                         {eligibility && !eligibility.eligible ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-amber-200">
+                          <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-200">
                             <Lock size={13} className="shrink-0" aria-hidden="true" />
                             Complete first: {eligibility.missingRequirements.join(" · ")}
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-emerald-300">
+                          <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-300">
                             <CheckCircle2 size={13} className="shrink-0" aria-hidden="true" />
                             Prerequisites complete · Ready to apply
                           </span>
@@ -506,7 +513,7 @@ export function InternshipsWorkspace() {
                         <button
                           type="button"
                           onClick={() => setSelectedInternshipId(track.id)}
-                          className="min-h-11 rounded-full border border-white/15 px-4 py-2 text-xs text-white/90 hover:border-white/35 hover:text-white"
+                          className="min-h-11 rounded-full border border-border px-4 py-2 text-xs text-foreground transition-colors hover:bg-muted/40"
                         >
                           View Internship
                         </button>
@@ -518,22 +525,22 @@ export function InternshipsWorkspace() {
             </div>
           </section>
 
-          <section className="self-start rounded-2xl border border-white/10 bg-[#111111] p-6 sm:p-7">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-[#b9a9d6]">
+          <section className="tgl-glass self-start rounded-2xl p-6 sm:p-7">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--accent)]">
               Internship Application (Free)
             </p>
-            <h3 className="mt-2 text-xl font-medium tracking-[-0.03em]">
+            <h3 className="mt-2 text-xl font-medium tracking-[-0.03em] text-foreground">
               Apply when ready
             </h3>
-            <p className="mt-2 text-xs leading-5 text-white/60">
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
               Finish the matching course, quiz, and project review first. Participation in the internship is always free.
             </p>
 
             {user ? (
               <form onSubmit={handleApply} className="mt-5 space-y-4">
                 {!user.name && (
-                  <label className="block text-xs text-white/70">
-                    Full name <span className="text-white/35">required for your learner record</span>
+                  <label className="block text-xs text-foreground">
+                    Full name <span className="text-muted-foreground">required for your learner record</span>
                     <input
                       type="text"
                       autoComplete="name"
@@ -543,17 +550,17 @@ export function InternshipsWorkspace() {
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       placeholder="Your full name as it should appear on records"
-                      className="mt-1.5 h-11 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-xs text-white"
+                      className="mt-1.5 h-11 w-full rounded-lg border border-border bg-input px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </label>
                 )}
-                <label className="block text-xs text-white/70">
+                <label className="block text-xs text-foreground">
                   Selected internship
                   <select
                     value={selectedInternshipId}
                     onChange={(e) => setSelectedInternshipId(e.target.value)}
                     required
-                    className="mt-1.5 h-11 w-full rounded-lg border border-white/10 bg-[#151515] px-3 text-xs text-white"
+                    className="mt-1.5 h-11 w-full rounded-lg border border-border bg-input px-3 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     {internships.map((track) => (
                       <option key={track.id} value={track.id}>
@@ -564,28 +571,28 @@ export function InternshipsWorkspace() {
                 </label>
 
                 {selectedEligibility && !selectedEligibility.eligible && (
-                  <div className="rounded-xl border border-amber-400/30 bg-amber-950/20 p-4 text-xs text-amber-100">
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-900 dark:text-amber-100">
                     <p className="font-medium">
                       Finish these steps to unlock {selectedTrack?.title}:
                     </p>
-                    <ul className="mt-2 list-disc space-y-1 pl-4 text-white/80">
+                    <ul className="mt-2 list-disc space-y-1 pl-4 opacity-90">
                       {selectedEligibility.missingRequirements.map((req) => (
                         <li key={req}>{req}</li>
                       ))}
                     </ul>
                     {selectedTrack?.required_course_slug && (
                       <Link
-                        href={`/courses/${selectedTrack.required_course_slug}`}
-                        className="mt-3 inline-flex min-h-11 items-center gap-1.5 font-medium text-[#b9a9d6] hover:underline"
+                        href={`/programmes/${selectedTrack.required_course_slug}`}
+                        className="mt-3 inline-flex min-h-11 items-center gap-1.5 font-medium text-[var(--accent)] hover:underline"
                       >
-                        Go to {selectedEligibility.requiredCourseTitle ?? "required course"}{" "}
+                        Go to {selectedEligibility.requiredCourseTitle ?? "required programme"}{" "}
                         <ArrowUpRight size={13} aria-hidden="true" />
                       </Link>
                     )}
                   </div>
                 )}
 
-                <label className="block text-xs text-white/70">
+                <label className="block text-xs text-foreground">
                   What would you like to learn and build in this internship?
                   <textarea
                     required
@@ -594,18 +601,18 @@ export function InternshipsWorkspace() {
                     value={motivation}
                     onChange={(e) => setMotivation(e.target.value)}
                     placeholder="Tell us your goals for the weekly tasks and mentor reviews..."
-                    className="mt-1.5 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white"
+                    className="mt-1.5 w-full rounded-lg border border-border bg-input px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
 
-                <label className="block text-xs text-white/70">
+                <label className="block text-xs text-foreground">
                   Portfolio or GitHub URL (optional)
                   <input
                     type="url"
                     value={portfolioUrl}
                     onChange={(e) => setPortfolioUrl(e.target.value)}
                     placeholder="https://github.com/username"
-                    className="mt-1.5 h-11 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-xs text-white"
+                    className="mt-1.5 h-11 w-full rounded-lg border border-border bg-input px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
 
@@ -616,7 +623,7 @@ export function InternshipsWorkspace() {
                     !selectedInternshipId ||
                     (selectedEligibility ? !selectedEligibility.eligible : false)
                   }
-                  className="min-h-11 w-full rounded-full bg-[#f4f3ef] px-5 py-3 text-xs font-medium text-[#111111] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
+                  className="min-h-11 w-full rounded-full bg-primary px-5 py-3 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   {busy
                     ? "Submitting..."
@@ -626,11 +633,11 @@ export function InternshipsWorkspace() {
                 </button>
               </form>
             ) : (
-              <div className="mt-6 rounded-xl border border-dashed border-white/15 p-5 text-xs text-white/60">
+              <div className="mt-6 rounded-xl border border-dashed border-border p-5 text-xs text-muted-foreground">
                 <p>Sign in with your TGL student account to apply for an internship.</p>
                 <Link
                   href="/auth/login?next=/internships"
-                  className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111]"
+                  className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-medium text-primary-foreground"
                 >
                   Sign in to apply <ArrowUpRight size={13} />
                 </Link>

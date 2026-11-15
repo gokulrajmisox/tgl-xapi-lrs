@@ -35,18 +35,18 @@ export default async function VerifyCertificatePage({
     : "";
 
   return (
-    <main className="min-h-screen bg-[#090909] text-[#f4f3ef]">
+    <main className="min-h-screen bg-background text-foreground">
       <Header />
       <section className="px-6 pb-24 pt-36 md:px-12 md:pt-44 lg:px-20">
         <div className="mx-auto max-w-[920px]">
           <Link
             href="/certificates"
-            className="mb-10 inline-flex items-center gap-2 text-xs text-white/45 transition-colors hover:text-white"
+            className="mb-10 inline-flex items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft size={13} /> Certificates directory
           </Link>
 
-          <p className="text-[10px] uppercase tracking-[0.22em] text-white/40">
+          <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
             Touch Grass Later · Public Certificate Registry
           </p>
           <h1 className="mt-4 text-4xl font-medium tracking-[-0.06em] sm:text-5xl">
@@ -54,14 +54,14 @@ export default async function VerifyCertificatePage({
           </h1>
 
           {!cert ? (
-            <section className="mt-8 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-7">
-              <div className="flex items-center gap-3 text-amber-200">
+            <section className="mt-8 rounded-2xl border border-amber-500/35 bg-amber-500/10 p-7">
+              <div className="flex items-center gap-3 text-amber-700 dark:text-amber-200">
                 <ShieldAlert size={20} aria-hidden="true" />
                 <h2 className="text-lg font-medium">Certificate record not found</h2>
               </div>
-              <p className="mt-3 text-sm leading-6 text-white/70">
+              <p className="mt-3 text-sm leading-6 text-foreground/80">
                 No issued certificate matches ID{" "}
-                <code className="font-mono text-white">{decodedId}</code>. Verify the ID printed on the document or contact Touch Grass Later.
+                <code className="font-mono text-foreground">{decodedId}</code>. Verify the ID printed on the document or contact Touch Grass Later.
               </p>
             </section>
           ) : (
@@ -69,45 +69,45 @@ export default async function VerifyCertificatePage({
               <section
                 className={`rounded-2xl border p-6 ${
                   isRevoked
-                    ? "border-rose-400/40 bg-rose-500/10"
+                    ? "border-rose-500/40 bg-rose-500/10"
                     : isAuthentic
-                      ? "border-emerald-400/35 bg-emerald-500/10"
-                      : "border-white/15 bg-white/[0.03]"
+                      ? "border-emerald-500/35 bg-emerald-500/10"
+                      : "tgl-glass"
                 }`}
               >
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     {isRevoked ? (
-                      <ShieldX size={22} className="text-rose-300" aria-hidden="true" />
+                      <ShieldX size={22} className="text-rose-600 dark:text-rose-300" aria-hidden="true" />
                     ) : (
-                      <ShieldCheck size={22} className="text-emerald-300" aria-hidden="true" />
+                      <ShieldCheck size={22} className="text-emerald-600 dark:text-emerald-300" aria-hidden="true" />
                     )}
                     <div>
-                      <p className="text-base font-medium">
+                      <p className="text-base font-medium text-foreground">
                         {isRevoked
                           ? "Revoked Certificate — Invalid"
                           : isAuthentic
                             ? "Authentic & Active Certificate"
                             : "Pending Approval"}
                       </p>
-                      <p className="mt-0.5 font-mono text-xs text-white/70">
+                      <p className="mt-0.5 font-mono text-xs text-muted-foreground">
                         ID: {cert.certificate_id}
                       </p>
                     </div>
                   </div>
-                  <span className="text-xs font-medium uppercase tracking-[0.14em] text-white/75">
+                  <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                     {cert.issuance_status}
                   </span>
                 </div>
 
                 {isRevoked && cert.revocation_reason && (
-                  <p className="mt-4 border-t border-rose-300/20 pt-3 text-xs text-rose-200">
+                  <p className="mt-4 border-t border-rose-500/20 pt-3 text-xs text-rose-700 dark:text-rose-200">
                     Audit revocation reason: {cert.revocation_reason}
                   </p>
                 )}
               </section>
 
-              <article className="rounded-2xl border border-[#d9d5cc] bg-[#f4f3ef] p-7 text-[#111111] sm:p-10">
+              <article className="rounded-2xl border border-[#d9d5cc] bg-[#f4f3ef] p-7 text-[#111111] shadow-sm sm:p-10">
                 <div className="flex flex-col justify-between gap-6 border-b border-black/10 pb-6 sm:flex-row sm:items-end">
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-black/55">

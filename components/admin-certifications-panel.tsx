@@ -450,26 +450,26 @@ export function AdminCertificationsPanel({
     <div
       className={
         embedded
-          ? "text-[#f4f3ef] pb-12 pt-2"
-          : "mx-auto max-w-[1200px] px-6 pb-24 pt-36 text-[#f4f3ef] md:px-12 md:pt-44"
+          ? "pb-12 pt-2 text-foreground"
+          : "mx-auto max-w-[1200px] px-6 pb-24 pt-36 text-foreground md:px-12 md:pt-44"
       }
     >
-      <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
+      <div className="flex flex-wrap items-end justify-between gap-6 border-b border-border pb-8">
         <div>
-          <p className="text-[10px] uppercase tracking-[0.2em] text-white/45">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
             TGL Administration · Payments, Certificates &amp; Email
           </p>
           <h1 className="mt-4 text-4xl font-medium tracking-[-0.06em] sm:text-5xl">
-            Certification &amp; <span className="font-serif italic text-[#b9a9d6]">Payment Console</span>
+            Certification &amp; <span className="font-serif italic text-[var(--accent)]">Payment Console</span>
           </h1>
-          <p className="mt-3 max-w-2xl text-xs leading-6 text-white/55">
+          <p className="mt-3 max-w-2xl text-xs leading-6 text-muted-foreground">
             Inspect Razorpay Programme orders and refunds, evaluate internship tasks, approve completions (auto-issuing ₹0 certificates), revoke certificates with audit notes, and send test emails.
           </p>
         </div>
         <div className="flex items-center gap-3">
           <Link
             href="/programmes"
-            className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/80 hover:border-white/35"
+            className="rounded-full border border-border px-4 py-2 text-xs text-foreground transition-colors hover:bg-muted/40"
           >
             Programme Catalog
           </Link>
@@ -477,7 +477,7 @@ export function AdminCertificationsPanel({
             type="button"
             onClick={() => void loadAll()}
             aria-label="Refresh admin data"
-            className="grid size-9 place-items-center rounded-full border border-white/15 text-white/70 hover:text-white"
+            className="grid size-9 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"
           >
             <RefreshCw size={14} />
           </button>
@@ -485,23 +485,23 @@ export function AdminCertificationsPanel({
       </div>
 
       {isSandbox && (
-        <p className="mt-5 rounded-xl border border-[#b9a9d6]/30 bg-[#b9a9d6]/10 px-4 py-3 text-xs text-[#dfd5ef]">
+        <p className="mt-5 rounded-xl border border-[var(--accent)]/35 bg-[var(--accent)]/10 px-4 py-3 text-xs text-foreground">
           Sandbox mode active (Supabase env vars not set). All state updates, refunds, revocations, auto-issued certificates, and test email logs run in server memory.
         </p>
       )}
 
       {notice && (
-        <p role="status" className="mt-5 flex items-center gap-2 rounded-xl border border-emerald-400/25 bg-emerald-400/10 p-4 text-xs text-emerald-200">
+        <p role="status" className="mt-5 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-700 dark:text-emerald-200">
           <CheckCircle2 size={14} /> {notice}
         </p>
       )}
       {error && (
-        <p role="alert" className="mt-5 flex items-center gap-2 rounded-xl border border-rose-400/25 bg-rose-400/10 p-4 text-xs text-rose-200">
+        <p role="alert" className="mt-5 flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-700 dark:text-rose-200">
           <ShieldAlert size={14} /> {error}
         </p>
       )}
 
-      <div role="tablist" aria-label="Admin sections" className="mt-8 flex flex-wrap gap-2 border-b border-white/10 pb-4">
+      <div role="tablist" aria-label="Admin sections" className="mt-8 flex flex-wrap gap-2 border-b border-border pb-4">
         {(
           [
             ["certificates", `Internships & Certificates (${issuances.length})`],
@@ -515,10 +515,10 @@ export function AdminCertificationsPanel({
             type="button"
             aria-selected={tab === key}
             onClick={() => setTab(key)}
-            className={`rounded-full px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+            className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-xs font-medium transition-colors ${
               tab === key
-                ? "bg-[#f4f3ef] text-[#111111]"
-                : "border border-white/10 text-white/60 hover:text-white"
+                ? "bg-primary text-primary-foreground"
+                : "border border-border text-muted-foreground hover:text-foreground"
             }`}
           >
             {label}
@@ -529,17 +529,17 @@ export function AdminCertificationsPanel({
       {tab === "payments" && (
         <div className="mt-8 space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-lg font-medium">Programme orders, payments &amp; refunds</h2>
+            <h2 className="text-lg font-medium text-foreground">Programme orders, payments &amp; refunds</h2>
             <div className="flex flex-wrap gap-1.5">
               {["all", "captured", "failed", "cancelled", "refunded"].map((status) => (
                 <button
                   key={status}
                   type="button"
                   onClick={() => setPaymentFilter(status)}
-                  className={`rounded-full px-3 py-1.5 text-xs capitalize ${
+                  className={`rounded-full px-3 py-1.5 text-xs capitalize transition-colors ${
                     paymentFilter === status
-                      ? "bg-[#f4f3ef] text-[#111111]"
-                      : "border border-white/10 text-white/60"
+                      ? "bg-primary text-primary-foreground"
+                      : "border border-border text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {status}
@@ -566,20 +566,20 @@ export function AdminCertificationsPanel({
               return (
                 <article
                   key={pay.id}
-                  className="flex flex-col justify-between gap-4 rounded-2xl border border-white/10 bg-[#111111] p-5 md:flex-row md:items-center"
+                  className="tgl-glass flex flex-col justify-between gap-4 rounded-2xl p-5 md:flex-row md:items-center"
                 >
                   <div className="space-y-1 text-xs">
-                    <p className="font-medium text-[#f4f3ef]">
+                    <p className="font-medium text-foreground">
                       {itemTitle} ·{" "}
                       <span className="font-mono tabular-nums">
                         {order ? formatInrFromPaise(order.amount_paise) : "INR"}
                       </span>
                     </p>
-                    <p className="font-mono text-[11px] text-white/50">
+                    <p className="font-mono text-[11px] text-muted-foreground">
                       Payment: {pay.razorpay_payment_id} · Order: {order?.razorpay_order_id}
                     </p>
-                    <p className="text-[11px] text-white/50">
-                      Status: <strong className="capitalize text-[#b9a9d6]">{pay.payment_status}</strong>
+                    <p className="text-[11px] text-muted-foreground">
+                      Status: <strong className="capitalize text-[var(--accent)]">{pay.payment_status}</strong>
                       {pay.failure_reason ? ` · Reason: ${pay.failure_reason}` : ""}
                       {pay.refund_id ? ` · Refund ID: ${pay.refund_id}` : ""}
                     </p>
@@ -594,7 +594,7 @@ export function AdminCertificationsPanel({
                         onChange={(e) =>
                           setRefundReasons((prev) => ({ ...prev, [pay.id]: e.target.value }))
                         }
-                        className="h-9 rounded-lg border border-white/10 bg-black/30 px-3 text-xs text-white"
+                        className="h-9 rounded-lg border border-border bg-input px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                       <button
                         type="button"
@@ -608,7 +608,7 @@ export function AdminCertificationsPanel({
                             reason: (refundReasons[pay.id] || "Admin-approved refund").trim(),
                           })
                         }
-                        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-rose-300/35 px-3.5 py-2 text-xs text-rose-200 hover:bg-rose-300/10"
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-rose-500/35 px-3.5 py-2 text-xs text-rose-700 transition-colors hover:bg-rose-500/10 dark:text-rose-200"
                       >
                         <RotateCcw size={12} /> Process refund
                       </button>
@@ -618,7 +618,7 @@ export function AdminCertificationsPanel({
               );
             })}
             {filteredPayments.length === 0 && (
-              <p className="rounded-xl border border-dashed border-white/15 p-6 text-xs text-white/45">
+              <p className="rounded-xl border border-dashed border-border p-6 text-xs text-muted-foreground">
                 No payment records match the selected filter.
               </p>
             )}
@@ -630,7 +630,7 @@ export function AdminCertificationsPanel({
         <div className="mt-8 space-y-10">
           <div className="grid gap-8 lg:grid-cols-[1.2fr_.8fr]">
             <section className="space-y-4">
-              <h2 className="text-lg font-medium">
+              <h2 className="text-lg font-medium text-foreground">
                 Internship tasks, final evaluation &amp; completion approval ({applications.length})
               </h2>
               <div className="space-y-4">
@@ -642,18 +642,18 @@ export function AdminCertificationsPanel({
                   return (
                     <article
                       key={app.id}
-                      className="rounded-2xl border border-white/10 bg-[#111111] p-5 text-xs"
+                      className="tgl-glass rounded-2xl p-5 text-xs"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                          <p className="font-medium text-[#f4f3ef]">
+                          <p className="font-medium text-foreground">
                             {app.applicant_name} ({app.applicant_email})
                           </p>
-                          <p className="mt-1 text-white/55">{track?.title ?? "Internship Track"}</p>
+                          <p className="mt-1 text-muted-foreground">{track?.title ?? "Internship Track"}</p>
                         </div>
                         <span
-                          className={`capitalize font-medium ${
-                            app.mentor_approved ? "text-emerald-300" : "text-[#b9a9d6]"
+                          className={`font-medium capitalize ${
+                            app.mentor_approved ? "text-emerald-600 dark:text-emerald-300" : "text-[var(--accent)]"
                           }`}
                         >
                           {app.status.replaceAll("_", " ")}
@@ -661,8 +661,8 @@ export function AdminCertificationsPanel({
                       </div>
 
                       {tasks.length > 0 && (
-                        <div className="mt-4 space-y-2.5 border-t border-white/10 pt-3">
-                          <p className="text-[10px] uppercase tracking-[0.14em] text-white/45">
+                        <div className="mt-4 space-y-2.5 border-t border-border pt-3">
+                          <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
                             Assigned Task Submissions
                           </p>
                           {tasks.map((task) => {
@@ -671,19 +671,19 @@ export function AdminCertificationsPanel({
                             return (
                               <div
                                 key={task.id}
-                                className="rounded-xl border border-white/10 bg-black/25 p-3.5"
+                                className="tgl-subsurface rounded-xl p-3.5"
                               >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <p className="font-medium text-[#f4f3ef]">{task.title}</p>
+                                  <p className="font-medium text-foreground">{task.title}</p>
                                   <span
-                                    className={`capitalize ${
+                                    className={`capitalize font-medium ${
                                       sub?.status === "approved"
-                                        ? "text-emerald-300"
+                                        ? "text-emerald-600 dark:text-emerald-300"
                                         : sub?.status === "revision_required"
-                                          ? "text-amber-300"
+                                          ? "text-amber-700 dark:text-amber-300"
                                           : sub?.status === "submitted"
-                                            ? "text-[#b9a9d6]"
-                                            : "text-white/40"
+                                            ? "text-[var(--accent)]"
+                                            : "text-muted-foreground"
                                     }`}
                                   >
                                     {sub ? sub.status.replaceAll("_", " ") : "Not submitted"}
@@ -695,11 +695,11 @@ export function AdminCertificationsPanel({
                                       href={sub.submissionUrl}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="block font-mono text-[11px] text-[#b9a9d6] underline"
+                                      className="block font-mono text-[11px] text-[var(--accent)] underline"
                                     >
                                       {sub.submissionUrl}
                                     </a>
-                                    <p className="text-white/65">{sub.summary}</p>
+                                    <p className="text-foreground/80">{sub.summary}</p>
                                     <div className="grid gap-2 pt-1 sm:grid-cols-2">
                                       <input
                                         type="text"
@@ -711,7 +711,7 @@ export function AdminCertificationsPanel({
                                             [key]: e.target.value,
                                           }))
                                         }
-                                        className="h-8 rounded-lg border border-white/10 bg-[#151515] px-2.5 text-[11px] text-white"
+                                        className="h-8 rounded-lg border border-border bg-input px-2.5 text-[11px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                       />
                                       <input
                                         type="text"
@@ -723,7 +723,7 @@ export function AdminCertificationsPanel({
                                             [key]: e.target.value,
                                           }))
                                         }
-                                        className="h-8 rounded-lg border border-white/10 bg-[#151515] px-2.5 text-[11px] text-white"
+                                        className="h-8 rounded-lg border border-border bg-input px-2.5 text-[11px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                       />
                                     </div>
                                     <div className="flex flex-wrap gap-2">
@@ -731,7 +731,7 @@ export function AdminCertificationsPanel({
                                         type="button"
                                         disabled={busy}
                                         onClick={() => void handleEvaluateTask(app.id, task.id, "approved")}
-                                        className="rounded-full bg-[#f4f3ef] px-3 py-1 text-[11px] font-medium text-[#111111]"
+                                        className="rounded-full bg-primary px-3 py-1 text-[11px] font-medium text-primary-foreground"
                                       >
                                         Approve task
                                       </button>
@@ -741,7 +741,7 @@ export function AdminCertificationsPanel({
                                         onClick={() =>
                                           void handleEvaluateTask(app.id, task.id, "revision_required")
                                         }
-                                        className="rounded-full border border-amber-300/35 px-3 py-1 text-[11px] text-amber-200"
+                                        className="rounded-full border border-amber-500/35 px-3 py-1 text-[11px] text-amber-700 hover:bg-amber-500/10 dark:text-amber-200"
                                       >
                                         Request revision
                                       </button>
@@ -755,7 +755,7 @@ export function AdminCertificationsPanel({
                       )}
 
                       {!app.mentor_approved ? (
-                        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
+                        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3">
                           <input
                             type="text"
                             placeholder="Final grade / distinction label..."
@@ -763,19 +763,19 @@ export function AdminCertificationsPanel({
                             onChange={(e) =>
                               setFinalScores((prev) => ({ ...prev, [app.id]: e.target.value }))
                             }
-                            className="h-9 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 text-xs text-white"
+                            className="h-9 flex-1 rounded-lg border border-border bg-input px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                           />
                           <button
                             type="button"
                             disabled={busy}
                             onClick={() => void handleApproveInternship(app.id)}
-                            className="inline-flex items-center gap-2 rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111]"
+                            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
                           >
                             <ShieldCheck size={13} /> Approve final internship completion
                           </button>
                         </div>
                       ) : (
-                        <p className="mt-3 text-emerald-300">
+                        <p className="mt-3 font-medium text-emerald-600 dark:text-emerald-300">
                           Final evaluation approved ({app.final_score_label || "Verified"})
                         </p>
                       )}
@@ -788,13 +788,13 @@ export function AdminCertificationsPanel({
             {/* Create Internship Programme + Tasks */}
             <form
               onSubmit={handleCreateInternship}
-              className="self-start rounded-2xl border border-white/10 bg-[#111111] p-6 text-xs"
+              className="tgl-glass self-start rounded-2xl p-6 text-xs"
             >
-              <h2 className="flex items-center gap-2 text-base font-medium">
-                <Plus size={15} className="text-[#b9a9d6]" /> Create internship programme
+              <h2 className="flex items-center gap-2 text-base font-medium text-foreground">
+                <Plus size={15} className="text-[var(--accent)]" /> Create internship programme
               </h2>
               <div className="mt-4 space-y-3">
-                <label className="block text-white/60">
+                <label className="block text-muted-foreground">
                   Programme title
                   <input
                     required
@@ -802,20 +802,20 @@ export function AdminCertificationsPanel({
                     value={newIntTitle}
                     onChange={(e) => setNewIntTitle(e.target.value)}
                     placeholder="e.g. Cloud Reliability Engineering Internship"
-                    className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                    className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
                 <div className="grid grid-cols-2 gap-3">
-                  <label className="block text-white/60">
+                  <label className="block text-muted-foreground">
                     Track
                     <input
                       required
                       value={newIntTrack}
                       onChange={(e) => setNewIntTrack(e.target.value)}
-                      className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                      className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-3 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </label>
-                  <label className="block text-white/60">
+                  <label className="block text-muted-foreground">
                     Duration (weeks)
                     <input
                       type="number"
@@ -823,20 +823,20 @@ export function AdminCertificationsPanel({
                       max={26}
                       value={newIntWeeks}
                       onChange={(e) => setNewIntWeeks(e.target.value)}
-                      className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                      className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-3 font-mono tabular-nums text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </label>
                 </div>
-                <label className="block text-white/60">
+                <label className="block text-muted-foreground">
                   Prerequisite course slug
                   <input
                     value={newIntCourseSlug}
                     onChange={(e) => setNewIntCourseSlug(e.target.value)}
                     placeholder="web-architecture-systems"
-                    className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                    className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
-                <label className="block text-white/60">
+                <label className="block text-muted-foreground">
                   Description
                   <textarea
                     required
@@ -845,10 +845,10 @@ export function AdminCertificationsPanel({
                     value={newIntDesc}
                     onChange={(e) => setNewIntDesc(e.target.value)}
                     placeholder="Practical sprint focus and mentor expectations..."
-                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white"
+                    className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
-                <label className="block text-white/60">
+                <label className="block text-muted-foreground">
                   Initial assigned task title
                   <input
                     required
@@ -856,10 +856,10 @@ export function AdminCertificationsPanel({
                     value={newIntTaskTitle}
                     onChange={(e) => setNewIntTaskTitle(e.target.value)}
                     placeholder="e.g. Task 1: Load & Failover Benchmark"
-                    className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                    className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
-                <label className="block text-white/60">
+                <label className="block text-muted-foreground">
                   Task brief &amp; deliverable expectation
                   <textarea
                     required
@@ -867,23 +867,23 @@ export function AdminCertificationsPanel({
                     rows={2}
                     value={newIntTaskBrief}
                     onChange={(e) => setNewIntTaskBrief(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white"
+                    className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
-                <label className="block text-white/60">
+                <label className="block text-muted-foreground">
                   Deadline label
                   <input
                     required
                     value={newIntTaskDeadline}
                     onChange={(e) => setNewIntTaskDeadline(e.target.value)}
                     placeholder="Week 2"
-                    className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                    className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
                 <button
                   type="submit"
                   disabled={busy}
-                  className="w-full rounded-full bg-[#f4f3ef] px-4 py-2.5 text-xs font-medium text-[#111111]"
+                  className="w-full rounded-full bg-primary px-4 py-2.5 text-xs font-medium text-primary-foreground"
                 >
                   Publish internship track
                 </button>
@@ -892,39 +892,39 @@ export function AdminCertificationsPanel({
           </div>
 
           <section className="space-y-4">
-            <h2 className="text-lg font-medium">Issued &amp; revoked certificates ({issuances.length})</h2>
+            <h2 className="text-lg font-medium text-foreground">Issued &amp; revoked certificates ({issuances.length})</h2>
             <div className="grid gap-3 md:grid-cols-2">
               {issuances.map((cert) => (
                 <article
                   key={cert.id}
-                  className="rounded-2xl border border-white/10 bg-[#111111] p-5 text-xs"
+                  className="tgl-glass rounded-2xl p-5 text-xs"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-mono text-[11px] text-[#b9a9d6]">{cert.certificate_id}</p>
-                      <p className="mt-1 text-sm font-medium text-[#f4f3ef]">
+                      <p className="font-mono text-[11px] text-[var(--accent)]">{cert.certificate_id}</p>
+                      <p className="mt-1 text-sm font-medium text-foreground">
                         {cert.recipient_name} — {cert.achievement_title}
                       </p>
-                      <p className="mt-1 text-white/45">
+                      <p className="mt-1 text-muted-foreground">
                         Status:{" "}
-                        <strong className={cert.issuance_status === "revoked" ? "text-rose-300" : "text-emerald-300"}>
+                        <strong className={cert.issuance_status === "revoked" ? "text-rose-600 dark:text-rose-300" : "text-emerald-600 dark:text-emerald-300"}>
                           {cert.issuance_status}
                         </strong>
                       </p>
                       {cert.revocation_reason && (
-                        <p className="mt-1 text-rose-200">Audit reason: {cert.revocation_reason}</p>
+                        <p className="mt-1 text-rose-700 dark:text-rose-200">Audit reason: {cert.revocation_reason}</p>
                       )}
                     </div>
                     <Link
                       href={`/verify/certificate/${encodeURIComponent(cert.certificate_id)}`}
-                      className="text-white/60 underline underline-offset-4 hover:text-white"
+                      className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
                     >
                       Verify page
                     </Link>
                   </div>
 
                   {cert.issuance_status !== "revoked" && (
-                    <div className="mt-4 flex flex-wrap gap-2 border-t border-white/10 pt-3">
+                    <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
                       <input
                         type="text"
                         placeholder="Mandatory audit reason for revocation..."
@@ -935,7 +935,7 @@ export function AdminCertificationsPanel({
                             [cert.certificate_id]: e.target.value,
                           }))
                         }
-                        className="h-9 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 text-xs text-white"
+                        className="h-9 flex-1 rounded-lg border border-border bg-input px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                       <button
                         type="button"
@@ -954,7 +954,7 @@ export function AdminCertificationsPanel({
                             reason,
                           });
                         }}
-                        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-rose-300/35 px-3.5 py-2 text-xs text-rose-200 hover:bg-rose-300/10"
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-rose-500/35 px-3.5 py-2 text-xs text-rose-700 transition-colors hover:bg-rose-500/10 dark:text-rose-200"
                       >
                         <ShieldX size={13} /> Revoke
                       </button>
@@ -970,30 +970,30 @@ export function AdminCertificationsPanel({
       {tab === "emails" && (
         <div className="mt-8 space-y-8">
           <div className="grid gap-8 lg:grid-cols-2">
-            <section className="rounded-2xl border border-white/10 bg-[#111111] p-6">
+            <section className="tgl-glass rounded-2xl p-6">
               <div className="flex items-center justify-between">
-                <h2 className="flex items-center gap-2 text-base font-medium">
-                  <Mail size={15} className="text-[#b9a9d6]" /> Admin Test Email Sender
+                <h2 className="flex items-center gap-2 text-base font-medium text-foreground">
+                  <Mail size={15} className="text-[var(--accent)]" /> Admin Test Email Sender
                 </h2>
-                <span className="text-[11px] text-[#b9a9d6]">
+                <span className="text-[11px] font-medium text-[var(--accent)]">
                   Provider: {emailConfig?.provider ?? "console"} ·{" "}
                   {emailConfig?.testMode ? "TEST MODE ON" : "Live"}
                 </span>
               </div>
 
               <div className="mt-4 space-y-4">
-                <label className="block text-xs text-white/60">
+                <label className="block text-xs text-muted-foreground">
                   Test recipient email address
                   <input
                     type="email"
                     value={testRecipient}
                     onChange={(e) => setTestRecipient(e.target.value)}
                     placeholder="recipient@example.com"
-                    className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-xs text-white"
+                    className="mt-1 h-10 w-full rounded-lg border border-border bg-input px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
 
-                <label className="flex items-center gap-2 text-xs text-white/60">
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={simulateEmailFailure}
@@ -1002,8 +1002,8 @@ export function AdminCertificationsPanel({
                   Simulate provider failure (tests retry &amp; failure logging)
                 </label>
 
-                <div className="space-y-2 border-t border-white/10 pt-4">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <div className="space-y-2 border-t border-border pt-4">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
                     Send sample lifecycle email
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -1011,7 +1011,7 @@ export function AdminCertificationsPanel({
                       type="button"
                       disabled={busy}
                       onClick={() => void handleTestEmail("payment_success", false)}
-                      className="inline-flex items-center gap-1.5 rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111]"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
                     >
                       <Send size={12} /> Send Payment Confirmation
                     </button>
@@ -1019,7 +1019,7 @@ export function AdminCertificationsPanel({
                       type="button"
                       disabled={busy}
                       onClick={() => void handleTestEmail("certificate_issued", false)}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-4 py-2 text-xs text-white/85 hover:border-white/35"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-xs text-foreground transition-colors hover:bg-muted/40"
                     >
                       <Send size={12} /> Send Internship Certificate Email
                     </button>
@@ -1027,28 +1027,28 @@ export function AdminCertificationsPanel({
                       type="button"
                       disabled={busy}
                       onClick={() => void handleTestEmail("certificate_ready", false)}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-4 py-2 text-xs text-white/85 hover:border-white/35"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-xs text-foreground transition-colors hover:bg-muted/40"
                     >
                       <Send size={12} /> Send Course Completion Email
                     </button>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 border-t border-white/10 pt-4">
+                <div className="flex items-center gap-3 border-t border-border pt-4">
                   <button
                     type="button"
                     disabled={busy}
                     onClick={() => void handleTestEmail(selectedTemplateKey, true)}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-[#b9a9d6]/40 px-4 py-2 text-xs text-[#d8cbea]"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[var(--accent)]/40 px-4 py-2 text-xs font-medium text-[var(--accent)] hover:bg-[var(--accent)]/10"
                   >
                     <Eye size={13} /> Preview selected template
                   </button>
                 </div>
 
                 {testPreview && (
-                  <div className="rounded-xl border border-white/10 bg-black/40 p-4 text-xs">
-                    <p className="font-medium text-[#b9a9d6]">Subject: {testPreview.subject}</p>
-                    <pre className="mt-2 whitespace-pre-wrap font-sans leading-5 text-white/70">
+                  <div className="tgl-subsurface rounded-xl p-4 text-xs">
+                    <p className="font-medium text-[var(--accent)]">Subject: {testPreview.subject}</p>
+                    <pre className="mt-2 whitespace-pre-wrap font-sans leading-5 text-foreground/80">
                       {testPreview.text}
                     </pre>
                   </div>
@@ -1056,15 +1056,15 @@ export function AdminCertificationsPanel({
               </div>
             </section>
 
-            <section className="rounded-2xl border border-white/10 bg-[#111111] p-6">
-              <h2 className="text-base font-medium">Configure email templates (8 events)</h2>
+            <section className="tgl-glass rounded-2xl p-6">
+              <h2 className="text-base font-medium text-foreground">Configure email templates (8 events)</h2>
               <div className="mt-4 space-y-3">
-                <label className="block text-xs text-white/60">
+                <label className="block text-xs text-muted-foreground">
                   Lifecycle template
                   <select
                     value={selectedTemplateKey}
                     onChange={(e) => setSelectedTemplateKey(e.target.value as EmailTemplateKey)}
-                    className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#151515] px-3 text-xs text-white"
+                    className="mt-1 h-10 w-full rounded-lg border border-border bg-input px-3 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     {templates.map((t) => (
                       <option key={t.template_key} value={t.template_key}>
@@ -1074,22 +1074,22 @@ export function AdminCertificationsPanel({
                   </select>
                 </label>
 
-                <label className="block text-xs text-white/60">
+                <label className="block text-xs text-muted-foreground">
                   Subject template
                   <input
                     value={editSubject}
                     onChange={(e) => setEditSubject(e.target.value)}
-                    className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-xs text-white"
+                    className="mt-1 h-10 w-full rounded-lg border border-border bg-input px-3 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
 
-                <label className="block text-xs text-white/60">
+                <label className="block text-xs text-muted-foreground">
                   Body template
                   <textarea
                     rows={6}
                     value={editBody}
                     onChange={(e) => setEditBody(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white"
+                    className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
 
@@ -1097,7 +1097,7 @@ export function AdminCertificationsPanel({
                   type="button"
                   disabled={busy}
                   onClick={() => void handleSaveTemplate()}
-                  className="rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111]"
+                  className="rounded-full bg-primary px-5 py-2.5 text-xs font-medium text-primary-foreground"
                 >
                   Save template
                 </button>
@@ -1105,30 +1105,30 @@ export function AdminCertificationsPanel({
             </section>
           </div>
 
-          <section className="rounded-2xl border border-white/10 bg-[#111111] p-6">
-            <h2 className="text-base font-medium">Email delivery &amp; failure logs ({emailLogs.length})</h2>
+          <section className="tgl-glass rounded-2xl p-6">
+            <h2 className="text-base font-medium text-foreground">Email delivery &amp; failure logs ({emailLogs.length})</h2>
             <div className="mt-4 space-y-2.5">
               {emailLogs.map((log) => (
                 <article
                   key={log.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/25 p-4 text-xs"
+                  className="tgl-subsurface flex flex-wrap items-center justify-between gap-3 rounded-xl p-4 text-xs"
                 >
                   <div>
-                    <p className="font-medium text-[#f4f3ef]">{log.subject}</p>
-                    <p className="mt-1 text-[11px] text-white/50">
+                    <p className="font-medium text-foreground">{log.subject}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
                       To: {log.recipient_email} · Template: {log.template_key} · Provider: {log.provider} · Attempts: {log.attempt_count}
                     </p>
                     {log.error_message && (
-                      <p className="mt-1 text-[11px] text-rose-300">Error: {log.error_message}</p>
+                      <p className="mt-1 text-[11px] text-rose-700 dark:text-rose-300">Error: {log.error_message}</p>
                     )}
                   </div>
                   <span
                     className={`rounded-full px-3 py-1 text-[11px] font-medium ${
                       log.delivery_status === "failed"
-                        ? "border border-rose-400/30 text-rose-300"
+                        ? "border border-rose-500/35 text-rose-700 dark:text-rose-300"
                         : log.delivery_status === "sent"
-                          ? "border border-emerald-400/30 text-emerald-300"
-                          : "border border-[#b9a9d6]/30 text-[#d8cbea]"
+                          ? "border border-emerald-500/35 text-emerald-700 dark:text-emerald-300"
+                          : "border border-[var(--accent)]/35 text-[var(--accent)]"
                     }`}
                   >
                     {log.delivery_status}
@@ -1136,7 +1136,7 @@ export function AdminCertificationsPanel({
                 </article>
               ))}
               {emailLogs.length === 0 && (
-                <p className="rounded-xl border border-dashed border-white/15 p-5 text-xs text-white/45">
+                <p className="rounded-xl border border-dashed border-border p-5 text-xs text-muted-foreground">
                   No email delivery logs recorded yet. Send a test email above to verify delivery and logging.
                 </p>
               )}
@@ -1150,16 +1150,16 @@ export function AdminCertificationsPanel({
           role="dialog"
           aria-modal="true"
           aria-labelledby="admin-confirm-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm dark:bg-black/80"
         >
-          <div className="w-full max-w-md rounded-2xl border border-rose-400/35 bg-[#121212] p-6 text-[#f4f3ef] shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+          <div className="tgl-glass-strong w-full max-w-md rounded-2xl border-rose-500/35 p-6 text-foreground shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
               <div className="flex items-start gap-3">
-                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-rose-500/20 text-rose-300">
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-300">
                   <AlertTriangle size={18} aria-hidden="true" />
                 </span>
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-rose-300">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-rose-600 dark:text-rose-300">
                     Confirm Admin Action
                   </p>
                   <h3 id="admin-confirm-title" className="mt-1 text-lg font-medium tracking-[-0.03em]">
@@ -1173,29 +1173,29 @@ export function AdminCertificationsPanel({
                 type="button"
                 aria-label="Cancel action"
                 onClick={() => setPendingConfirm(null)}
-                className="grid size-11 place-items-center rounded-full border border-white/10 text-white/65 hover:text-white"
+                className="grid size-11 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"
               >
                 <X size={15} />
               </button>
             </div>
 
-            <div className="mt-4 space-y-2 text-xs text-white/75">
+            <div className="mt-4 space-y-2 text-xs text-foreground/85">
               {pendingConfirm.type === "refund" ? (
                 <>
                   <p>
                     You are about to process a refund for{" "}
-                    <strong className="text-white">{pendingConfirm.itemTitle}</strong>.
+                    <strong className="text-foreground">{pendingConfirm.itemTitle}</strong>.
                   </p>
-                  <p className="text-white/55">Reason: {pendingConfirm.reason}</p>
+                  <p className="text-muted-foreground">Reason: {pendingConfirm.reason}</p>
                 </>
               ) : (
                 <>
                   <p>
                     This immediately marks{" "}
-                    <strong className="text-white">{pendingConfirm.certificateId}</strong>{" "}
+                    <strong className="text-foreground">{pendingConfirm.certificateId}</strong>{" "}
                     ({pendingConfirm.recipientName}) as revoked on public verification pages.
                   </p>
-                  <p className="text-white/55">Audit reason: {pendingConfirm.reason}</p>
+                  <p className="text-muted-foreground">Audit reason: {pendingConfirm.reason}</p>
                 </>
               )}
             </div>
@@ -1205,7 +1205,7 @@ export function AdminCertificationsPanel({
                 type="button"
                 disabled={busy}
                 onClick={() => setPendingConfirm(null)}
-                className="min-h-11 flex-1 rounded-full border border-white/15 px-4 py-2 text-xs text-white/85 hover:border-white/35"
+                className="min-h-11 flex-1 rounded-full border border-border px-4 py-2 text-xs text-foreground transition-colors hover:bg-muted/40"
               >
                 Cancel
               </button>
@@ -1221,7 +1221,7 @@ export function AdminCertificationsPanel({
                     await handleRevokeCertificate(action.certificateId);
                   }
                 }}
-                className="min-h-11 flex-1 rounded-full bg-rose-500 px-4 py-2 text-xs font-medium text-white hover:bg-rose-400 disabled:opacity-50"
+                className="min-h-11 flex-1 rounded-full bg-rose-600 px-4 py-2 text-xs font-medium text-white hover:bg-rose-500 disabled:opacity-50"
               >
                 {pendingConfirm.type === "refund" ? "Confirm Refund" : "Confirm Revocation"}
               </button>

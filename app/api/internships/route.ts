@@ -99,6 +99,38 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    if (actor.user.role !== "admin") {
+      const [internships, applications, courses] = await Promise.all([
+        listInternships(),
+        listStudentApplications(actor.user.id),
+        listCoursesCatalog(actor.user.id),
+      ]);
+      const app = applications.find((a) => a.id === parsed.data.applicationId);
+      const track = app ? internships.find((i) => i.id === app.internship_id) : null;
+      if (track && track.required_course_slug) {
+        const matchedCourse = courses.find((c) => c.slug === track.required_course_slug);
+        const lessonsDone = matchedCourse
+          ? matchedCourse.lessonCount > 0 &&
+            matchedCourse.completedLessonCount >= matchedCourse.lessonCount
+          : true;
+        const quizPassed = Boolean(matchedCourse?.quizPassed);
+        const projectStatus = track.required_project_slug
+          ? getProjectStatusForUser(actor.user.id, track.required_project_slug)
+          : "not_started";
+        const projectApproved = !track.require_project_approval || projectStatus === "approved";
+        if (!matchedCourse?.enrolled || !lessonsDone || !quizPassed || !projectApproved) {
+          return NextResponse.json(
+            {
+              error:
+                "Complete your linked programme modules, graded quiz, and receive mentor project approval before submitting internship tasks.",
+            },
+            { status: 403 },
+          );
+        }
+      }
+    }
+
     const result = await submitInternshipTaskWork({
       userId: actor.user.id,
       applicationId: parsed.data.applicationId,

@@ -259,7 +259,7 @@ export function AdminOperationsClient({
       <div
         role="tablist"
         aria-label="Admin operational areas"
-        className="flex flex-wrap gap-2 border-b border-white/10 pb-4"
+        className="flex flex-wrap gap-2 border-b border-border pb-4"
       >
         {[
           { id: "overview" as const, label: "Cohorts, Content & Users" },
@@ -273,10 +273,10 @@ export function AdminOperationsClient({
             type="button"
             aria-selected={section === item.id}
             onClick={() => setSection(item.id)}
-            className={`rounded-full px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+            className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-xs font-medium transition-colors ${
               section === item.id
-                ? "bg-[#f4f3ef] text-[#111111]"
-                : "border border-white/10 text-white/60 hover:text-white"
+                ? "bg-primary text-primary-foreground"
+                : "border border-border text-muted-foreground hover:text-foreground"
             }`}
           >
             {item.label}
@@ -285,12 +285,12 @@ export function AdminOperationsClient({
       </div>
 
       {notice && (
-        <p role="status" className="rounded-xl border border-emerald-400/25 bg-emerald-950/20 px-4 py-3 text-xs text-emerald-200">
+        <p role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-700 dark:text-emerald-200">
           {notice}
         </p>
       )}
       {error && (
-        <p role="alert" className="rounded-xl border border-rose-400/30 bg-rose-950/20 px-4 py-3 text-xs text-rose-200">
+        <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-700 dark:text-rose-200">
           {error}
         </p>
       )}
@@ -298,51 +298,51 @@ export function AdminOperationsClient({
       {section === "overview" && (
         <div className="space-y-8">
           <div className="grid gap-4 sm:grid-cols-4">
-            <div className="rounded-2xl border border-white/10 bg-[#111111] p-5">
-              <p className="text-[11px] text-white/45">Programmes</p>
-              <p className="mt-2 text-2xl font-medium tabular-nums">{courses.length}</p>
+            <div className="tgl-glass rounded-2xl p-5">
+              <p className="text-[11px] text-muted-foreground">Programmes</p>
+              <p className="mt-2 text-2xl font-medium tabular-nums text-foreground">{courses.length}</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-[#111111] p-5">
-              <p className="text-[11px] text-white/45">Pathways &amp; nodes</p>
-              <p className="mt-2 text-2xl font-medium tabular-nums">
+            <div className="tgl-glass rounded-2xl p-5">
+              <p className="text-[11px] text-muted-foreground">Pathways &amp; nodes</p>
+              <p className="mt-2 text-2xl font-medium tabular-nums text-foreground">
                 {contentSummary.pathwayCount} · {contentSummary.nodeCount}
               </p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-[#111111] p-5">
-              <p className="text-[11px] text-white/45">Projects</p>
-              <p className="mt-2 text-2xl font-medium tabular-nums">{contentSummary.projectCount}</p>
+            <div className="tgl-glass rounded-2xl p-5">
+              <p className="text-[11px] text-muted-foreground">Projects</p>
+              <p className="mt-2 text-2xl font-medium tabular-nums text-foreground">{contentSummary.projectCount}</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-[#111111] p-5">
-              <p className="text-[11px] text-white/45">Active cohorts</p>
-              <p className="mt-2 text-2xl font-medium tabular-nums">{cohorts.length}</p>
+            <div className="tgl-glass rounded-2xl p-5">
+              <p className="text-[11px] text-muted-foreground">Active cohorts</p>
+              <p className="mt-2 text-2xl font-medium tabular-nums text-foreground">{cohorts.length}</p>
             </div>
           </div>
 
           <div className="grid gap-6 lg:grid-cols-[1.2fr_.8fr]">
-            <section className="rounded-2xl border border-white/10 bg-[#111111] p-6">
-              <h2 className="flex items-center gap-2 text-base font-medium">
-                <Layers3 size={15} className="text-[#b9a9d6]" aria-hidden="true" />
+            <section className="tgl-glass rounded-2xl p-6">
+              <h2 className="flex items-center gap-2 text-base font-medium text-foreground">
+                <Layers3 size={15} className="text-[var(--accent)]" aria-hidden="true" />
                 <span>Cohorts ({cohorts.length})</span>
               </h2>
               <div className="mt-4 space-y-2.5 text-xs">
                 {cohorts.map((cohort) => (
                   <div
                     key={cohort.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/25 p-4"
+                    className="tgl-subsurface flex flex-wrap items-center justify-between gap-3 rounded-xl p-4"
                   >
                     <div>
-                      <p className="font-medium text-[#f4f3ef]">{cohort.name}</p>
-                      <p className="mt-0.5 text-[11px] text-white/45">
+                      <p className="font-medium text-foreground">{cohort.name}</p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
                         Mentor: {cohort.mentorName} ({cohort.mentorEmail})
                       </p>
                     </div>
                     <div className="flex items-center gap-4">
-                      <span className="font-mono tabular-nums text-white/60">
+                      <span className="font-mono tabular-nums text-muted-foreground">
                         {cohort.learnerCount} learners
                       </span>
                       <Link
                         href={`/pathways/${cohort.pathwaySlug}`}
-                        className="text-[#b9a9d6] hover:underline"
+                        className="font-medium text-[var(--accent)] hover:underline"
                       >
                         Map
                       </Link>
@@ -354,29 +354,29 @@ export function AdminOperationsClient({
 
             <form
               onSubmit={handleCreateCohort}
-              className="self-start rounded-2xl border border-white/10 bg-[#111111] p-6"
+              className="tgl-glass self-start rounded-2xl p-6"
             >
-              <h2 className="flex items-center gap-2 text-base font-medium">
-                <Plus size={15} className="text-[#b9a9d6]" aria-hidden="true" />
+              <h2 className="flex items-center gap-2 text-base font-medium text-foreground">
+                <Plus size={15} className="text-[var(--accent)]" aria-hidden="true" />
                 <span>Create cohort</span>
               </h2>
               <div className="mt-4 space-y-3 text-xs">
-                <label className="block text-white/60">
+                <label className="block text-muted-foreground">
                   Cohort name
                   <input
                     required
                     value={cohortName}
                     onChange={(e) => setCohortName(e.target.value)}
                     placeholder="e.g. Winter Systems Cohort"
-                    className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-white"
+                    className="mt-1 h-10 w-full rounded-xl border border-border bg-input px-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
-                <label className="block text-white/60">
+                <label className="block text-muted-foreground">
                   Primary pathway
                   <select
                     value={pathwaySlug}
                     onChange={(e) => setPathwaySlug(e.target.value)}
-                    className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-[#151515] px-3 text-white"
+                    className="mt-1 h-10 w-full rounded-xl border border-border bg-input px-3 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     {enrichedPathways.map((p) => (
                       <option key={p.slug} value={p.slug}>
@@ -385,17 +385,17 @@ export function AdminOperationsClient({
                     ))}
                   </select>
                 </label>
-                <label className="block text-white/60">
+                <label className="block text-muted-foreground">
                   Assigned mentor name
                   <input
                     required
                     value={mentorName}
                     onChange={(e) => setMentorName(e.target.value)}
                     placeholder="Mentor name"
-                    className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-white"
+                    className="mt-1 h-10 w-full rounded-xl border border-border bg-input px-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
-                <label className="block text-white/60">
+                <label className="block text-muted-foreground">
                   Mentor email
                   <input
                     type="email"
@@ -403,12 +403,12 @@ export function AdminOperationsClient({
                     value={mentorEmail}
                     onChange={(e) => setMentorEmail(e.target.value)}
                     placeholder="mentor@touchgrasslater.org"
-                    className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-white"
+                    className="mt-1 h-10 w-full rounded-xl border border-border bg-input px-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
                 <button
                   type="submit"
-                  className="w-full rounded-full bg-[#f4f3ef] px-4 py-2.5 text-xs font-medium text-[#111111]"
+                  className="w-full rounded-full bg-primary px-4 py-2.5 text-xs font-medium text-primary-foreground"
                 >
                   Create cohort
                 </button>
@@ -416,23 +416,23 @@ export function AdminOperationsClient({
             </form>
           </div>
 
-          <section className="rounded-2xl border border-white/10 bg-[#111111] p-6">
-            <h2 className="flex items-center gap-2 text-base font-medium">
-              <Users size={15} className="text-[#b9a9d6]" aria-hidden="true" />
+          <section className="tgl-glass rounded-2xl p-6">
+            <h2 className="flex items-center gap-2 text-base font-medium text-foreground">
+              <Users size={15} className="text-[var(--accent)]" aria-hidden="true" />
               <span>Users &amp; roles ({users.length})</span>
             </h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {users.map((u) => (
                 <div
                   key={u.id}
-                  className="rounded-xl border border-white/10 bg-black/25 p-4 text-xs"
+                  className="tgl-subsurface rounded-xl p-4 text-xs"
                 >
                   <div className="flex items-center justify-between">
-                    <p className="font-medium text-[#f4f3ef]">{u.name}</p>
-                    <span className="capitalize text-[#b9a9d6]">{u.role}</span>
+                    <p className="font-medium text-foreground">{u.name}</p>
+                    <span className="capitalize font-medium text-[var(--accent)]">{u.role}</span>
                   </div>
-                  <p className="mt-1 text-[11px] text-white/45">{u.email}</p>
-                  <p className="mt-1 text-[11px] text-white/55">{u.cohort}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{u.email}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{u.cohort}</p>
                 </div>
               ))}
             </div>
@@ -444,17 +444,17 @@ export function AdminOperationsClient({
         <section className="space-y-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h2 className="flex items-center gap-2 text-base font-medium">
-                <BookOpen size={15} className="text-[#b9a9d6]" aria-hidden="true" />
+              <h2 className="flex items-center gap-2 text-base font-medium text-foreground">
+                <BookOpen size={15} className="text-[var(--accent)]" aria-hidden="true" />
                 <span>Manage bundled programmes, single INR fee (₹499–₹1,999), project, internship &amp; criteria</span>
               </h2>
-              <p className="mt-1 text-xs text-white/50">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Each Programme fee covers the course modules, attached project, included internship track, and certificate (₹0 extra).
               </p>
             </div>
             <Link
               href="/programmes"
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-4 py-2 text-xs text-white/80 hover:border-white/35"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-xs text-foreground transition-colors hover:bg-muted/40"
             >
               View public programmes <ArrowUpRight size={13} aria-hidden="true" />
             </Link>
@@ -465,31 +465,31 @@ export function AdminOperationsClient({
               {courses.map((course) => (
                 <article
                   key={course.id}
-                  className="rounded-2xl border border-white/10 bg-[#111111] p-5 text-xs"
+                  className="tgl-glass rounded-2xl p-5 text-xs"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-[11px] text-[#b9a9d6]">
+                      <p className="text-[11px] font-medium text-[var(--accent)]">
                         {course.category} · {course.moduleCount} modules · Certificate Included (₹0 extra) ·{" "}
                         {course.isPublished ? "Published" : "Hidden"}
                       </p>
-                      <h3 className="mt-1 text-base font-medium text-[#f4f3ef]">
+                      <h3 className="mt-1 text-base font-medium text-foreground">
                         {course.title}
                       </h3>
-                      <p className="mt-1 text-white/50">{course.subtitle}</p>
+                      <p className="mt-1 text-muted-foreground">{course.subtitle}</p>
                     </div>
                     <button
                       type="button"
                       disabled={busyCourseId === course.id}
                       onClick={() => void handleSaveCourse(course, true)}
-                      className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/80 hover:border-white/35"
+                      className="rounded-full border border-border px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-muted/40"
                     >
                       {course.isPublished ? "Hide" : "Publish"}
                     </button>
                   </div>
 
-                  <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 sm:grid-cols-2">
-                    <label className="block text-white/60">
+                  <div className="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
+                    <label className="block text-muted-foreground">
                       Attached project title
                       <input
                         type="text"
@@ -500,10 +500,10 @@ export function AdminOperationsClient({
                             [course.id]: e.target.value,
                           }))
                         }
-                        className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-xs text-white"
+                        className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-3 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                     </label>
-                    <label className="block text-white/60">
+                    <label className="block text-muted-foreground">
                       Included internship duration (weeks)
                       <input
                         type="number"
@@ -516,12 +516,12 @@ export function AdminOperationsClient({
                             [course.id]: e.target.value,
                           }))
                         }
-                        className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 font-mono text-xs tabular-nums text-white"
+                        className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-3 font-mono text-xs tabular-nums text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                     </label>
                   </div>
 
-                  <label className="mt-3 block text-white/60">
+                  <label className="mt-3 block text-muted-foreground">
                     Completion &amp; certificate requirements (one requirement per line)
                     <textarea
                       rows={3}
@@ -532,12 +532,12 @@ export function AdminOperationsClient({
                           [course.id]: e.target.value,
                         }))
                       }
-                      className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white"
+                      className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </label>
 
-                  <div className="mt-3 grid gap-3 border-t border-white/10 pt-4 sm:grid-cols-2">
-                    <label className="block text-white/60">
+                  <div className="mt-3 grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
+                    <label className="block text-muted-foreground">
                       Add new module title
                       <input
                         type="text"
@@ -549,10 +549,10 @@ export function AdminOperationsClient({
                             [course.id]: e.target.value,
                           }))
                         }
-                        className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-xs text-white"
+                        className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                     </label>
-                    <label className="block text-white/60">
+                    <label className="block text-muted-foreground">
                       Post announcement title
                       <input
                         type="text"
@@ -564,13 +564,13 @@ export function AdminOperationsClient({
                             [course.id]: e.target.value,
                           }))
                         }
-                        className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-xs text-white"
+                        className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                     </label>
                   </div>
 
                   {announcementTitles[course.id]?.trim() && (
-                    <label className="mt-2.5 block text-white/60">
+                    <label className="mt-2.5 block text-muted-foreground">
                       Announcement message
                       <textarea
                         rows={2}
@@ -582,14 +582,14 @@ export function AdminOperationsClient({
                             [course.id]: e.target.value,
                           }))
                         }
-                        className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white"
+                        className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                     </label>
                   )}
 
-                  <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-white/10 pt-4">
+                  <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-border pt-4">
                     <div className="flex flex-wrap items-end gap-3">
-                      <label className="text-white/60">
+                      <label className="text-muted-foreground">
                         Single Enrolment INR Fee (₹499–₹1,999)
                         <input
                           type="number"
@@ -603,21 +603,21 @@ export function AdminOperationsClient({
                               [course.id]: e.target.value,
                             }))
                           }
-                          className="mt-1 block h-9 w-36 rounded-lg border border-white/10 bg-black/30 px-3 font-mono text-xs tabular-nums text-white"
+                          className="mt-1 block h-9 w-36 rounded-lg border border-border bg-input px-3 font-mono text-xs tabular-nums text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                       </label>
                       <button
                         type="button"
                         disabled={busyCourseId === course.id}
                         onClick={() => void handleSaveCourse(course, false)}
-                        className="h-9 rounded-full bg-[#f4f3ef] px-4 text-xs font-medium text-[#111111] disabled:opacity-45"
+                        className="h-9 rounded-full bg-primary px-4 text-xs font-medium text-primary-foreground tabular-nums disabled:opacity-45"
                       >
                         Save programme ({formatInrFromPaise(course.pricePaise)})
                       </button>
                     </div>
                     <Link
                       href={`/programmes/${course.slug}`}
-                      className="text-[#b9a9d6] hover:text-white"
+                      className="font-medium text-[var(--accent)] hover:underline"
                     >
                       Open programme page
                     </Link>
@@ -628,17 +628,17 @@ export function AdminOperationsClient({
 
             <form
               onSubmit={handleCreateCourse}
-              className="self-start rounded-2xl border border-white/10 bg-[#111111] p-6 text-xs"
+              className="tgl-glass self-start rounded-2xl p-6 text-xs"
             >
-              <h3 className="flex items-center gap-2 text-base font-medium">
-                <Plus size={15} className="text-[#b9a9d6]" aria-hidden="true" />
+              <h3 className="flex items-center gap-2 text-base font-medium text-foreground">
+                <Plus size={15} className="text-[var(--accent)]" aria-hidden="true" />
                 <span>Create bundled programme (₹499–₹1,999)</span>
               </h3>
-              <p className="mt-1 text-[11px] text-white/50">
+              <p className="mt-1 text-[11px] text-muted-foreground">
                 Automatically includes course learning, practical project, internship track, and certificate (₹0 extra).
               </p>
               <div className="mt-4 space-y-3">
-                <label className="block text-white/60">
+                <label className="block text-muted-foreground">
                   Programme title
                   <input
                     required
@@ -646,10 +646,10 @@ export function AdminOperationsClient({
                     value={newCourseTitle}
                     onChange={(e) => setNewCourseTitle(e.target.value)}
                     placeholder="e.g. Distributed Event Queues Internship Programme"
-                    className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                    className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
-                <label className="block text-white/60">
+                <label className="block text-muted-foreground">
                   Subtitle / summary
                   <textarea
                     required
@@ -658,11 +658,11 @@ export function AdminOperationsClient({
                     value={newCourseSubtitle}
                     onChange={(e) => setNewCourseSubtitle(e.target.value)}
                     placeholder="What learners will master and build..."
-                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white"
+                    className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
                 <div className="grid grid-cols-2 gap-3">
-                  <label className="block text-white/60">
+                  <label className="block text-muted-foreground">
                     Discipline
                     <select
                       value={newCourseCategory}
@@ -675,7 +675,7 @@ export function AdminOperationsClient({
                             | "Product & design",
                         )
                       }
-                      className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-[#151515] px-2 text-white"
+                      className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     >
                       <option value="Engineering">Engineering</option>
                       <option value="Data & AI">Data &amp; AI</option>
@@ -683,7 +683,7 @@ export function AdminOperationsClient({
                       <option value="Product & design">Product &amp; design</option>
                     </select>
                   </label>
-                  <label className="block text-white/60">
+                  <label className="block text-muted-foreground">
                     Single INR Fee (499–1999)
                     <input
                       type="number"
@@ -692,12 +692,12 @@ export function AdminOperationsClient({
                       required
                       value={newCourseRupees}
                       onChange={(e) => setNewCourseRupees(e.target.value)}
-                      className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 font-mono text-white"
+                      className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-3 font-mono tabular-nums text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </label>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <label className="block text-white/60">
+                  <label className="block text-muted-foreground">
                     Duration (hours)
                     <input
                       type="number"
@@ -705,28 +705,28 @@ export function AdminOperationsClient({
                       max={120}
                       value={newCourseHours}
                       onChange={(e) => setNewCourseHours(e.target.value)}
-                      className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                      className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-3 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </label>
-                  <label className="block text-white/60">
+                  <label className="block text-muted-foreground">
                     Lead mentor
                     <input
                       required
                       value={newCourseMentor}
                       onChange={(e) => setNewCourseMentor(e.target.value)}
-                      className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                      className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-3 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </label>
                 </div>
-                <label className="block text-white/60">
+                <label className="block text-muted-foreground">
                   Skills taught (comma separated)
                   <input
                     value={newCourseSkills}
                     onChange={(e) => setNewCourseSkills(e.target.value)}
-                    className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                    className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-3 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
-                <label className="block text-white/60">
+                <label className="block text-muted-foreground">
                   Linked practical project title
                   <input
                     required
@@ -734,10 +734,10 @@ export function AdminOperationsClient({
                     value={newCourseProjectTitle}
                     onChange={(e) => setNewCourseProjectTitle(e.target.value)}
                     placeholder="e.g. Idempotent Webhook & Retry Worker"
-                    className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-white"
+                    className="mt-1 h-9 w-full rounded-lg border border-border bg-input px-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
-                <label className="block text-white/60">
+                <label className="block text-muted-foreground">
                   Linked project brief
                   <textarea
                     required
@@ -746,13 +746,13 @@ export function AdminOperationsClient({
                     value={newCourseProjectSummary}
                     onChange={(e) => setNewCourseProjectSummary(e.target.value)}
                     placeholder="Expected deliverables and verification rubric..."
-                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white"
+                    className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
                 <button
                   type="submit"
                   disabled={busyCourseId === "create"}
-                  className="w-full rounded-full bg-[#f4f3ef] px-4 py-2.5 text-xs font-medium text-[#111111]"
+                  className="w-full rounded-full bg-primary px-4 py-2.5 text-xs font-medium text-primary-foreground"
                 >
                   Publish new programme
                 </button>

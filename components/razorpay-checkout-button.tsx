@@ -140,12 +140,25 @@ export function RazorpayCheckoutButton({
         throw new Error(data.error ?? "Could not start payment right now.");
       }
 
-      const order = data.order as { razorpay_order_id: string; amount_paise: number };
+      const order = data.order as {
+        razorpay_order_id?: string;
+        amount_paise?: number;
+      };
+      const orderId = (data.order_id as string | undefined) || order?.razorpay_order_id || "";
+      const amountPaise =
+        typeof data.amount === "number" ? data.amount : Number(order?.amount_paise ?? pricePaise);
+      const currency = (data.currency as string | undefined) || "INR";
+      const resolvedKeyId =
+        !data.isSimulated
+          ? (data.keyId as string | undefined) ||
+            process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
+            null
+          : null;
 
-      if (data.isSimulated || !data.keyId) {
+      if (data.isSimulated || !resolvedKeyId) {
         setSandboxOrder({
-          razorpayOrderId: order.razorpay_order_id,
-          amountPaise: order.amount_paise,
+          razorpayOrderId: orderId,
+          amountPaise,
           itemName: productName,
           isSimulated: true,
         });
@@ -161,17 +174,17 @@ export function RazorpayCheckoutButton({
 
       setStep("idle");
       const rzp = new window.Razorpay({
-        key: data.keyId,
-        amount: order.amount_paise,
-        currency: "INR",
+        key: resolvedKeyId,
+        amount: amountPaise,
+        currency,
         name: "Touch Grass Later",
         description: productName,
-        order_id: order.razorpay_order_id,
+        order_id: orderId,
         prefill: {
           name: studentName ?? "",
           email: studentEmail ?? "",
         },
-        theme: { color: "#b9a9d6" },
+        theme: { color: "#007aff" },
         handler: async (paymentRes: {
           razorpay_order_id: string;
           razorpay_payment_id: string;
@@ -227,7 +240,7 @@ export function RazorpayCheckoutButton({
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                razorpayOrderId: order.razorpay_order_id,
+                razorpayOrderId: orderId,
                 status: "cancelled",
                 reason: "Student closed Razorpay checkout window",
               }),
@@ -251,7 +264,7 @@ export function RazorpayCheckoutButton({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            razorpayOrderId: order.razorpay_order_id,
+            razorpayOrderId: orderId,
             status: "failed",
             reason: desc,
           }),
@@ -373,7 +386,7 @@ export function RazorpayCheckoutButton({
         type="button"
         disabled={busy || !eligible || alreadyCompleted}
         onClick={handleOpenSummary}
-        className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-3 text-xs font-medium text-[#111111] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 whitespace-nowrap shrink-0"
+        className="inline-flex min-h-11 items-center gap-2 rounded-full bg-accent px-5 py-3 text-xs font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 whitespace-nowrap shrink-0"
       >
         {busy ? (
           <Loader2 size={14} className="animate-spin" aria-hidden="true" />
@@ -390,18 +403,18 @@ export function RazorpayCheckoutButton({
       </button>
 
       {disabledReason && !alreadyCompleted && (
-        <p className="text-xs text-white/55">{disabledReason}</p>
+        <p className="text-xs text-muted-foreground">{disabledReason}</p>
       )}
 
       {statusMessage && step === "idle" && (
-        <p role="status" className="flex items-center gap-2 text-xs text-emerald-300">
+        <p role="status" className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300">
           <CheckCircle2 size={14} aria-hidden="true" />
           <span>{statusMessage}</span>
         </p>
       )}
 
       {errorMessage && step === "idle" && (
-        <p role="alert" className="flex items-center gap-2 text-xs text-rose-300">
+        <p role="alert" className="flex items-center gap-2 text-xs text-rose-700 dark:text-rose-300">
           <AlertCircle size={14} aria-hidden="true" />
           <span>{errorMessage}</span>
         </p>
@@ -413,40 +426,40 @@ export function RazorpayCheckoutButton({
           role="dialog"
           aria-modal="true"
           aria-labelledby="order-summary-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
         >
-          <div className="w-full max-w-md rounded-2xl border border-white/15 bg-[#121212] p-6 text-[#f4f3ef] shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+          <div className="tgl-glass-strong w-full max-w-md rounded-3xl p-6 text-foreground shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
               <div>
-                <p className="text-[11px] uppercase tracking-[0.18em] text-[#b9a9d6]">
+                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-accent">
                   Step 1 of 2 · Order Summary
                 </p>
-                <h3 id="order-summary-title" className="mt-1.5 text-lg font-medium tracking-[-0.03em]">
+                <h3 id="order-summary-title" className="mt-1.5 text-lg font-semibold tracking-[-0.03em]">
                   {productName}
                 </h3>
                 {courseDuration && (
-                  <p className="mt-1 text-xs text-white/55">Duration: {courseDuration}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Duration: {courseDuration}</p>
                 )}
               </div>
               <button
                 type="button"
                 aria-label="Close order summary"
                 onClick={() => setStep("idle")}
-                className="grid size-11 place-items-center rounded-full border border-white/10 text-white/70 hover:text-white"
+                className="grid size-10 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"
               >
                 <X size={16} />
               </button>
             </div>
 
             <div className="mt-4 space-y-4 text-xs">
-              <div className="rounded-xl border border-white/10 bg-black/30 p-4">
-                <p className="font-medium text-white">What you get after payment:</p>
-                <ul className="mt-2.5 space-y-2 text-white/75">
+              <div className="tgl-subsurface rounded-2xl p-4">
+                <p className="font-semibold text-foreground">What you get after payment:</p>
+                <ul className="mt-2.5 space-y-2 text-foreground/85">
                   {summaryItems.map((item) => (
                     <li key={item} className="flex items-start gap-2">
                       <CheckCircle2
                         size={14}
-                        className="mt-0.5 shrink-0 text-emerald-300"
+                        className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-300"
                         aria-hidden="true"
                       />
                       <span>{item}</span>
@@ -455,15 +468,15 @@ export function RazorpayCheckoutButton({
                 </ul>
               </div>
 
-              <div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-4 py-3">
-                <span className="text-white/65">Total to pay now</span>
-                <span className="font-mono text-base font-semibold tabular-nums text-white">
+              <div className="tgl-subsurface flex items-center justify-between rounded-2xl px-4 py-3">
+                <span className="text-muted-foreground">Total to pay now</span>
+                <span className="font-mono text-base font-semibold tabular-nums text-foreground">
                   {formatInrFromPaise(pricePaise)} INR
                 </span>
               </div>
 
-              <div className="flex items-start gap-2 rounded-xl border border-[#b9a9d6]/25 bg-[#b9a9d6]/10 p-3 text-[11px] leading-5 text-[#dfd5ef]">
-                <ShieldCheck size={14} className="mt-0.5 shrink-0 text-[#b9a9d6]" aria-hidden="true" />
+              <div className="flex items-start gap-2 rounded-2xl border border-accent/25 bg-accent/10 p-3 text-[11px] leading-5 text-foreground/85">
+                <ShieldCheck size={14} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
                 <span>
                   {isCourse
                     ? "One-time single fee: covers course lessons, assignments, project review, internship participation, and your Internship Completion Certificate at ₹0 extra once approved."
@@ -476,7 +489,7 @@ export function RazorpayCheckoutButton({
               <button
                 type="button"
                 onClick={() => setStep("idle")}
-                className="min-h-11 flex-1 rounded-full border border-white/15 px-4 py-2.5 text-xs text-white/80 hover:border-white/35"
+                className="min-h-11 rounded-full border border-border bg-card px-6 py-2.5 text-xs font-medium text-foreground hover:border-foreground/30 sm:flex-none"
               >
                 Back
               </button>
@@ -484,7 +497,7 @@ export function RazorpayCheckoutButton({
                 type="button"
                 disabled={busy}
                 onClick={() => void handleProceedToPay()}
-                className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111] hover:bg-white disabled:opacity-50"
+                className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-accent px-5 py-2.5 text-xs font-medium text-accent-foreground hover:opacity-90 disabled:opacity-50"
               >
                 {busy ? (
                   <>
@@ -509,15 +522,15 @@ export function RazorpayCheckoutButton({
           role="dialog"
           aria-modal="true"
           aria-labelledby="sandbox-checkout-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
         >
-          <div className="w-full max-w-md rounded-2xl border border-white/15 bg-[#121212] p-6 text-[#f4f3ef] shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+          <div className="tgl-glass-strong w-full max-w-md rounded-3xl p-6 text-foreground shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
               <div>
-                <p className="text-[11px] uppercase tracking-[0.18em] text-[#b9a9d6]">
+                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-accent">
                   Step 2 of 2 · Secure Test Checkout
                 </p>
-                <h3 id="sandbox-checkout-title" className="mt-1.5 text-lg font-medium tracking-[-0.03em]">
+                <h3 id="sandbox-checkout-title" className="mt-1.5 text-lg font-semibold tracking-[-0.03em]">
                   {sandboxOrder.itemName}
                 </h3>
               </div>
@@ -525,30 +538,30 @@ export function RazorpayCheckoutButton({
                 type="button"
                 aria-label="Cancel payment"
                 onClick={() => void runSandboxAction("cancelled")}
-                className="grid size-11 place-items-center rounded-full border border-white/10 text-white/65 hover:text-white"
+                className="grid size-10 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"
               >
                 <X size={16} />
               </button>
             </div>
 
-            <div className="mt-4 space-y-2 rounded-xl border border-white/10 bg-black/30 p-4 text-xs">
+            <div className="tgl-subsurface mt-4 space-y-2 rounded-2xl p-4 text-xs">
               <div className="flex justify-between">
-                <span className="text-white/55">Reference</span>
-                <span className="font-mono text-white/85">{sandboxOrder.razorpayOrderId}</span>
+                <span className="text-muted-foreground">Reference</span>
+                <span className="font-mono text-foreground">{sandboxOrder.razorpayOrderId}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-white/55">Amount</span>
-                <span className="font-semibold tabular-nums text-white">
+                <span className="text-muted-foreground">Amount</span>
+                <span className="font-semibold tabular-nums text-foreground">
                   {formatInrFromPaise(sandboxOrder.amountPaise)} INR
                 </span>
               </div>
-              <p className="pt-2 text-xs leading-5 text-white/55">
+              <p className="pt-2 text-xs leading-5 text-muted-foreground">
                 Test mode is active—no real money will be charged. Slide below to confirm your payment and unlock access immediately.
               </p>
             </div>
 
             {errorMessage && (
-              <p role="alert" className="mt-3 flex items-center gap-2 rounded-xl border border-rose-400/30 bg-rose-950/25 px-3 py-2.5 text-xs text-rose-200">
+              <p role="alert" className="mt-3 flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-xs text-rose-800 dark:text-rose-200">
                 <AlertCircle size={14} className="shrink-0" aria-hidden="true" />
                 <span>{errorMessage}</span>
               </p>
@@ -560,10 +573,10 @@ export function RazorpayCheckoutButton({
                   label={`Slide to pay ${formatInrFromPaise(sandboxOrder.amountPaise)}`}
                   doneLabel="Paid"
                   errorLabel="Check payment"
-                  trackColor="#1c1922"
-                  handleColor="#f4f3ef"
-                  successColor="#22c55e"
-                  dangerColor="#e5484d"
+                  trackColor="#27272a"
+                  handleColor="#ffffff"
+                  successColor="#34C759"
+                  dangerColor="#DC2626"
                   width={276}
                   height={52}
                   disabled={busy}
@@ -575,7 +588,7 @@ export function RazorpayCheckoutButton({
                     }, 550);
                   }}
                 />
-                <p className="text-xs text-white/50">
+                <p className="text-xs text-muted-foreground">
                   Drag across or focus the handle and press End to pay.
                 </p>
               </div>
@@ -584,7 +597,7 @@ export function RazorpayCheckoutButton({
                   type="button"
                   disabled={busy}
                   onClick={() => void runSandboxAction("failed")}
-                  className="min-h-11 rounded-full border border-rose-300/30 px-3 py-2 text-xs text-rose-200 hover:bg-rose-300/10 disabled:opacity-50"
+                  className="min-h-11 rounded-full border border-rose-500/30 px-3 py-2 text-xs font-medium text-rose-700 dark:text-rose-200 hover:bg-rose-500/10 disabled:opacity-50"
                 >
                   Simulate payment issue
                 </button>
@@ -592,7 +605,7 @@ export function RazorpayCheckoutButton({
                   type="button"
                   disabled={busy}
                   onClick={() => void runSandboxAction("cancelled")}
-                  className="min-h-11 rounded-full border border-white/15 px-3 py-2 text-xs text-white/75 hover:text-white disabled:opacity-50"
+                  className="min-h-11 rounded-full border border-border bg-card px-3 py-2 text-xs font-medium text-foreground hover:border-foreground/30 disabled:opacity-50"
                 >
                   Cancel checkout
                 </button>
@@ -601,7 +614,7 @@ export function RazorpayCheckoutButton({
                 type="button"
                 disabled={busy}
                 onClick={() => void runSandboxAction("invalid_signature")}
-                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-amber-300/25 px-4 py-2 text-xs text-amber-200/90 hover:bg-amber-300/10 disabled:opacity-50"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-amber-500/30 px-4 py-2 text-xs font-medium text-amber-700 dark:text-amber-200 hover:bg-amber-500/10 disabled:opacity-50"
               >
                 <ShieldAlert size={13} aria-hidden="true" />
                 Test invalid signature block
@@ -617,19 +630,19 @@ export function RazorpayCheckoutButton({
           role="dialog"
           aria-modal="true"
           aria-labelledby="payment-success-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
         >
-          <div className="w-full max-w-md rounded-2xl border border-emerald-400/35 bg-[#121212] p-6 text-[#f4f3ef] shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+          <div className="tgl-glass-strong w-full max-w-md rounded-3xl border border-emerald-500/35 p-6 text-foreground shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
               <div className="flex items-start gap-3">
-                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-500/20 text-emerald-300">
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
                   <CheckCircle2 size={20} aria-hidden="true" />
                 </span>
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-300">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">
                     Payment Confirmed
                   </p>
-                  <h3 id="payment-success-title" className="mt-1 text-lg font-medium tracking-[-0.03em]">
+                  <h3 id="payment-success-title" className="mt-1 text-lg font-semibold tracking-[-0.03em]">
                     {isCourse ? "Programme Enrolment Active!" : "Certificate Issued!"}
                   </h3>
                 </div>
@@ -638,14 +651,14 @@ export function RazorpayCheckoutButton({
                 type="button"
                 aria-label="Close confirmation"
                 onClick={() => setStep("idle")}
-                className="grid size-11 place-items-center rounded-full border border-white/10 text-white/65 hover:text-white"
+                className="grid size-10 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"
               >
                 <X size={16} />
               </button>
             </div>
 
             <div className="mt-4 space-y-3 text-xs">
-              <p className="leading-5 text-white/80">
+              <p className="leading-5 text-foreground/85">
                 {statusMessage ||
                   (isCourse
                     ? `You now have full access to ${productName}, its linked project, and its internship track.`
@@ -653,14 +666,14 @@ export function RazorpayCheckoutButton({
               </p>
 
               {confirmedRef && (
-                <div className="space-y-1.5 rounded-xl border border-white/10 bg-black/30 p-3.5 text-[11px] text-white/65">
+                <div className="tgl-subsurface space-y-1.5 rounded-2xl p-3.5 text-[11px] text-muted-foreground">
                   <p>
                     Total paid (all-inclusive):{" "}
-                    <strong className="text-white">{formatInrFromPaise(pricePaise)} INR</strong>
+                    <strong className="text-foreground">{formatInrFromPaise(pricePaise)} INR</strong>
                   </p>
                   <p className="font-mono">Order: {confirmedRef.orderId}</p>
                   {confirmedRef.certificateId && (
-                    <p className="font-mono text-emerald-300">
+                    <p className="font-mono text-emerald-700 dark:text-emerald-300">
                       Certificate ID: {confirmedRef.certificateId}
                     </p>
                   )}
@@ -676,7 +689,7 @@ export function RazorpayCheckoutButton({
                     setStep("idle");
                     onSuccess?.();
                   }}
-                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111] hover:bg-white"
+                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-xs font-medium text-accent-foreground hover:opacity-90"
                 >
                   Open Programme Workspace
                   <ArrowRight size={14} aria-hidden="true" />
@@ -684,7 +697,7 @@ export function RazorpayCheckoutButton({
               ) : confirmedRef?.certificateId ? (
                 <Link
                   href={`/verify/certificate/${encodeURIComponent(confirmedRef.certificateId)}`}
-                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111] hover:bg-white"
+                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-xs font-medium text-accent-foreground hover:opacity-90"
                 >
                   View Certificate
                   <ArrowRight size={14} aria-hidden="true" />
@@ -693,7 +706,7 @@ export function RazorpayCheckoutButton({
                 <Link
                   href={continueHref ?? "/certificates"}
                   onClick={() => setStep("idle")}
-                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111] hover:bg-white"
+                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-xs font-medium text-accent-foreground hover:opacity-90"
                 >
                   Continue Learning
                   <ArrowRight size={14} aria-hidden="true" />
@@ -710,19 +723,19 @@ export function RazorpayCheckoutButton({
           role="dialog"
           aria-modal="true"
           aria-labelledby="payment-failed-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
         >
-          <div className="w-full max-w-md rounded-2xl border border-rose-400/35 bg-[#121212] p-6 text-[#f4f3ef] shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+          <div className="tgl-glass-strong w-full max-w-md rounded-3xl border border-rose-500/35 p-6 text-foreground shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
               <div className="flex items-start gap-3">
-                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-rose-500/20 text-rose-300">
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-rose-500/15 text-rose-700 dark:text-rose-300">
                   <AlertCircle size={20} aria-hidden="true" />
                 </span>
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-rose-300">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-rose-700 dark:text-rose-300">
                     Payment Not Completed
                   </p>
-                  <h3 id="payment-failed-title" className="mt-1 text-lg font-medium tracking-[-0.03em]">
+                  <h3 id="payment-failed-title" className="mt-1 text-lg font-semibold tracking-[-0.03em]">
                     Nothing was charged
                   </h3>
                 </div>
@@ -731,13 +744,13 @@ export function RazorpayCheckoutButton({
                 type="button"
                 aria-label="Close notice"
                 onClick={() => setStep("idle")}
-                className="grid size-11 place-items-center rounded-full border border-white/10 text-white/65 hover:text-white"
+                className="grid size-10 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"
               >
                 <X size={16} />
               </button>
             </div>
 
-            <p className="mt-4 text-xs leading-6 text-white/75">
+            <p className="mt-4 text-xs leading-6 text-muted-foreground">
               {errorMessage || "Your payment did not finish. You can review your order and try again."}
             </p>
 
@@ -745,7 +758,7 @@ export function RazorpayCheckoutButton({
               <button
                 type="button"
                 onClick={() => setStep("idle")}
-                className="min-h-11 flex-1 rounded-full border border-white/15 px-4 py-2.5 text-xs text-white/80 hover:border-white/35"
+                className="min-h-11 flex-1 rounded-full border border-border bg-card px-4 py-2.5 text-xs font-medium text-foreground hover:border-foreground/30"
               >
                 Close
               </button>
@@ -755,7 +768,7 @@ export function RazorpayCheckoutButton({
                   setErrorMessage("");
                   setStep("summary");
                 }}
-                className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111] hover:bg-white"
+                className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-xs font-medium text-accent-foreground hover:opacity-90"
               >
                 Try Again
                 <ArrowRight size={14} aria-hidden="true" />

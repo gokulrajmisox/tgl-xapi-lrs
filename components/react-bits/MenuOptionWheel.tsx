@@ -49,8 +49,8 @@ export default function MenuOptionWheel({
   defaultSelected = 0,
   onChange,
   onActivate,
-  textColor = '#8a8694',
-  activeColor = '#f4f3ef',
+  textColor,
+  activeColor,
   side = 'left',
   fontSize = 2.2,
   spacing = 1.4,
@@ -337,8 +337,8 @@ export default function MenuOptionWheel({
       className={`menu-option-wheel${side === 'right' ? ' menu-option-wheel--right' : ''}${isDragging ? ' menu-option-wheel--dragging' : ''}${className ? ` ${className}` : ''}`}
       style={
         {
-          '--ow-text-color': textColor,
-          '--ow-active-color': activeColor,
+          ...(textColor ? { '--ow-text-color': textColor } : {}),
+          ...(activeColor ? { '--ow-active-color': activeColor } : {}),
           '--ow-font-size': `${fontSize}rem`,
           '--ow-inset': `${inset}px`,
         } as CSSProperties

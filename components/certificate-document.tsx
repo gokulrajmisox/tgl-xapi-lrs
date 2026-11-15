@@ -152,7 +152,7 @@ export function CertificateDocument({
               <a
                 href={`/api/certificates/${encodeURIComponent(data.certificateId)}/pdf`}
                 download={`${data.certificateId}.pdf`}
-                className="inline-flex items-center gap-2 rounded-full bg-[#f4f3ef] px-4 py-2 text-xs font-medium text-[#111111] transition-colors hover:bg-white whitespace-nowrap shrink-0"
+                className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-xs font-medium text-accent-foreground transition-opacity hover:opacity-90 whitespace-nowrap shrink-0"
               >
                 <Download size={14} aria-hidden="true" />
                 Download certificate
@@ -160,7 +160,7 @@ export function CertificateDocument({
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-xs text-white/80 transition-colors hover:border-white/35 hover:text-white whitespace-nowrap shrink-0"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30 whitespace-nowrap shrink-0"
               >
                 <Printer size={14} aria-hidden="true" />
                 Print / Save PDF
@@ -169,7 +169,7 @@ export function CertificateDocument({
           )}
           <Link
             href={verifyPath}
-            className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-xs text-[#b9a9d6] transition-colors hover:border-[#b9a9d6]/50 whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-accent transition-colors hover:border-accent/50 whitespace-nowrap shrink-0"
           >
             Public verification <ExternalLink size={13} aria-hidden="true" />
           </Link>

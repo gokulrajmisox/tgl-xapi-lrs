@@ -184,13 +184,13 @@ export default function OptionWheel({
         {/* Outer guide halo & top indicator */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-4 rounded-full border border-white/10"
+          className="pointer-events-none absolute inset-4 rounded-full border border-border"
         />
         <div
           aria-hidden="true"
           className="pointer-events-none absolute left-1/2 top-1.5 z-20 -translate-x-1/2"
         >
-          <span className="block h-2.5 w-2.5 rotate-45 bg-[#b9a9d6] shadow-[0_0_12px_rgba(185,169,214,0.85)]" />
+          <span className="block h-2.5 w-2.5 rotate-45 bg-accent shadow-sm" />
         </div>
 
         {/* Rotating radial spoke layer */}
@@ -219,8 +219,8 @@ export default function OptionWheel({
                   style={{ transform: `rotate(${-liveRotation}deg)` }}
                   className={`flex min-w-[54px] max-w-[84px] flex-col items-center rounded-2xl border px-1.5 py-1 text-center transition-colors sm:min-w-[78px] sm:max-w-[110px] sm:px-3 sm:py-2 ${
                     isSelected
-                      ? 'border-[#b9a9d6] bg-[#f4f3ef] text-[#111111] shadow-[0_10px_28px_rgba(185,169,214,0.28)]'
-                      : 'border-white/15 bg-[#151515]/95 text-white/80 hover:border-white/40 hover:text-white'
+                      ? 'border-accent bg-accent text-accent-foreground shadow-md'
+                      : 'border-border bg-card/95 text-foreground/85 hover:border-foreground/30 hover:text-foreground'
                   }`}
                 >
                   <span className="truncate max-w-full text-[9px] font-medium leading-tight sm:text-[11px]">
@@ -228,7 +228,7 @@ export default function OptionWheel({
                   </span>
                   <span
                     className={`mt-0.5 font-mono text-[9px] tabular-nums sm:text-[10px] ${
-                      isSelected ? 'text-black/70' : 'text-[#b9a9d6]'
+                      isSelected ? 'opacity-90' : 'text-accent'
                     }`}
                   >
                     {item.priceLabel}
@@ -242,23 +242,23 @@ export default function OptionWheel({
         {/* Stationary center hub readout */}
         {activeItem && (
           <div className="pointer-events-none relative z-10 flex h-full w-full items-center justify-center p-12 sm:p-20">
-            <div className="pointer-events-auto flex w-36 flex-col items-center rounded-full border border-white/15 bg-[#101012]/95 px-3 py-3.5 text-center shadow-2xl backdrop-blur-md sm:w-48 sm:px-4 sm:py-5">
-              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#b9a9d6]">
+            <div className="tgl-glass-strong pointer-events-auto flex w-36 flex-col items-center rounded-full px-3 py-3.5 text-center shadow-xl sm:w-48 sm:px-4 sm:py-5">
+              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-accent">
                 {String(selectedIndex + 1).padStart(2, '0')} / {String(count).padStart(2, '0')}
               </p>
-              <p className="mt-1 line-clamp-2 text-[11px] font-medium leading-4 text-[#f4f3ef] sm:text-xs">
+              <p className="mt-1 line-clamp-2 text-[11px] font-semibold leading-4 text-foreground sm:text-xs">
                 {activeItem.label}
               </p>
-              <p className="mt-1 font-mono text-xs font-semibold tabular-nums text-[#f4f3ef] sm:text-sm">
+              <p className="mt-1 font-mono text-xs font-semibold tabular-nums text-foreground sm:text-sm">
                 {activeItem.priceLabel}
               </p>
-              <p className="mt-0.5 hidden text-[10px] text-white/45 sm:block">{activeItem.meta}</p>
+              <p className="mt-0.5 hidden text-[10px] text-muted-foreground sm:block">{activeItem.meta}</p>
               <div className="mt-2.5 flex items-center gap-2 sm:mt-3">
                 <button
                   type="button"
                   onClick={() => stepBy(-1)}
                   aria-label="Previous course on wheel"
-                  className="grid size-9 place-items-center rounded-full border border-white/15 text-white/75 hover:border-white/40 hover:text-white sm:size-10"
+                  className="grid size-9 place-items-center rounded-full border border-border bg-card text-foreground/75 hover:border-foreground/35 hover:text-foreground sm:size-10"
                 >
                   <ChevronLeft size={14} aria-hidden="true" />
                 </button>
@@ -266,7 +266,7 @@ export default function OptionWheel({
                   type="button"
                   onClick={() => stepBy(1)}
                   aria-label="Next course on wheel"
-                  className="grid size-9 place-items-center rounded-full border border-white/15 text-white/75 hover:border-white/40 hover:text-white sm:size-10"
+                  className="grid size-9 place-items-center rounded-full border border-border bg-card text-foreground/75 hover:border-foreground/35 hover:text-foreground sm:size-10"
                 >
                   <ChevronRight size={14} aria-hidden="true" />
                 </button>

@@ -9,6 +9,11 @@ import {
 } from "@/lib/learning-graph";
 import { getLearnerSnapshot } from "@/lib/learning-workspace-store";
 import { DEMO_STUDENT_ID, resolveCurrentActor } from "@/lib/certifications/store";
+import {
+  getCourseDetailForActor,
+  listAllCoursesRaw,
+} from "@/lib/courses/store";
+import { canAccessCourseProject } from "@/lib/learning/progression";
 
 export async function generateMetadata({
   params,
@@ -40,6 +45,34 @@ export default async function ProjectPage({
   const actorId = user?.id ?? DEMO_STUDENT_ID;
   const workspace = getLearnerSnapshot(actorId);
 
+  const allCourses = await listAllCoursesRaw(true);
+  const linkedCourse = allCourses.find(
+    (c) => c.project.slug === project.slug,
+  );
+  let accessAllowed = true;
+  let accessLockReason: string | null = null;
+  if (linkedCourse && user?.role !== "admin") {
+    const courseDetail = await getCourseDetailForActor({
+      slug: linkedCourse.slug,
+      userId: actorId,
+      bypassLockForAdmin: false,
+    });
+    if (!courseDetail || courseDetail.locked) {
+      accessAllowed = false;
+      accessLockReason =
+        "Enrol in this programme first, complete the modules, and pass the graded quiz to unlock this project.";
+    } else {
+      const gate = canAccessCourseProject({
+        enrolled: true,
+        completedLessonCount: courseDetail.course.completedLessonCount,
+        totalLessonCount: courseDetail.course.lessonCount,
+        quizPassed: courseDetail.course.quizPassed,
+      });
+      accessAllowed = gate.allowed;
+      accessLockReason = gate.reason;
+    }
+  }
+
   const relatedConcepts = project.relatedConceptIds
     .map((id) => findNodeById(id))
     .filter((node): node is LearningNode => Boolean(node));
@@ -60,10 +93,18 @@ export default async function ProjectPage({
       role="student"
       title={project.title}
       subtitle={`${project.category} · ${project.cohortName} · Mentor: ${project.mentorName}`}
-      primaryAction={{ label: "Portfolio & evidence", href: "/learn/portfolio" }}
+      primaryAction={
+        linkedCourse
+          ? { label: "Open Unified Workspace", href: `/programmes/${linkedCourse.slug}` }
+          : { label: "My Learning", href: "/learn" }
+      }
     >
       <ProjectWorkspaceClient
         project={project}
+        linkedCourseSlug={linkedCourse?.slug ?? null}
+        linkedCourseTitle={linkedCourse?.title ?? null}
+        accessAllowed={accessAllowed}
+        accessLockReason={accessLockReason}
         relatedConcepts={relatedConcepts}
         relatedProjects={relatedProjects}
         initialSubmissions={projectSubmissions}

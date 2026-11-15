@@ -91,26 +91,26 @@ export function CertificatesHub() {
 
   return (
     <div className="space-y-10">
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-[#111111] px-6 py-4 text-xs text-white/70">
+      <div className="tgl-glass flex flex-wrap items-center justify-between gap-4 rounded-2xl px-6 py-4 text-xs text-muted-foreground">
         <span className="flex items-center gap-2">
-          <ShieldCheck size={15} className="text-[#b9a9d6]" aria-hidden="true" />
+          <ShieldCheck size={15} className="text-[var(--accent)]" aria-hidden="true" />
           Certificate Policy:{" "}
-          <strong className="text-[#f4f3ef]">
+          <strong className="text-foreground">
             Included in every TGL Programme Enrolment (₹0 additional certificate fee)
           </strong>
         </span>
-        <Link href="/learn" className="min-h-11 inline-flex items-center gap-1 text-[#b9a9d6] hover:text-white">
-          Open My Home <ArrowUpRight size={13} />
+        <Link href="/learn" className="inline-flex min-h-11 items-center gap-1 font-medium text-[var(--accent)] hover:underline">
+          Open My Learning <ArrowUpRight size={13} />
         </Link>
       </div>
 
       {claimNotice && (
-        <p role="status" className="rounded-xl border border-emerald-400/25 bg-emerald-950/20 px-4 py-3 text-xs text-emerald-200">
+        <p role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-700 dark:text-emerald-200">
           {claimNotice}
         </p>
       )}
       {claimError && (
-        <p role="alert" className="rounded-xl border border-rose-400/30 bg-rose-950/20 px-4 py-3 text-xs text-rose-200">
+        <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-700 dark:text-rose-200">
           {claimError}
         </p>
       )}
@@ -118,7 +118,7 @@ export function CertificatesHub() {
       {loading ? (
         <div className="grid gap-4 md:grid-cols-2">
           {[1, 2, 3, 4].map((n) => (
-            <div key={n} className="h-64 animate-pulse rounded-2xl border border-white/10 bg-white/[0.03]" />
+            <div key={n} className="tgl-glass h-64 rounded-2xl opacity-60" />
           ))}
         </div>
       ) : (
@@ -131,23 +131,21 @@ export function CertificatesHub() {
             return (
               <article
                 key={product.id}
-                className={`flex flex-col justify-between rounded-2xl border p-6 sm:p-7 ${
-                  isInternship
-                    ? "border-[#b9a9d6]/45 bg-[#14121a]"
-                    : "border-white/10 bg-[#111111]"
+                className={`tgl-glass flex flex-col justify-between rounded-2xl p-6 sm:p-7 ${
+                  isInternship ? "border-[var(--accent)]/45" : ""
                 }`}
               >
                 <div>
                   <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-                    <span className="text-[#b9a9d6]">
+                    <span className="font-medium text-[var(--accent)]">
                       Included with Programme Enrolment
                     </span>
-                    <span className="font-mono text-sm font-semibold tabular-nums text-emerald-300">
+                    <span className="font-mono text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-300">
                       {formatInrFromPaise(0)}
                     </span>
                   </div>
 
-                  <h2 className="mt-3 text-2xl font-medium tracking-[-0.04em] text-[#f4f3ef]">
+                  <h2 className="mt-3 text-2xl font-medium tracking-[-0.04em] text-foreground">
                     {isInternship ? (
                       <span className="uppercase tracking-[0.02em]">INTERNSHIP CERTIFICATE</span>
                     ) : (
@@ -155,10 +153,10 @@ export function CertificatesHub() {
                     )}
                   </h2>
 
-                  <p className="mt-2 text-xs leading-6 text-white/60">{product.description}</p>
+                  <p className="mt-2 text-xs leading-6 text-muted-foreground">{product.description}</p>
 
-                  <div className="mt-5 border-t border-white/10 pt-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/50">
+                  <div className="mt-5 border-t border-border pt-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
                       Eligibility checklist
                     </p>
                     {product.eligibility ? (
@@ -167,20 +165,20 @@ export function CertificatesHub() {
                           {product.eligibility.checks.map((c) => (
                             <li key={c.key} className="flex items-center gap-2 text-xs">
                               {c.satisfied ? (
-                                <CheckCircle2 size={14} className="shrink-0 text-emerald-400" aria-hidden="true" />
+                                <CheckCircle2 size={14} className="shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
                               ) : (
-                                <CircleDashed size={14} className="shrink-0 text-white/40" aria-hidden="true" />
+                                <CircleDashed size={14} className="shrink-0 text-muted-foreground" aria-hidden="true" />
                               )}
-                              <span className={c.satisfied ? "text-white/90" : "text-white/55"}>
+                              <span className={c.satisfied ? "text-foreground" : "text-muted-foreground"}>
                                 {c.label}
                               </span>
                             </li>
                           ))}
                         </ul>
                         {!eligible && product.eligibility.missingReasons.length > 0 && (
-                          <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-950/20 p-3 text-[11px] leading-5 text-amber-100">
+                          <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] leading-5 text-amber-900 dark:text-amber-100">
                             <p className="font-medium">Remaining steps to unlock:</p>
-                            <ul className="mt-1 list-disc pl-4 text-white/80">
+                            <ul className="mt-1 list-disc pl-4 opacity-90">
                               {product.eligibility.missingReasons.map((reason) => (
                                 <li key={reason}>{reason}</li>
                               ))}
@@ -189,22 +187,22 @@ export function CertificatesHub() {
                         )}
                       </>
                     ) : (
-                      <p className="mt-2 flex items-center gap-2 text-xs text-white/55">
+                      <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                         <Lock size={13} aria-hidden="true" /> Sign in to check your certificate progress.
                       </p>
                     )}
                   </div>
                 </div>
 
-                <div className="mt-6 space-y-4 border-t border-white/10 pt-5">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/60">
+                <div className="mt-6 space-y-4 border-t border-border pt-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                     <span>
                       Certificate fee:{" "}
-                      <strong className="text-emerald-300">Included (₹0 extra)</strong>
+                      <strong className="text-emerald-600 dark:text-emerald-300">Included (₹0 extra)</strong>
                     </span>
                     <span>
                       Status:{" "}
-                      <strong className="text-[#b9a9d6]">
+                      <strong className="text-[var(--accent)]">
                         {issued
                           ? `Issued (${product.activeIssuance?.certificate_id})`
                           : eligible
@@ -218,14 +216,14 @@ export function CertificatesHub() {
                     {!user ? (
                       <Link
                         href="/auth/login?next=/certificates"
-                        className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111]"
+                        className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-medium text-primary-foreground"
                       >
                         Sign in to Check Eligibility <ArrowUpRight size={13} />
                       </Link>
                     ) : issued && product.activeIssuance ? (
                       <Link
                         href={`/verify/certificate/${encodeURIComponent(product.activeIssuance.certificate_id)}`}
-                        className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111]"
+                        className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-medium text-primary-foreground"
                       >
                         <Award size={14} aria-hidden="true" /> Open Verified Certificate
                       </Link>
@@ -234,7 +232,7 @@ export function CertificatesHub() {
                         type="button"
                         disabled={claimingId === product.id}
                         onClick={() => void handleClaimIncluded(product)}
-                        className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#f4f3ef] px-5 py-2.5 text-xs font-medium text-[#111111] disabled:opacity-50"
+                        className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
                       >
                         {claimingId === product.id
                           ? "Issuing Certificate…"
@@ -243,7 +241,7 @@ export function CertificatesHub() {
                     ) : (
                       <Link
                         href="/learn"
-                        className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 px-5 py-2.5 text-xs text-white/85 hover:border-white/35"
+                        className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-5 py-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/40"
                       >
                         Complete Remaining Steps <ArrowUpRight size={13} />
                       </Link>
@@ -252,7 +250,7 @@ export function CertificatesHub() {
                     <button
                       type="button"
                       onClick={() => setSelectedPreviewId(product.id)}
-                      className="min-h-11 rounded-full border border-white/15 px-4 py-2 text-xs text-white/80 hover:border-white/35 hover:text-white"
+                      className="min-h-11 rounded-full border border-border px-4 py-2 text-xs text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
                     >
                       Preview certificate
                     </button>
@@ -265,20 +263,20 @@ export function CertificatesHub() {
       )}
 
       {previewProduct && (
-        <section className="space-y-4 border-t border-white/10 pt-10">
+        <section className="space-y-4 border-t border-border pt-10">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <p className="text-[11px] uppercase tracking-[0.18em] text-white/50">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                 Certificate Preview &amp; Verification
               </p>
-              <h3 className="mt-2 text-2xl font-medium tracking-[-0.04em]">
+              <h3 className="mt-2 text-2xl font-medium tracking-[-0.04em] text-foreground">
                 {previewProduct.name}
               </h3>
             </div>
             {previewProduct.activeIssuance && (
               <Link
                 href={`/verify/certificate/${encodeURIComponent(previewProduct.activeIssuance.certificate_id)}`}
-                className="min-h-11 inline-flex items-center text-xs text-[#b9a9d6] underline underline-offset-4"
+                className="inline-flex min-h-11 items-center text-xs font-medium text-[var(--accent)] underline underline-offset-4"
               >
                 Open public verification link
               </Link>

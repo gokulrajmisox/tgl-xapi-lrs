@@ -3,12 +3,10 @@ import { Header } from "@/components/header";
 import { CourseWorkspaceClient } from "@/components/course-workspace-client";
 import {
   isSupabaseConfigured,
-  listInternships,
-  listIssuances,
-  listStudentApplications,
   resolveCurrentActor,
 } from "@/lib/certifications/store";
 import { getCourseDetailForActor } from "@/lib/courses/store";
+import { buildProgrammeWorkspacePayload } from "@/lib/learning/course-workspace";
 
 export async function generateMetadata({
   params,
@@ -35,46 +33,29 @@ export default async function CourseDetailPage({
   const configured = isSupabaseConfigured();
   const actor = await resolveCurrentActor();
 
-  const detail = await getCourseDetailForActor({
+  const payload = await buildProgrammeWorkspacePayload({
     slug,
-    userId: actor.user?.id ?? null,
-    bypassLockForAdmin: actor.user?.role === "admin",
+    user: actor.user,
   });
 
-  if (!detail) {
+  if (!payload) {
     notFound();
   }
 
-  const [internships, applications, issuances] = await Promise.all([
-    listInternships(),
-    actor.user ? listStudentApplications(actor.user.id) : Promise.resolve([]),
-    actor.user ? listIssuances(actor.user.id) : Promise.resolve([]),
-  ]);
-
-  const internshipTrack =
-    internships.find((i) => i.slug === detail.course.linkedInternshipSlug) ?? null;
-  const internshipApplication =
-    internshipTrack
-      ? applications.find((a) => a.internship_id === internshipTrack.id) ?? null
-      : null;
-  const issuedCertificate =
-    internshipApplication
-      ? issuances.find(
-          (i) =>
-            i.internship_application_id === internshipApplication.id &&
-            i.issuance_status !== "revoked",
-        ) ?? null
-      : null;
-
   return (
-    <div className="min-h-screen overflow-x-clip bg-[#090909]">
+    <div className="min-h-screen overflow-x-clip bg-background text-foreground">
       <Header />
       <main>
         <CourseWorkspaceClient
-          initialDetail={detail}
-          initialInternshipTrack={internshipTrack}
-          initialInternshipApplication={internshipApplication}
-          initialIssuedCertificate={issuedCertificate}
+          initialDetail={payload.detail}
+          initialInternshipTrack={payload.internshipTrack}
+          initialInternshipApplication={payload.internshipApplication}
+          initialIssuedCertificate={payload.issuedCertificate}
+          initialProgression={payload.progression}
+          initialEnrolledAt={payload.enrolledAt}
+          initialCompletedOn={payload.completedOn}
+          initialClaimedAt={payload.claimedAt}
+          initialProjectSubmissions={payload.projectSubmissions}
           user={actor.user}
           isSandbox={!configured}
         />

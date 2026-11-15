@@ -11,6 +11,9 @@ export function createClient(): SupabaseClient {
   return createBrowserClient(
     url,
     key,
-    { cookieOptions: { secure: process.env.NODE_ENV === "production" } },
+    {
+      auth: { flowType: "pkce" },
+      cookieOptions: { secure: process.env.NODE_ENV === "production" },
+    },
   );
 }

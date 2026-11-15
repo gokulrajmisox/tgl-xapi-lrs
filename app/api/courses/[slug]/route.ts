@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
-import {
-  listInternships,
-  listIssuances,
-  listStudentApplications,
-  resolveCurrentActor,
-} from "@/lib/certifications/store";
-import { getCourseDetailForActor } from "@/lib/courses/store";
+import { resolveCurrentActor } from "@/lib/certifications/store";
+import { buildProgrammeWorkspacePayload } from "@/lib/learning/course-workspace";
 
 export async function GET(
   _request: Request,
@@ -13,43 +8,26 @@ export async function GET(
 ) {
   const { slug } = await params;
   const actor = await resolveCurrentActor();
-  const detail = await getCourseDetailForActor({
+  const payload = await buildProgrammeWorkspacePayload({
     slug,
-    userId: actor.user?.id ?? null,
-    bypassLockForAdmin: actor.user?.role === "admin",
+    user: actor.user,
   });
 
-  if (!detail) {
+  if (!payload) {
     return NextResponse.json({ error: "Programme not found." }, { status: 404 });
   }
 
-  const [internships, applications, issuances] = await Promise.all([
-    listInternships(),
-    actor.user ? listStudentApplications(actor.user.id) : Promise.resolve([]),
-    actor.user ? listIssuances(actor.user.id) : Promise.resolve([]),
-  ]);
-
-  const internshipTrack =
-    internships.find((i) => i.slug === detail.course.linkedInternshipSlug) ?? null;
-  const internshipApplication =
-    internshipTrack
-      ? applications.find((a) => a.internship_id === internshipTrack.id) ?? null
-      : null;
-  const issuedCertificate =
-    internshipApplication
-      ? issuances.find(
-          (i) =>
-            i.internship_application_id === internshipApplication.id &&
-            i.issuance_status !== "revoked",
-        ) ?? null
-      : null;
-
   return NextResponse.json(
     {
-      ...detail,
-      internshipTrack,
-      internshipApplication,
-      issuedCertificate,
+      ...payload.detail,
+      internshipTrack: payload.internshipTrack,
+      internshipApplication: payload.internshipApplication,
+      issuedCertificate: payload.issuedCertificate,
+      progression: payload.progression,
+      enrolledAt: payload.enrolledAt,
+      completedOn: payload.completedOn,
+      claimedAt: payload.claimedAt,
+      projectSubmissions: payload.projectSubmissions,
     },
     { headers: { "Cache-Control": "no-store" } },
   );

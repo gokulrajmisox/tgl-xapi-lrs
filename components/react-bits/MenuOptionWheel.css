@@ -1,6 +1,6 @@
 .menu-option-wheel {
-  --ow-text-color: #a6a6a6;
-  --ow-active-color: #ffffff;
+  --ow-text-color: #6e6e73;
+  --ow-active-color: #1d1d1f;
   --ow-font-size: 2.25rem;
   --ow-inset: 32px;
 
@@ -12,6 +12,11 @@
   user-select: none;
   touch-action: none;
   outline: none;
+}
+
+.dark .menu-option-wheel {
+  --ow-text-color: #a6a6a6;
+  --ow-active-color: #ffffff;
 }
 
 .menu-option-wheel--dragging {

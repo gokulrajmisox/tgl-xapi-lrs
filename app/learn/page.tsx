@@ -5,6 +5,7 @@ import { getLearnerSnapshot } from "@/lib/learning-workspace-store";
 import { listCoursesCatalog } from "@/lib/courses/store";
 import {
   DEMO_STUDENT_ID,
+  getCertificateClaimedAt,
   isSupabaseConfigured,
   listInternships,
   listIssuances,
@@ -16,9 +17,9 @@ import {
 } from "@/lib/certifications/store";
 
 export const metadata = {
-  title: "My Home — Touch Grass Later",
+  title: "My Learning — Touch Grass Later",
   description:
-    "Follow your next step across Courses, Projects, Internships, and Verified Certificates.",
+    "Unified learning hub for all enrolled programmes, internship tracks, practical projects, and included certificates.",
 };
 
 export default async function StudentHomePage() {
@@ -44,12 +45,16 @@ export default async function StudentHomePage() {
       listProducts(false),
     ]);
 
+  const claimedCertIds = issuances
+    .filter((i) => Boolean(getCertificateClaimedAt(i.certificate_id)))
+    .map((i) => i.certificate_id);
+
   return (
     <RoleShell
       role="student"
-      title={`Welcome back, ${learnerName}!`}
-      subtitle="See what you have finished and what to do next across your courses, projects, internships, and certificates."
-      primaryAction={{ label: "Browse Programmes", href: "/programmes" }}
+      title={`My Learning · ${learnerName}`}
+      subtitle="Continue where you left off across all enrolled programmes, practical projects, guided internship tracks, and included certificates."
+      primaryAction={{ label: "Explore Programmes", href: "/programmes" }}
     >
       <StudentHomeClient
         learnerName={learnerName}
@@ -59,6 +64,7 @@ export default async function StudentHomePage() {
         orders={orders}
         payments={payments}
         issuances={issuances}
+        claimedCertIds={claimedCertIds}
         products={products}
         nodeStates={workspace.nodeStates}
         savedItems={workspace.savedItems}

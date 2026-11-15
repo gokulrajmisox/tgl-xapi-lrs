@@ -13,5 +13,5 @@ export function SignOutButton() {
     if (!error) { router.push("/"); router.refresh(); }
     else setBusy(false);
   };
-  return <button type="button" disabled={busy} onClick={signOut} className="text-left text-xs text-white/50 hover:text-white disabled:opacity-50">{busy ? "Signing out…" : "Sign out"}</button>;
+  return <button type="button" disabled={busy} onClick={signOut} className="text-left text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">{busy ? "Signing out…" : "Sign out"}</button>;
 }

@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { resolveCurrentActor } from "@/lib/certifications/store";
 import {
+  getUserCourseProgressMap,
+  getUserCourseQuizAttempt,
+  hasActiveCourseEnrollment,
+  listAllCoursesRaw,
+} from "@/lib/courses/store";
+import { canAccessCourseProject } from "@/lib/learning/progression";
+import {
   getLearnerSnapshot,
   postMentorMessage,
   setLearnerNodeState,
@@ -58,6 +65,37 @@ const ActionSchema = z.discriminatedUnion("action", [
     body: z.string().trim().min(5, "Write a clear question for your mentor").max(1500),
   }),
 ]);
+
+async function checkLinkedCourseProjectPrerequisite(params: {
+  userId: string;
+  role: "student" | "admin";
+  projectSlug: string;
+}): Promise<{ allowed: boolean; reason: string | null }> {
+  if (params.role === "admin") return { allowed: true, reason: null };
+  const allCourses = await listAllCoursesRaw(true);
+  const linkedCourse = allCourses.find((c) => c.project.slug === params.projectSlug);
+  if (!linkedCourse) return { allowed: true, reason: null };
+
+  const enrolled = await hasActiveCourseEnrollment(params.userId, linkedCourse.id);
+  const [progressMap, quizAttempt] = enrolled
+    ? await Promise.all([
+        getUserCourseProgressMap(params.userId, linkedCourse.id),
+        getUserCourseQuizAttempt(params.userId, linkedCourse.id),
+      ])
+    : [{} as Record<string, { status: string }>, null];
+
+  const allLessons = linkedCourse.modules.flatMap((m) => m.lessons);
+  const completedCount = allLessons.filter(
+    (l) => progressMap[l.id]?.status === "completed",
+  ).length;
+
+  return canAccessCourseProject({
+    enrolled,
+    completedLessonCount: completedCount,
+    totalLessonCount: allLessons.length,
+    quizPassed: Boolean(quizAttempt?.passed),
+  });
+}
 
 export async function GET() {
   const { user, configured } = await resolveCurrentActor();
@@ -118,6 +156,18 @@ export async function POST(request: Request) {
   }
 
   if (input.action === "start_project") {
+    const gate = await checkLinkedCourseProjectPrerequisite({
+      userId: actor.id,
+      role: actor.role,
+      projectSlug: input.projectSlug,
+    });
+    if (!gate.allowed) {
+      return NextResponse.json(
+        { error: gate.reason ?? "Complete learning modules and graded quiz first." },
+        { status: 403 },
+      );
+    }
+
     const result = startLearnerProjectWork({
       userId: actor.id,
       learnerName: actor.name,
@@ -134,6 +184,18 @@ export async function POST(request: Request) {
   }
 
   if (input.action === "submit_project") {
+    const gate = await checkLinkedCourseProjectPrerequisite({
+      userId: actor.id,
+      role: actor.role,
+      projectSlug: input.projectSlug,
+    });
+    if (!gate.allowed) {
+      return NextResponse.json(
+        { error: gate.reason ?? "Complete learning modules and graded quiz first." },
+        { status: 403 },
+      );
+    }
+
     const githubUrl = input.githubUrl || input.artifactUrl;
     if (!githubUrl) {
       return NextResponse.json(

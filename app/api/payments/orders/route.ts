@@ -4,6 +4,7 @@ import {
   createCourseEnrollmentOrder,
   resolveCurrentActor,
 } from "@/lib/certifications/store";
+import { RazorpayGatewayError } from "@/lib/payments/razorpay";
 
 const ProgrammeOrderSchema = z.object({
   orderKind: z.enum(["programme_enrollment", "course_enrollment"]),
@@ -49,6 +50,9 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           order: result.order,
+          order_id: result.order.razorpay_order_id,
+          amount: result.order.amount_paise,
+          currency: result.order.currency,
           keyId: result.keyId ?? null,
           isSimulated: Boolean(result.isSimulated),
           courseTitle: result.courseTitle ?? null,
@@ -65,9 +69,10 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   } catch (error) {
+    const status = error instanceof RazorpayGatewayError ? error.statusCode : 500;
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Order creation failed." },
-      { status: 500 },
+      { status },
     );
   }
 }

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { deriveStudentProfileSeed } from "@/lib/auth/profile-sync";
 import { createClient as createUserClient } from "@/lib/supabase/server";
 import { serviceClient, isSupabaseConfigured } from "@/lib/supabase/service";
 import {
@@ -182,6 +183,8 @@ type MemoryStore = {
   emailLogs: EmailDeliveryRecord[];
   pathwayCompletedUserIds: Set<string>;
   distinctionApprovedUserIds: Set<string>;
+  claimedCertificateAtByCertId: Record<string, string>;
+  sandboxDisplayNamesByUserId: Record<string, string>;
 };
 
 const globalStore = globalThis as unknown as { __tglCertStore?: MemoryStore };
@@ -517,6 +520,11 @@ function createSeedStore(): MemoryStore {
     emailLogs: [],
     pathwayCompletedUserIds: new Set([DEMO_STUDENT_ID, DEMO_GRADUATE_ID]),
     distinctionApprovedUserIds: new Set([DEMO_GRADUATE_ID]),
+    claimedCertificateAtByCertId: {},
+    sandboxDisplayNamesByUserId: {
+      [DEMO_STUDENT_ID]: "Aarav Sharma",
+      [DEMO_ADMIN_ID]: "TGL Administrator",
+    },
   };
 }
 
@@ -531,6 +539,35 @@ export function resetMemoryStoreForTest(): void {
   globalStore.__tglCertStore = createSeedStore();
 }
 
+export function getCertificateClaimedAt(certificateId: string): string | null {
+  return getMemoryStore().claimedCertificateAtByCertId[certificateId] ?? null;
+}
+
+export function markCertificateClaimed(certificateId: string): string {
+  const store = getMemoryStore();
+  if (!store.claimedCertificateAtByCertId[certificateId]) {
+    store.claimedCertificateAtByCertId[certificateId] = new Date().toISOString();
+  }
+  return store.claimedCertificateAtByCertId[certificateId];
+}
+
+export function updateSandboxDisplayName(userId: string, fullName: string): string {
+  const trimmed = fullName.trim();
+  const store = getMemoryStore();
+  store.sandboxDisplayNamesByUserId[userId] = trimmed;
+  for (const app of store.applications) {
+    if (app.user_id === userId) {
+      app.applicant_name = trimmed;
+    }
+  }
+  for (const cert of store.issuances) {
+    if (cert.user_id === userId) {
+      cert.recipient_name = trimmed;
+    }
+  }
+  return trimmed;
+}
+
 export async function resolveCurrentActor(options?: {
   allowSandboxAdmin?: boolean;
 }): Promise<{ user: SandboxUser | null; configured: boolean }> {
@@ -540,28 +577,28 @@ export async function resolveCurrentActor(options?: {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return { user: null, configured: true };
-    const role = user.app_metadata?.role === "admin" ? "admin" : "student";
-    const name =
-      typeof user.user_metadata?.display_name === "string" && user.user_metadata.display_name.trim()
-        ? user.user_metadata.display_name.trim()
-        : "";
+    const seed = deriveStudentProfileSeed(user);
     return {
       user: {
         id: user.id,
-        email: user.email ?? "",
-        name,
-        role,
+        email: seed.email || user.email || "",
+        name: seed.fullName,
+        role: seed.role,
         isSandbox: false,
       },
       configured: true,
     };
   }
 
+  const sandboxId = options?.allowSandboxAdmin ? DEMO_ADMIN_ID : DEMO_STUDENT_ID;
+  const fallbackName = options?.allowSandboxAdmin ? "TGL Administrator" : "Aarav Sharma";
+  const storedName = getMemoryStore().sandboxDisplayNamesByUserId[sandboxId];
+
   return {
     user: {
-      id: options?.allowSandboxAdmin ? DEMO_ADMIN_ID : DEMO_STUDENT_ID,
+      id: sandboxId,
       email: options?.allowSandboxAdmin ? "admin@touchgrasslater.org" : "aarav.sharma@example.edu",
-      name: options?.allowSandboxAdmin ? "TGL Administrator" : "Aarav Sharma",
+      name: storedName || fallbackName,
       role: options?.allowSandboxAdmin ? "admin" : "student",
       isSandbox: true,
     },
