@@ -36,6 +36,7 @@ type WorkspaceActor = {
   name: string;
   email: string;
   role: string;
+  isSandbox?: boolean;
 } | null;
 
 const ALL_STEP_KEYS: ProgressionStepKey[] = [
@@ -810,9 +811,9 @@ export function CourseWorkspaceClient({
               </div>
 
               <div className="mt-5 border-t border-border pt-5">
-                {!user && !isSandbox ? (
+                {!user || user.isSandbox || isSandbox ? (
                   <Link
-                    href={`/auth/login?next=${encodeURIComponent(`/programmes/${course.slug}`)}`}
+                    href={`/auth/login?next=${encodeURIComponent(`/courses/${course.slug}`)}`}
                     className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-accent px-5 py-3 text-xs font-medium text-accent-foreground"
                   >
                     Sign in to Enrol Now ({formatInrFromPaise(course.pricePaise)})

@@ -28,7 +28,7 @@ const CreateOrderRequestSchema = z.union([
 
 export async function POST(request: Request) {
   const actor = await resolveCurrentActor();
-  if (!actor.user) {
+  if (!actor.user || actor.user.isSandbox) {
     return NextResponse.json(
       { error: "Sign in required to create an order." },
       { status: 401 },
