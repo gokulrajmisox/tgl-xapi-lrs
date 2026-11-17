@@ -130,6 +130,15 @@ export function AdminCertificationsPanel({
     testMode: boolean;
     from: string;
   } | null>(null);
+  const [testmailStatus, setTestmailStatus] = useState<{
+    enabled: boolean;
+    configured: boolean;
+    namespaceConfigured: boolean;
+    apiKeyConfigured: boolean;
+    supportedTags: string[];
+  } | null>(null);
+  const [testmailInbox, setTestmailInbox] = useState<{ tag: string; address: string; timestampFrom: number } | null>(null);
+  const [testmailResult, setTestmailResult] = useState<{ count?: number; emails?: Array<{ from?: string; to?: string; subject?: string; text?: string; html?: string }> } | null>(null);
 
   const [taskFeedbacks, setTaskFeedbacks] = useState<Record<string, string>>({});
   const [taskScores, setTaskScores] = useState<Record<string, string>>({});
@@ -176,9 +185,10 @@ export function AdminCertificationsPanel({
   const [error, setError] = useState("");
 
   const loadAll = useCallback(async () => {
-    const [ordersRes, emailsRes] = await Promise.all([
+    const [ordersRes, emailsRes, testmailRes] = await Promise.all([
       fetch("/api/admin/certifications/orders", { cache: "no-store" }),
       fetch("/api/admin/emails/test", { cache: "no-store" }),
+      fetch("/api/admin/testmail", { cache: "no-store" }),
     ]);
 
     if (ordersRes.ok) {
@@ -196,6 +206,10 @@ export function AdminCertificationsPanel({
       setTemplates(data.templates ?? []);
       setEmailLogs(data.logs ?? []);
       setEmailConfig(data.config ?? null);
+    }
+    if (testmailRes.ok) {
+      const data = await testmailRes.json();
+      setTestmailStatus(data.status ?? null);
     }
   }, []);
 
@@ -437,6 +451,52 @@ export function AdminCertificationsPanel({
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Test email error.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleGenerateTestmailInbox = async () => {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await fetch("/api/admin/testmail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "generate", tag: "enrollment" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not generate Testmail inbox.");
+      setTestmailInbox(data.inbox);
+      setTestRecipient(data.inbox.address);
+      setNotice(`Generated Testmail inbox ${data.inbox.address}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Testmail inbox generation failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRetrieveTestmail = async () => {
+    if (!testmailInbox) return;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/testmail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "query",
+          query: { tag: testmailInbox.tag, timestampFrom: testmailInbox.timestampFrom, limit: 20 },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not retrieve Testmail messages.");
+      setTestmailResult(data.result);
+      setNotice(`Retrieved ${data.result?.count ?? 0} Testmail message(s).`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Testmail retrieval failed.");
     } finally {
       setBusy(false);
     }
@@ -1053,6 +1113,55 @@ export function AdminCertificationsPanel({
                     </pre>
                   </div>
                 )}
+              </div>
+            </section>
+
+            <section className="tgl-glass rounded-2xl p-6">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="flex items-center gap-2 text-base font-medium text-foreground">
+                  <Mail size={15} className="text-[var(--accent)]" /> Testmail.app Inbox
+                </h2>
+                <span className="text-[11px] font-medium text-[var(--accent)]">
+                  {testmailStatus?.configured ? "CONFIGURED" : "NOT CONFIGURED"}
+                </span>
+              </div>
+              <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                Development-only inbox capture. The Testmail API key stays on the server and is never sent to the browser.
+              </p>
+              <div className="mt-4 space-y-3 text-xs">
+                <p className="text-muted-foreground">
+                  Namespace: {testmailStatus?.namespaceConfigured ? "configured" : "missing"} · API key: {testmailStatus?.apiKeyConfigured ? "configured" : "missing"}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={busy || !testmailStatus?.configured}
+                    onClick={() => void handleGenerateTestmailInbox()}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 font-medium text-primary-foreground disabled:opacity-50"
+                  >
+                    <Plus size={12} /> Generate test inbox
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy || !testmailInbox || !testmailStatus?.configured}
+                    onClick={() => void handleRetrieveTestmail()}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-foreground disabled:opacity-50"
+                  >
+                    <RefreshCw size={12} /> Retrieve latest
+                  </button>
+                </div>
+                {testmailInbox && (
+                  <p className="break-all rounded-lg border border-border p-3 text-[11px] text-foreground">
+                    Inbox: {testmailInbox.address}
+                  </p>
+                )}
+                {testmailResult?.emails?.map((email, index) => (
+                  <article key={`${email.subject ?? "message"}-${index}`} className="tgl-subsurface rounded-lg p-3">
+                    <p className="font-medium text-foreground">{email.subject ?? "(no subject)"}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">From: {email.from ?? "unknown"} · To: {email.to ?? "unknown"}</p>
+                    {email.text && <p className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap text-[11px] text-foreground/80">{email.text}</p>}
+                  </article>
+                ))}
               </div>
             </section>
 
