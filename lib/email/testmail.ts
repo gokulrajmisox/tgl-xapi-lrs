@@ -33,7 +33,9 @@ export type TestmailQueryResult = {
 function getTestmailConfig() {
   const apiKey = process.env.TESTMAIL_APIKEY?.trim() || "";
   const namespace = process.env.TESTMAIL_NAMESPACE?.trim() || "";
-  const enabled = process.env.NODE_ENV !== "production" && process.env.TESTMAIL_ENABLED === "true";
+  const enabled =
+    process.env.TESTMAIL_ENABLED === "true" ||
+    (process.env.NODE_ENV !== "production" && Boolean(apiKey && namespace));
   return { apiKey, namespace, enabled };
 }
 
