@@ -13,34 +13,36 @@ export type FirebaseClientConfig = {
   recaptchaSiteKey?: string;
 };
 
+const envProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim();
+const isCustomProject = Boolean(envProjectId && envProjectId !== appletConfig.projectId);
+
 export const firebaseConfig: FirebaseClientConfig = {
-  projectId:
-    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim() || appletConfig.projectId,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.trim() || appletConfig.appId,
+  projectId: envProjectId || appletConfig.projectId,
+  appId:
+    process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.trim() ||
+    (isCustomProject ? "" : appletConfig.appId),
   apiKey:
-    process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim() || appletConfig.apiKey,
+    process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim() ||
+    (isCustomProject ? "" : appletConfig.apiKey),
   authDomain:
     process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN?.trim() ||
-    appletConfig.authDomain,
+    (isCustomProject ? `${envProjectId}.firebaseapp.com` : appletConfig.authDomain),
   firestoreDatabaseId:
     process.env.NEXT_PUBLIC_FIREBASE_FIRESTORE_DATABASE_ID?.trim() ||
-    appletConfig.firestoreDatabaseId ||
-    "(default)",
+    (isCustomProject ? "(default)" : appletConfig.firestoreDatabaseId || "(default)"),
   storageBucket:
     process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim() ||
-    appletConfig.storageBucket,
+    (isCustomProject ? `${envProjectId}.firebasestorage.app` : appletConfig.storageBucket),
   messagingSenderId:
     process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID?.trim() ||
-    appletConfig.messagingSenderId,
+    (isCustomProject ? "" : appletConfig.messagingSenderId),
   measurementId:
     process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID?.trim() ||
-    appletConfig.measurementId ||
-    "",
-  oAuthClientId: appletConfig.oAuthClientId || "",
+    (isCustomProject ? "" : appletConfig.measurementId || ""),
+  oAuthClientId: isCustomProject ? "" : appletConfig.oAuthClientId || "",
   recaptchaSiteKey:
     process.env.NEXT_PUBLIC_FIREBASE_RECAPTCHA_SITE_KEY?.trim() ||
-    appletConfig.recaptchaSiteKey ||
-    "",
+    (isCustomProject ? "" : appletConfig.recaptchaSiteKey || ""),
 };
 
 export function isFirebaseClientConfigured(): boolean {
