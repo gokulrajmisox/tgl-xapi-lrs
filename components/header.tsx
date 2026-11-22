@@ -7,7 +7,7 @@ import { ArrowUpRight, Compass, Menu, X } from "lucide-react";
 import Magnet from "@/components/react-bits/Magnet";
 import MenuOptionWheel from "@/components/react-bits/MenuOptionWheel";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { createClient } from "@/lib/supabase/client";
+import { useFirebaseAuth } from "@/components/firebase-provider";
 
 const primaryLinks = [
   { label: "Home", href: "/" },
@@ -60,9 +60,14 @@ export function Header() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [wheelIndex, setWheelIndex] = useState(0);
-  const [signedIn, setSignedIn] = useState(false);
+  const { user, isStaff } = useFirebaseAuth();
+  const signedIn = Boolean(user);
 
-  const selectedDestination = wheelDestinations[wheelIndex] ?? wheelDestinations[0];
+  const visibleDestinations = isStaff
+    ? wheelDestinations
+    : wheelDestinations.slice(0, 5);
+  const selectedDestination =
+    visibleDestinations[wheelIndex] ?? visibleDestinations[0];
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -72,16 +77,6 @@ export function Header() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [menuOpen]);
-
-  useEffect(() => {
-    const client = createClient();
-    void client.auth.getUser().then(({ data }) => setSignedIn(Boolean(data.user)));
-    if (typeof client.auth?.onAuthStateChange !== "function") return;
-    const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
-      setSignedIn(Boolean(session?.user));
-    });
-    return () => listener?.subscription?.unsubscribe?.();
-  }, []);
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
@@ -175,7 +170,7 @@ export function Header() {
           role="dialog"
           aria-modal="true"
           aria-label="Interactive navigation menu"
-          className="tgl-glass-strong mx-auto mt-2 grid max-w-[1440px] gap-6 rounded-3xl p-5 md:grid-cols-[1.05fr_.95fr] md:p-8"
+          className="tgl-glass-strong mx-auto mt-2 grid max-h-[calc(100dvh-5.5rem)] max-w-[1440px] gap-6 overflow-y-auto rounded-3xl bg-background/95 p-5 backdrop-blur-2xl dark:bg-[#0d0d10]/95 md:grid-cols-[1.05fr_.95fr] md:p-8"
         >
           {/* Left: Curved React Bits OptionWheel Menu */}
           <div className="tgl-subsurface flex flex-col justify-between rounded-2xl p-4 sm:p-6">
@@ -195,7 +190,7 @@ export function Header() {
 
             <div className="my-2 h-[270px] w-full sm:h-[310px]">
               <MenuOptionWheel
-                items={wheelDestinations.map((d) => d.label)}
+                items={visibleDestinations.map((d) => d.label)}
                 defaultSelected={wheelIndex}
                 side="left"
                 fontSize={1.8}
@@ -207,7 +202,7 @@ export function Header() {
                 inset={16}
                 onChange={(idx) => setWheelIndex(idx)}
                 onActivate={(idx) => {
-                  const target = wheelDestinations[idx];
+                  const target = visibleDestinations[idx];
                   if (target) {
                     setMenuOpen(false);
                     router.push(target.href);
@@ -268,7 +263,7 @@ export function Header() {
                 <ThemeSwitcher variant="segmented" />
               </div>
 
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <div className={isStaff ? "grid grid-cols-3 gap-2 text-center text-xs" : "grid grid-cols-1 text-center text-xs"}>
                 <Link
                   href={signedIn ? "/learn" : "/auth/login"}
                   onClick={() => setMenuOpen(false)}
@@ -276,20 +271,24 @@ export function Header() {
                 >
                   {signedIn ? "My Learning" : "Sign in"}
                 </Link>
-                <Link
-                  href="/mentor"
-                  onClick={() => setMenuOpen(false)}
-                  className="flex min-h-10 items-center justify-center rounded-xl border border-border text-foreground/75 hover:border-foreground/30"
-                >
-                  Mentor
-                </Link>
-                <Link
-                  href="/admin"
-                  onClick={() => setMenuOpen(false)}
-                  className="flex min-h-10 items-center justify-center rounded-xl border border-border text-foreground/75 hover:border-foreground/30"
-                >
-                  Admin
-                </Link>
+                {isStaff && (
+                  <>
+                    <Link
+                      href="/mentor"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex min-h-10 items-center justify-center rounded-xl border border-border text-foreground/75 hover:border-foreground/30"
+                    >
+                      Mentor
+                    </Link>
+                    <Link
+                      href="/admin"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex min-h-10 items-center justify-center rounded-xl border border-border text-foreground/75 hover:border-foreground/30"
+                    >
+                      Admin
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           </nav>

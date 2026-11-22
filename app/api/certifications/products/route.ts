@@ -9,10 +9,10 @@ import {
 } from "@/lib/certifications/store";
 import { getRazorpayPublicConfig } from "@/lib/payments/razorpay";
 
-export async function GET() {
+export async function GET(request: Request) {
   const [products, actorResult] = await Promise.all([
     listProducts(false),
-    resolveCurrentActor(),
+    resolveCurrentActor({ request }),
   ]);
   const razorpay = getRazorpayPublicConfig();
 

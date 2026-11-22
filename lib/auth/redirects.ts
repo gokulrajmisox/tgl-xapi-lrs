@@ -51,7 +51,7 @@ export function mapOAuthErrorToMessage(
   }
 
   if (code === "oauth_config" || code === "not_configured" || desc.includes("provider is not enabled")) {
-    return "Google Sign-In is not configured yet in this environment. Enable Google provider credentials in Supabase and environment settings to sign in with Google.";
+    return "Google Sign-In is not configured yet in Firebase Authentication. Enable the Google provider and authorized domains in Firebase Console.";
   }
 
   if (code === "oauth_unverified_email") {

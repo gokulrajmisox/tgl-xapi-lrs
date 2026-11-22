@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, BookOpen, Layers3, Plus, Users } from "lucide-react";
+import { ArrowUpRight, BookOpen, Layers3, PencilLine, Plus, Users } from "lucide-react";
 import { AdminCertificationsPanel } from "@/components/admin-certifications-panel";
+import { CourseContentStudio } from "@/components/admin/CourseContentStudio";
 import type { CohortRecord } from "@/lib/learning-workspace-store";
 import { enrichedPathways } from "@/lib/learning-graph";
 import { formatInrFromPaise } from "@/lib/certifications/pricing";
 import type { PublicCourseSummary } from "@/lib/courses/store";
+import { syncCourseToFirestore } from "@/lib/firebase/firestore-sync";
 
 type AdminSection = "overview" | "courses" | "payments" | "emails";
 
@@ -89,14 +91,26 @@ export function AdminOperationsClient({
   const [announcementTitles, setAnnouncementTitles] = useState<Record<string, string>>({});
   const [announcementBodies, setAnnouncementBodies] = useState<Record<string, string>>({});
 
+  const [activeStudioCourseId, setActiveStudioCourseId] = useState<string | null>(null);
   const [busyCourseId, setBusyCourseId] = useState<string | null>(null);
+  const [userSearch, setUserSearch] = useState("");
+  const [userRoleFilter, setUserRoleFilter] = useState("all");
+  const [reportSummary, setReportSummary] = useState<{
+    paidOrdersCount: number;
+    grossRevenueInr: number;
+    approvedSubmissions: number;
+    totalSubmissions: number;
+    issuedCertificates: number;
+    completedInternships: number;
+  } | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
   const loadWorkspaceAdmin = useCallback(async () => {
-    const [wsRes, coursesRes] = await Promise.all([
+    const [wsRes, coursesRes, reportsRes] = await Promise.all([
       fetch("/api/workspace/admin", { cache: "no-store" }),
       fetch("/api/courses?all=true", { cache: "no-store" }),
+      fetch("/api/admin/reports", { cache: "no-store" }),
     ]);
 
     if (wsRes.ok) {
@@ -104,6 +118,11 @@ export function AdminOperationsClient({
       setCohorts(data.cohorts ?? []);
       setUsers(data.users ?? []);
       if (data.contentSummary) setContentSummary(data.contentSummary);
+    }
+
+    if (reportsRes.ok) {
+      const rData = await reportsRes.json();
+      if (rData.summary) setReportSummary(rData.summary);
     }
 
     if (coursesRes.ok) {
@@ -191,6 +210,21 @@ export function AdminOperationsClient({
       setNewCourseSubtitle("");
       setNewCourseProjectTitle("");
       setNewCourseProjectSummary("");
+      if (data.course) {
+        void syncCourseToFirestore({
+          id: data.course.id,
+          slug: data.course.slug,
+          title: data.course.title,
+          subtitle: data.course.subtitle,
+          category: data.course.category,
+          level: data.course.level,
+          pricePaise: data.course.pricePaise,
+          currency: "INR",
+          estimatedHours: data.course.estimatedHours,
+          linkedInternshipSlug: data.course.linkedInternshipSlug,
+          isPublished: Boolean(data.course.isPublished),
+        });
+      }
       setNotice(`Created bundled programme "${data.course.title}" (${formatInrFromPaise(pricePaise)}).`);
       await loadWorkspaceAdmin();
     } finally {
@@ -247,12 +281,32 @@ export function AdminOperationsClient({
         setAnnouncementTitles((prev) => ({ ...prev, [course.id]: "" }));
         setAnnouncementBodies((prev) => ({ ...prev, [course.id]: "" }));
       }
+      void syncCourseToFirestore({
+        id: course.id,
+        slug: course.slug,
+        title: course.title,
+        subtitle: course.subtitle,
+        category: course.category,
+        level: course.level,
+        pricePaise,
+        currency: "INR",
+        estimatedHours: course.estimatedHours,
+        linkedInternshipSlug: course.linkedInternshipSlug,
+        isPublished: togglePublish ? !course.isPublished : course.isPublished,
+      });
       setNotice(`Updated "${course.title}" (${formatInrFromPaise(pricePaise)}).`);
       await loadWorkspaceAdmin();
     } finally {
       setBusyCourseId(null);
     }
   };
+
+  const filteredUsers = users.filter((u) => {
+    if (userRoleFilter !== "all" && u.role !== userRoleFilter) return false;
+    const q = userSearch.trim().toLowerCase();
+    if (!q) return true;
+    return `${u.name} ${u.email} ${u.cohort} ${u.role}`.toLowerCase().includes(q);
+  });
 
   return (
     <div className="space-y-8">
@@ -262,10 +316,10 @@ export function AdminOperationsClient({
         className="flex flex-wrap gap-2 border-b border-border pb-4"
       >
         {[
-          { id: "overview" as const, label: "Cohorts, Content & Users" },
+          { id: "overview" as const, label: "Overview, Users & Reports" },
           { id: "courses" as const, label: `Programmes & Pricing (${courses.length})` },
           { id: "payments" as const, label: "Internships, Certificates & Payments" },
-          { id: "emails" as const, label: "Email Templates & Test" },
+          { id: "emails" as const, label: "Email Templates & Testmail" },
         ].map((item) => (
           <button
             key={item.id}
@@ -297,24 +351,63 @@ export function AdminOperationsClient({
 
       {section === "overview" && (
         <div className="space-y-8">
-          <div className="grid gap-4 sm:grid-cols-4">
-            <div className="tgl-glass rounded-2xl p-5">
-              <p className="text-[11px] text-muted-foreground">Programmes</p>
-              <p className="mt-2 text-2xl font-medium tabular-nums text-foreground">{courses.length}</p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">
+              Real-time revenue, submission approvals, and credential operations across {courses.length} bundled programmes ({contentSummary.projectCount} projects · {cohorts.length} cohorts).
+            </p>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Link
+                href="/mentor"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-foreground hover:border-foreground/30"
+              >
+                Review Project Queue <ArrowUpRight size={13} aria-hidden="true" />
+              </Link>
+              <a
+                href="/api/admin/reports?format=csv"
+                download="tgl-platform-report.csv"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-xs font-medium text-accent-foreground hover:opacity-90"
+              >
+                Export CSV Report
+              </a>
             </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="tgl-glass rounded-2xl p-5">
-              <p className="text-[11px] text-muted-foreground">Pathways &amp; nodes</p>
-              <p className="mt-2 text-2xl font-medium tabular-nums text-foreground">
-                {contentSummary.pathwayCount} · {contentSummary.nodeCount}
+              <p className="text-[11px] text-muted-foreground">Paid Revenue (INR)</p>
+              <p className="mt-2 font-mono text-2xl font-semibold tabular-nums text-foreground">
+                ₹{(reportSummary?.grossRevenueInr ?? 0).toLocaleString("en-IN")}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {reportSummary?.paidOrdersCount ?? 0} verified orders
               </p>
             </div>
             <div className="tgl-glass rounded-2xl p-5">
-              <p className="text-[11px] text-muted-foreground">Projects</p>
-              <p className="mt-2 text-2xl font-medium tabular-nums text-foreground">{contentSummary.projectCount}</p>
+              <p className="text-[11px] text-muted-foreground">Active Programmes</p>
+              <p className="mt-2 font-mono text-2xl font-semibold tabular-nums text-foreground">
+                {courses.length}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {contentSummary.pathwayCount} tracks · {cohorts.length} cohorts
+              </p>
             </div>
             <div className="tgl-glass rounded-2xl p-5">
-              <p className="text-[11px] text-muted-foreground">Active cohorts</p>
-              <p className="mt-2 text-2xl font-medium tabular-nums text-foreground">{cohorts.length}</p>
+              <p className="text-[11px] text-muted-foreground">Projects Approved</p>
+              <p className="mt-2 font-mono text-2xl font-semibold tabular-nums text-accent">
+                {reportSummary?.approvedSubmissions ?? 0}/{reportSummary?.totalSubmissions ?? 0}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Mentor rubric verified
+              </p>
+            </div>
+            <div className="tgl-glass rounded-2xl p-5">
+              <p className="text-[11px] text-muted-foreground">Issued Certificates</p>
+              <p className="mt-2 font-mono text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-300">
+                {reportSummary?.issuedCertificates ?? 0}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {reportSummary?.completedInternships ?? 0} internships completed
+              </p>
             </div>
           </div>
 
@@ -417,12 +510,35 @@ export function AdminOperationsClient({
           </div>
 
           <section className="tgl-glass rounded-2xl p-6">
-            <h2 className="flex items-center gap-2 text-base font-medium text-foreground">
-              <Users size={15} className="text-[var(--accent)]" aria-hidden="true" />
-              <span>Users &amp; roles ({users.length})</span>
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <h2 className="flex items-center gap-2 text-base font-medium text-foreground">
+                <Users size={15} className="text-[var(--accent)]" aria-hidden="true" />
+                <span>Students, Mentors &amp; Staff ({filteredUsers.length}/{users.length})</span>
+              </h2>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <input
+                  type="search"
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  placeholder="Search user name, email, or cohort..."
+                  aria-label="Filter users directory"
+                  className="h-9 w-56 rounded-full border border-border bg-input px-3.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <select
+                  aria-label="Filter directory by role"
+                  value={userRoleFilter}
+                  onChange={(e) => setUserRoleFilter(e.target.value)}
+                  className="h-9 rounded-full border border-border bg-input px-3 text-xs text-foreground outline-none"
+                >
+                  <option value="all">All roles</option>
+                  <option value="student">Students</option>
+                  <option value="mentor">Mentors</option>
+                  <option value="admin">Admins</option>
+                </select>
+              </div>
+            </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {users.map((u) => (
+              {filteredUsers.map((u) => (
                 <div
                   key={u.id}
                   className="tgl-subsurface rounded-xl p-4 text-xs"
@@ -435,6 +551,11 @@ export function AdminOperationsClient({
                   <p className="mt-1 text-[11px] text-muted-foreground">{u.cohort}</p>
                 </div>
               ))}
+              {filteredUsers.length === 0 && (
+                <p className="col-span-full text-xs text-muted-foreground">
+                  No users match the current search or role filter.
+                </p>
+              )}
             </div>
           </section>
         </div>
@@ -460,6 +581,14 @@ export function AdminOperationsClient({
             </Link>
           </div>
 
+          {activeStudioCourseId && (
+            <CourseContentStudio
+              courseId={activeStudioCourseId}
+              onClose={() => setActiveStudioCourseId(null)}
+              onStudioMutated={loadWorkspaceAdmin}
+            />
+          )}
+
           <div className="grid gap-8 lg:grid-cols-[1.25fr_.75fr]">
             <div className="space-y-4">
               {courses.map((course) => (
@@ -470,22 +599,33 @@ export function AdminOperationsClient({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-[11px] font-medium text-[var(--accent)]">
-                        {course.category} · {course.moduleCount} modules · Certificate Included (₹0 extra) ·{" "}
+                        {course.category} · {course.moduleCount} modules · {course.lessonCount} lessons · Certificate Included (₹0 extra) ·{" "}
                         {course.isPublished ? "Published" : "Hidden"}
+                        {course.hasDraftChanges ? " · Draft changes staged" : ""}
                       </p>
                       <h3 className="mt-1 text-base font-medium text-foreground">
                         {course.title}
                       </h3>
                       <p className="mt-1 text-muted-foreground">{course.subtitle}</p>
                     </div>
-                    <button
-                      type="button"
-                      disabled={busyCourseId === course.id}
-                      onClick={() => void handleSaveCourse(course, true)}
-                      className="rounded-full border border-border px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-muted/40"
-                    >
-                      {course.isPublished ? "Hide" : "Publish"}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setActiveStudioCourseId(course.id)}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-xs font-medium text-accent-foreground transition-opacity hover:opacity-90"
+                      >
+                        <PencilLine size={12} aria-hidden="true" />
+                        Open Content Studio
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busyCourseId === course.id}
+                        onClick={() => void handleSaveCourse(course, true)}
+                        className="rounded-full border border-border px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-muted/40"
+                      >
+                        {course.isPublished ? "Hide" : "Publish"}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-2">

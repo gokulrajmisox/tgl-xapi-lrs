@@ -1,7 +1,8 @@
 import React from "react";
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
-import { Inter, JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { FirebaseProvider } from "@/components/firebase-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
@@ -10,12 +11,6 @@ const Analytics = () => null;
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
   variable: "--font-jakarta",
-  display: "swap",
-});
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
   display: "swap",
 });
 
@@ -29,23 +24,21 @@ export const metadata: Metadata = {
   title: "Touch Grass Later — Learn. Build. Grow.",
   description:
     "Unified online learning, practical projects, guided internships, and QR-verified credentials with Touch Grass Later.",
-  generator: "v0.app",
+  openGraph: {
+    title: "Touch Grass Later — Learn. Build. Grow.",
+    description:
+      "Single-fee internship-training programmes uniting structured courses, practical projects, guided internships, and verified certificates.",
+    type: "website",
+  },
   icons: {
     icon: [
       {
-        url: "/icon-light-32x32.png",
-        media: "(prefers-color-scheme: light)",
-      },
-      {
-        url: "/icon-dark-32x32.png",
-        media: "(prefers-color-scheme: dark)",
-      },
-      {
-        url: "/icon.svg",
-        type: "image/svg+xml",
+        url: "/favicon.ico",
+        type: "image/png",
       },
     ],
-    apple: "/apple-icon.png",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
   },
 };
 
@@ -64,7 +57,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${plusJakarta.variable} ${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}
+        className={`${plusJakarta.variable} ${jetbrainsMono.variable} font-sans antialiased`}
       >
         <ThemeProvider
           attribute="class"
@@ -72,8 +65,10 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
-          <Analytics />
+          <FirebaseProvider>
+            {children}
+            <Analytics />
+          </FirebaseProvider>
         </ThemeProvider>
         <Script
           src="https://checkout.razorpay.com/v1/checkout.js"

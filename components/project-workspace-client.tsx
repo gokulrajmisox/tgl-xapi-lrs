@@ -34,6 +34,9 @@ import type {
   SupportingFileMeta,
 } from "@/lib/learning-workspace-store";
 import SlideCommit from "@/components/react-bits/SlideCommit";
+import { getFirebaseAuth } from "@/lib/firebase/client";
+import { syncProjectSubmissionToFirestore } from "@/lib/firebase/firestore-sync";
+import { uploadSubmissionFileToStorage } from "@/lib/firebase/storage";
 
 const PROJECT_LIFECYCLE: Array<{
   key: "not_started" | ProjectSubmissionStatus;
@@ -138,25 +141,53 @@ export function ProjectWorkspaceClient({
   const [question, setQuestion] = useState("");
 
   const [busy, setBusy] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
-  const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files ?? []).slice(0, 5);
     if (picked.length === 0) return;
-    setSupportingFiles((prev) => {
-      const merged = [...prev];
+
+    setUploadingFiles(true);
+    setError("");
+    const currentUser = getFirebaseAuth().currentUser;
+    const uploadedMeta: SupportingFileMeta[] = [];
+
+    try {
       for (const file of picked) {
-        if (!merged.some((f) => f.name === file.name && f.sizeBytes === file.size)) {
-          merged.push({
+        if (currentUser) {
+          const uploaded = await uploadSubmissionFileToStorage(file);
+          uploadedMeta.push(uploaded);
+        } else {
+          uploadedMeta.push({
             name: file.name,
             sizeBytes: file.size,
             mimeType: file.type || "application/octet-stream",
           });
         }
       }
-      return merged.slice(0, 5);
-    });
+      setSupportingFiles((prev) => {
+        const merged = [...prev];
+        for (const item of uploadedMeta) {
+          if (!merged.some((f) => f.name === item.name && f.sizeBytes === item.sizeBytes)) {
+            merged.push(item);
+          }
+        }
+        return merged.slice(0, 5);
+      });
+      if (currentUser) {
+        setNotice("Deliverable file uploaded to Firebase Storage.");
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not upload deliverable file to Firebase Storage.",
+      );
+    } finally {
+      setUploadingFiles(false);
+    }
   };
 
   const toggleSave = async () => {
@@ -226,6 +257,19 @@ export function ProjectWorkspaceClient({
       setSubmissions((prev) => {
         const filtered = prev.filter((s) => s.id !== data.submission.id);
         return [data.submission, ...filtered];
+      });
+      void syncProjectSubmissionToFirestore({
+        id: data.submission.id,
+        projectSlug: project.slug,
+        pathwaySlug: data.submission.pathwaySlug,
+        cohortName: data.submission.cohortName,
+        learnerName: data.submission.learnerName,
+        githubUrl: githubUrl.trim(),
+        deploymentUrl: deploymentUrl.trim(),
+        supportingEvidence: supportingEvidence.trim(),
+        supportingFiles,
+        summary: summary.trim(),
+        reflection: reflection.trim(),
       });
       setNotice(
         currentStatus === "revision_required"
@@ -587,7 +631,7 @@ export function ProjectWorkspaceClient({
                       className="sr-only"
                     />
                     <span className="rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-medium text-foreground">
-                      Choose files
+                      {uploadingFiles ? "Uploading…" : "Choose files"}
                     </span>
                   </label>
                   {supportingFiles.length > 0 && (

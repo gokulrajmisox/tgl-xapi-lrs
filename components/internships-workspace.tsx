@@ -18,6 +18,7 @@ import type {
   InternshipTaskDefinition,
   InternshipTaskSubmission,
 } from "@/lib/internships/eligibility";
+import { useFirebaseAuth } from "@/components/firebase-provider";
 
 type Internship = {
   id: string;
@@ -105,6 +106,9 @@ export function InternshipsWorkspace() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
+  const { user: fbUser, loading: authLoading } = useFirebaseAuth();
+  const authUid = fbUser?.uid ?? null;
+
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/internships", { cache: "no-store" });
@@ -123,8 +127,10 @@ export function InternshipsWorkspace() {
   }, [selectedInternshipId]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!authLoading) {
+      void load();
+    }
+  }, [authLoading, authUid, load]);
 
   const handleApply = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

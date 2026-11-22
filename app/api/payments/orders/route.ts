@@ -20,7 +20,7 @@ const LegacyCertificateOrderSchema = z.object({
 const CreateOrderSchema = z.union([ProgrammeOrderSchema, LegacyCertificateOrderSchema]);
 
 export async function POST(request: Request) {
-  const actor = await resolveCurrentActor();
+  const actor = await resolveCurrentActor({ request });
   if (!actor.user || actor.user.isSandbox) {
     return NextResponse.json(
       { error: "Sign in required to initiate checkout." },

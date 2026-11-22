@@ -289,7 +289,7 @@ export function CertificatesHub() {
               certificateId:
                 previewProduct.activeIssuance?.certificate_id ?? "TGL-CERT-2026-8419",
               recipientName:
-                previewProduct.activeIssuance?.recipient_name ?? user?.name ?? "Aarav Sharma",
+                previewProduct.activeIssuance?.recipient_name ?? user?.name ?? "Your Verified Name",
               certificateTitle:
                 previewProduct.certificate_type === "internship"
                   ? "INTERNSHIP CERTIFICATE"

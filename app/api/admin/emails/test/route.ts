@@ -30,8 +30,8 @@ const TestEmailSchema = z.object({
   previewOnly: z.boolean().optional(),
 });
 
-export async function GET() {
-  const auth = await requireAdminActor();
+export async function GET(request: Request) {
+  const auth = await requireAdminActor(request);
   if (auth.error) return NextResponse.json({ error: auth.error.message }, { status: auth.error.status });
 
   const [logs, templates] = await Promise.all([listEmailLogs(), listEmailTemplates()]);
@@ -46,7 +46,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireAdminActor();
+  const auth = await requireAdminActor(request);
   if (auth.error) return NextResponse.json({ error: auth.error.message }, { status: auth.error.status });
 
   const parsed = TestEmailSchema.safeParse(await request.json().catch(() => null));

@@ -30,6 +30,7 @@ import {
 import { LearningWorkspaceHeader } from "@/components/workspace/LearningWorkspaceHeader";
 import { LearningRoadmap } from "@/components/workspace/LearningRoadmap";
 import { WorkspaceProgressSidebar } from "@/components/workspace/WorkspaceProgressSidebar";
+import { syncProjectSubmissionToFirestore } from "@/lib/firebase/firestore-sync";
 
 type WorkspaceActor = {
   id: string;
@@ -71,6 +72,7 @@ function buildDefaultExpanded(
 
 export function CourseWorkspaceClient({
   initialDetail,
+  initialLessonId,
   initialInternshipTrack = null,
   initialInternshipApplication = null,
   initialIssuedCertificate = null,
@@ -83,6 +85,7 @@ export function CourseWorkspaceClient({
   isSandbox,
 }: {
   initialDetail: CourseDetailResponse;
+  initialLessonId?: string;
   initialInternshipTrack?: InternshipRecord | null;
   initialInternshipApplication?: InternshipApplicationRecord | null;
   initialIssuedCertificate?: CertificateIssuanceRecord | null;
@@ -109,11 +112,34 @@ export function CourseWorkspaceClient({
 
   const [claimingCert, setClaimingCert] = useState(false);
   const [expandedSteps, setExpandedSteps] = useState<Record<ProgressionStepKey, boolean>>(
-    () => buildDefaultExpanded(initialProgression),
+    () => {
+      const base = buildDefaultExpanded(initialProgression);
+      if (initialLessonId && !initialDetail.locked) {
+        const hasRequested = initialDetail.modules.some((m) =>
+          m.lessons.some((l) => l.id === initialLessonId),
+        );
+        if (hasRequested) {
+          base.learning_modules = true;
+        }
+      }
+      return base;
+    },
   );
 
   const [activeLessonId, setActiveLessonId] = useState<string>(() => {
     if (!initialDetail.locked && initialDetail.modules[0]?.lessons[0]) {
+      const allLessonIds = new Set(
+        initialDetail.modules.flatMap((m) => m.lessons.map((l) => l.id)),
+      );
+      if (initialLessonId && allLessonIds.has(initialLessonId)) {
+        return initialLessonId;
+      }
+      if (
+        initialDetail.lastVisitedLessonId &&
+        allLessonIds.has(initialDetail.lastVisitedLessonId)
+      ) {
+        return initialDetail.lastVisitedLessonId;
+      }
       for (const mod of initialDetail.modules) {
         for (const les of mod.lessons) {
           if (initialDetail.lessonProgress[les.id]?.status !== "completed") {
@@ -126,6 +152,12 @@ export function CourseWorkspaceClient({
     return "";
   });
   const [busyLessonId, setBusyLessonId] = useState<string | null>(null);
+  const [busyExerciseLessonId, setBusyExerciseLessonId] = useState<string | null>(null);
+  const [busyKnowledgeLessonId, setBusyKnowledgeLessonId] = useState<string | null>(null);
+  const [busyModuleQuizId, setBusyModuleQuizId] = useState<string | null>(null);
+  const [moduleQuizExplanations, setModuleQuizExplanations] = useState<
+    Record<string, Record<string, string>>
+  >({});
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -217,8 +249,15 @@ export function CourseWorkspaceClient({
       setSubmissions(fresh.projectSubmissions);
     }
     if (!fresh.locked) {
+      const validIds = new Set(fresh.modules.flatMap((m) => m.lessons.map((l) => l.id)));
       const firstId = fresh.modules[0]?.lessons[0]?.id ?? "";
-      setActiveLessonId((prev) => prev || firstId);
+      setActiveLessonId((prev) => {
+        if (prev && validIds.has(prev)) return prev;
+        if (fresh.lastVisitedLessonId && validIds.has(fresh.lastVisitedLessonId)) {
+          return fresh.lastVisitedLessonId;
+        }
+        return firstId;
+      });
       if (fresh.quizAttempt) {
         setQuizAnswers(fresh.quizAttempt.answers);
       }
@@ -300,6 +339,27 @@ export function CourseWorkspaceClient({
     setExpandedSteps((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
+  const handleSelectLessonId = useCallback(
+    (lessonId: string) => {
+      setActiveLessonId(lessonId);
+      if (detail.locked) return;
+      setDetail((prev) => {
+        if (prev.locked) return prev;
+        return {
+          ...prev,
+          lastVisitedLessonId: lessonId,
+          course: { ...prev.course, lastVisitedLessonId: lessonId },
+        };
+      });
+      fetch(`/api/courses/${detail.course.slug}/progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "visit_lesson", lessonId }),
+      }).catch(() => {});
+    },
+    [detail.locked, detail.course.slug],
+  );
+
   const toggleLessonComplete = async (lessonId: string) => {
     if (detail.locked) return;
     const current = detail.lessonProgress[lessonId]?.status ?? "not_started";
@@ -335,6 +395,118 @@ export function CourseWorkspaceClient({
       await refreshDetail();
     } finally {
       setBusyLessonId(null);
+    }
+  };
+
+  const handleToggleExerciseComplete = async (lessonId: string, completed: boolean) => {
+    if (detail.locked) return;
+    setBusyExerciseLessonId(lessonId);
+    setError("");
+    setNotice("");
+    try {
+      const res = await fetch(`/api/courses/${detail.course.slug}/progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "mark_exercise", lessonId, completed }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Could not update exercise completion.");
+        return;
+      }
+      setDetail((prev) => {
+        if (prev.locked) return prev;
+        return {
+          ...prev,
+          exerciseCompletions: data.exerciseCompletions ?? prev.exerciseCompletions,
+          course: data.summary ?? prev.course,
+        };
+      });
+      setNotice(
+        completed
+          ? "Practical exercise marked complete."
+          : "Practical exercise marked incomplete.",
+      );
+      await refreshDetail();
+    } finally {
+      setBusyExerciseLessonId(null);
+    }
+  };
+
+  const handleSubmitKnowledgeCheck = async (lessonId: string, selectedIndex: number) => {
+    if (detail.locked) return;
+    setBusyKnowledgeLessonId(lessonId);
+    setError("");
+    setNotice("");
+    try {
+      const res = await fetch(`/api/courses/${detail.course.slug}/progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "submit_knowledge_check", lessonId, selectedIndex }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Could not grade knowledge check.");
+        return;
+      }
+      setDetail((prev) => {
+        if (prev.locked) return prev;
+        return {
+          ...prev,
+          knowledgeCheckResults: data.knowledgeCheckResults ?? prev.knowledgeCheckResults,
+        };
+      });
+      setNotice(
+        data.result?.passed
+          ? "Knowledge check verified! Explanation unlocked below."
+          : "Answer recorded — review the explanation below and retry anytime.",
+      );
+    } finally {
+      setBusyKnowledgeLessonId(null);
+    }
+  };
+
+  const handleSubmitModuleQuiz = async (
+    moduleId: string,
+    answers: Record<string, number>,
+  ) => {
+    if (detail.locked) return;
+    setBusyModuleQuizId(moduleId);
+    setError("");
+    setNotice("");
+    try {
+      const res = await fetch(`/api/courses/${detail.course.slug}/progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "submit_module_quiz", moduleId, answers }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Could not grade module quiz.");
+        return;
+      }
+      if (data.explanations) {
+        setModuleQuizExplanations((prev) => ({
+          ...prev,
+          [moduleId]: data.explanations,
+        }));
+      }
+      setDetail((prev) => {
+        if (prev.locked) return prev;
+        return {
+          ...prev,
+          moduleQuizAttempts: data.moduleQuizAttempts ?? prev.moduleQuizAttempts,
+          course: data.summary ?? prev.course,
+        };
+      });
+      setNotice(
+        data.attempt?.passed
+          ? `Module checkpoint quiz passed (${data.attempt.scorePercent}%).`
+          : `Module quiz scored ${data.attempt?.scorePercent ?? 0}%. Review explanations and retry.`,
+      );
+      await refreshDetail();
+    } finally {
+      setBusyModuleQuizId(null);
     }
   };
 
@@ -508,6 +680,19 @@ export function CourseWorkspaceClient({
           const rest = prev.filter((s) => s.id !== data.submission.id);
           return [data.submission, ...rest];
         });
+        void syncProjectSubmissionToFirestore({
+          id: data.submission.id,
+          projectSlug: detail.project.slug,
+          pathwaySlug: data.submission.pathwaySlug,
+          cohortName: data.submission.cohortName,
+          learnerName: data.submission.learnerName,
+          githubUrl: githubUrl.trim(),
+          deploymentUrl: deploymentUrl.trim(),
+          supportingEvidence: supportingEvidence.trim(),
+          supportingFiles,
+          summary: summary.trim(),
+          reflection: reflection.trim(),
+        });
       }
       setSummary("");
       setReflection("");
@@ -520,7 +705,6 @@ export function CourseWorkspaceClient({
   };
 
   const handleClaimIncludedCertificate = async () => {
-    if (!internshipApplication) return;
     setClaimingCert(true);
     setError("");
     setNotice("");
@@ -528,7 +712,7 @@ export function CourseWorkspaceClient({
       const res = await fetch("/api/certificates/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ internshipApplicationId: internshipApplication.id }),
+        body: JSON.stringify({ internshipApplicationId: internshipApplication?.id ?? null }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -576,7 +760,7 @@ export function CourseWorkspaceClient({
               <ArrowLeft size={14} aria-hidden="true" />
               Explore all programmes
             </Link>
-            <span className="rounded-full bg-accent/12 px-3 py-1 text-xs font-medium text-accent">
+            <span className="text-xs font-medium text-accent">
               {course.category} · {course.estimatedHours}h study + {course.internshipDurationWeeks}-week internship
             </span>
           </div>
@@ -647,6 +831,25 @@ export function CourseWorkspaceClient({
                   </li>
                 ))}
               </ul>
+
+              {course.prerequisites.length > 0 && (
+                <div className="mt-6 border-t border-border pt-5">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Prerequisites before starting
+                  </h3>
+                  <ul className="mt-2.5 space-y-1.5 text-xs leading-6 text-muted-foreground">
+                    {course.prerequisites.map((pre) => (
+                      <li key={pre} className="flex items-start gap-2">
+                        <span
+                          aria-hidden="true"
+                          className="mt-2 size-1.5 shrink-0 rounded-full bg-accent"
+                        />
+                        <span>{pre}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </section>
 
             <section className="tgl-glass rounded-3xl p-6 sm:p-7">
@@ -860,7 +1063,18 @@ export function CourseWorkspaceClient({
         progression={progression}
         enrolledAt={enrolledAt}
         hasInternshipApplication={Boolean(internshipApplication)}
-        onContinueLearning={() => jumpToStep(progression.currentStep.key)}
+        onContinueLearning={() => {
+          jumpToStep(progression.currentStep.key);
+          if (
+            progression.currentStep.key === "learning_modules" &&
+            !activeLessonId &&
+            !detail.locked
+          ) {
+            const fallback =
+              detail.lastVisitedLessonId ?? detail.modules[0]?.lessons[0]?.id ?? "";
+            if (fallback) setActiveLessonId(fallback);
+          }
+        }}
       />
 
       {notice && (
@@ -895,9 +1109,16 @@ export function CourseWorkspaceClient({
             internshipApplication={internshipApplication}
             issuedCertificate={issuedCertificate}
             activeLessonId={activeLessonId}
-            onSelectLessonId={setActiveLessonId}
+            onSelectLessonId={handleSelectLessonId}
             busyLessonId={busyLessonId}
             onToggleLessonComplete={toggleLessonComplete}
+            busyExerciseLessonId={busyExerciseLessonId}
+            onToggleExerciseComplete={handleToggleExerciseComplete}
+            busyKnowledgeLessonId={busyKnowledgeLessonId}
+            onSubmitKnowledgeCheck={handleSubmitKnowledgeCheck}
+            busyModuleQuizId={busyModuleQuizId}
+            moduleQuizExplanations={moduleQuizExplanations}
+            onSubmitModuleQuiz={handleSubmitModuleQuiz}
             assignmentTexts={assignmentTexts}
             assignmentUrls={assignmentUrls}
             busyAssignmentId={busyAssignmentId}

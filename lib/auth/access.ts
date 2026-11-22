@@ -5,7 +5,7 @@ const PRIVILEGED_STAFF_EMAILS = new Set([
 
 /**
  * Mentor and administrator access is intentionally restricted to this exact,
- * server-side allowlist. Callers should pass the verified Supabase email.
+ * server-side allowlist. Callers should pass the server-verified Firebase email.
  */
 export function isPrivilegedStaffEmail(email: string | null | undefined): boolean {
   return PRIVILEGED_STAFF_EMAILS.has((email ?? "").trim().toLowerCase());

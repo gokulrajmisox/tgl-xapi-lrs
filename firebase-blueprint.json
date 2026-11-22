@@ -1,0 +1,281 @@
+{
+  "entities": {
+    "AdminMarker": {
+      "title": "AdminMarker",
+      "description": "Server-managed administrator membership document.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "grantedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "grantedAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Non-PII workspace identity record keyed by Firebase Auth UID.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "displayName": { "type": "string", "minLength": 0, "maxLength": 120 },
+        "role": { "type": "string", "enum": ["student", "admin"] },
+        "cohort": { "type": "string", "maxLength": 120 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "role", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "PII-isolated private account information readable only by the owner or verified admin.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "phone": { "type": "string", "maxLength": 32 },
+        "avatarUrl": { "type": "string", "maxLength": 512 },
+        "authProvider": { "type": "string", "maxLength": 40 },
+        "emailVerified": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "emailVerified", "updatedAt"]
+    },
+    "Course": {
+      "title": "Course",
+      "description": "Bundled TGL programme record with single INR fee, syllabus modules, linked project, and internship metadata.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "slug": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 3, "maxLength": 160 },
+        "subtitle": { "type": "string", "minLength": 3, "maxLength": 600 },
+        "category": { "type": "string", "maxLength": 80 },
+        "level": { "type": "string", "maxLength": 60 },
+        "pricePaise": { "type": "integer" },
+        "currency": { "type": "string", "enum": ["INR"] },
+        "estimatedHours": { "type": "integer" },
+        "linkedInternshipSlug": { "type": "string", "maxLength": 128 },
+        "isPublished": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "slug", "title", "subtitle", "pricePaise", "currency", "isPublished", "updatedAt"]
+    },
+    "Internship": {
+      "title": "Internship",
+      "description": "Guided internship track linked to a bundled programme.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "slug": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 3, "maxLength": 160 },
+        "track": { "type": "string", "maxLength": 80 },
+        "durationWeeks": { "type": "integer" },
+        "isPublished": { "type": "boolean" }
+      },
+      "required": ["id", "slug", "title", "track", "durationWeeks", "isPublished"]
+    },
+    "Enrollment": {
+      "title": "Enrollment",
+      "description": "Verified student enrollment unlocking course modules, assignments, quiz, project, internship, and included certificate.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "courseId": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "paymentId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["active", "refunded"] },
+        "enrolledAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "courseId", "status", "enrolledAt", "updatedAt"]
+    },
+    "LearningProgress": {
+      "title": "LearningProgress",
+      "description": "Lesson and module progress state tied to an active enrollment.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "enrollmentId": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "courseId": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "lessonId": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "status": { "type": "string", "enum": ["not_started", "in_progress", "completed"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "enrollmentId", "courseId", "lessonId", "status", "updatedAt"]
+    },
+    "Submission": {
+      "title": "Submission",
+      "description": "Student project, assignment, or internship deliverable awaiting mentor/admin review.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "projectSlug": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-z0-9_\\-]+$" },
+        "githubUrl": { "type": "string", "minLength": 8, "maxLength": 512 },
+        "summary": { "type": "string", "minLength": 10, "maxLength": 4000 },
+        "reflection": { "type": "string", "maxLength": 4000 },
+        "status": { "type": "string", "enum": ["in_progress", "submitted", "under_review", "approved", "revision_required"] },
+        "mentorFeedback": { "type": "string", "maxLength": 2000 },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "projectSlug", "githubUrl", "summary", "status", "submittedAt", "updatedAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Mentor/admin audit record for a student submission.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "submissionId": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "reviewerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "decision": { "type": "string", "enum": ["approved", "revision_required"] },
+        "feedback": { "type": "string", "minLength": 5, "maxLength": 2000 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "submissionId", "studentUid", "reviewerUid", "decision", "feedback", "createdAt"]
+    },
+    "Certificate": {
+      "title": "Certificate",
+      "description": "QR-verified internship completion certificate issued strictly server-side after completion approval.",
+      "type": "object",
+      "properties": {
+        "certificateId": { "type": "string", "minLength": 6, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "recipientName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "achievementTitle": { "type": "string", "minLength": 2, "maxLength": 200 },
+        "issuanceStatus": { "type": "string", "enum": ["issued", "revoked"] },
+        "issuedAt": { "type": "string", "format": "date-time" },
+        "claimedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["certificateId", "userId", "recipientName", "achievementTitle", "issuanceStatus", "issuedAt", "updatedAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User-scoped learning notification and review alert.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "body": { "type": "string", "minLength": 2, "maxLength": 1000 },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "title", "body", "read", "createdAt", "updatedAt"]
+    },
+    "PaymentRecord": {
+      "title": "PaymentRecord",
+      "description": "Razorpay transaction metadata verified server-side (no card details stored).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "razorpayOrderId": { "type": "string", "minLength": 4, "maxLength": 128 },
+        "razorpayPaymentId": { "type": "string", "minLength": 4, "maxLength": 128 },
+        "amountPaise": { "type": "integer" },
+        "paymentStatus": { "type": "string", "enum": ["pending", "captured", "failed", "cancelled", "refunded"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "razorpayOrderId", "amountPaise", "paymentStatus", "createdAt"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Administrative audit and email delivery trace.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "actorUid": { "type": "string", "maxLength": 128 },
+        "eventType": { "type": "string", "maxLength": 80 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "eventType", "createdAt"]
+    },
+    "PlatformSetting": {
+      "title": "PlatformSetting",
+      "description": "Admin-managed templates and portal configuration.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminMarker" },
+      "description": "Server-managed administrator role markers."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Non-PII student/mentor workspace profiles keyed by Firebase UID."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "PII-isolated contact and provider verification metadata."
+    },
+    "/courses/{courseId}": {
+      "schema": { "$ref": "#/entities/Course" },
+      "description": "Bundled internship-training programmes and single INR pricing."
+    },
+    "/courses/{courseId}/modules/{moduleId}": {
+      "schema": { "$ref": "#/entities/Course" },
+      "description": "Course modules subcollection."
+    },
+    "/courses/{courseId}/modules/{moduleId}/lessons/{lessonId}": {
+      "schema": { "$ref": "#/entities/Course" },
+      "description": "Course lessons and interactive materials subcollection."
+    },
+    "/internships/{internshipId}": {
+      "schema": { "$ref": "#/entities/Internship" },
+      "description": "Internship track definitions and milestone tasks."
+    },
+    "/enrollments/{enrollmentId}": {
+      "schema": { "$ref": "#/entities/Enrollment" },
+      "description": "Server-verified student programme enrollments."
+    },
+    "/progress/{progressId}": {
+      "schema": { "$ref": "#/entities/LearningProgress" },
+      "description": "Student lesson, exercise, and quiz completion records."
+    },
+    "/assignments/{assignmentId}": {
+      "schema": { "$ref": "#/entities/Course" },
+      "description": "Practical programme assignments."
+    },
+    "/submissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/Submission" },
+      "description": "Student capstone and assignment submissions."
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/Review" },
+      "description": "Mentor/admin submission reviews."
+    },
+    "/certificates/{certificateId}": {
+      "schema": { "$ref": "#/entities/Certificate" },
+      "description": "QR-verifiable internship completion certificates."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Student notifications and mentor feedback updates."
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/PaymentRecord" },
+      "description": "Server-verified Razorpay transaction records."
+    },
+    "/payment_orders/{orderId}": {
+      "schema": { "$ref": "#/entities/PaymentRecord" },
+      "description": "Server-created Razorpay orders."
+    },
+    "/activity_logs/{logId}": {
+      "schema": { "$ref": "#/entities/ActivityLog" },
+      "description": "Admin-only audit and email delivery logs."
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/PlatformSetting" },
+      "description": "Admin-only platform settings and lifecycle email templates."
+    }
+  }
+}

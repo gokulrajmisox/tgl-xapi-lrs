@@ -21,6 +21,7 @@ export type CourseQuizQuestion = {
   options: string[];
   correctIndex: number;
   explanation: string;
+  questionType?: "conceptual" | "code" | "scenario";
 };
 
 export type CourseQuiz = {

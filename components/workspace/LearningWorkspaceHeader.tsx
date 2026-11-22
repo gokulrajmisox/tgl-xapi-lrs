@@ -36,11 +36,11 @@ export function LearningWorkspaceHeader({
           <ArrowLeft size={14} aria-hidden="true" />
           Back to My Learning
         </Link>
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="rounded-full bg-accent/12 px-3 py-1 font-medium text-accent">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          <span className="font-medium text-accent">
             {course.category} · Course + {course.internshipDurationWeeks}-Week Internship
           </span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-3 py-1 font-medium text-emerald-700 dark:text-emerald-300">
+          <span className="inline-flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-300">
             <CheckCircle2 size={12} aria-hidden="true" />
             Enrolled {hasInternshipApplication ? "· Internship Active" : ""}
           </span>
@@ -83,9 +83,11 @@ export function LearningWorkspaceHeader({
                 style={{ width: `${progression.overallProgressPercent}%` }}
               />
             </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              {progression.completedStepsCount} of {progression.totalStepsCount} roadmap stages complete ·{" "}
-              {course.completedLessonCount}/{course.lessonCount} lessons
+            <p className="mt-2 text-[11px] tabular-nums text-muted-foreground">
+              {progression.completedStepsCount}/{progression.totalStepsCount} stages ·{" "}
+              {course.completedLessonCount}/{course.lessonCount} lessons ·{" "}
+              {course.completedExerciseCount}/{course.totalExerciseCount} labs ·{" "}
+              {course.passedModuleQuizCount}/{course.totalModuleQuizCount} module quizzes
             </p>
           </div>
 

@@ -1,24 +1,31 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { serviceClient } from "@/lib/supabase/service";
 import {
-  isSupabaseConfigured,
   resolveCurrentActor,
   updateSandboxDisplayName,
 } from "@/lib/certifications/store";
+import {
+  createSignedSessionToken,
+  FIREBASE_SESSION_COOKIE_NAME,
+  getAdminAuth,
+  getAdminFirestore,
+  getAuthenticatedFirebaseActor,
+  isFirebaseAuthConfigured,
+} from "@/lib/firebase/server";
 
 const ProfileSchema = z.object({
   fullName: z.string().trim().min(2, "Enter your full name.").max(120),
+  avatarUrl: z.string().url().max(512).optional().nullable(),
 });
 
-export async function GET() {
-  const actor = await resolveCurrentActor();
+export async function GET(request: Request) {
+  const actor = await resolveCurrentActor({ request });
   if (actor.configured && !actor.user) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   }
   return NextResponse.json(
-    { user: actor.user, isSandbox: !actor.configured },
+    { user: actor.user, isSandbox: Boolean(actor.user?.isSandbox) },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
@@ -32,8 +39,84 @@ export async function PUT(request: Request) {
     );
   }
 
-  if (!isSupabaseConfigured()) {
-    const actor = await resolveCurrentActor();
+  const firebaseActor = await getAuthenticatedFirebaseActor(request);
+  if (firebaseActor) {
+    const trimmedName = parsed.data.fullName.trim();
+    const safeAvatarUrl = parsed.data.avatarUrl ?? firebaseActor.avatarUrl ?? null;
+    const adminAuth = getAdminAuth();
+    if (adminAuth) {
+      await adminAuth
+        .updateUser(firebaseActor.uid, {
+          displayName: trimmedName,
+          ...(safeAvatarUrl ? { photoURL: safeAvatarUrl } : {}),
+        })
+        .catch(() => {});
+    }
+
+    const db = getAdminFirestore();
+    if (db) {
+      await db
+        .collection("users")
+        .doc(firebaseActor.uid)
+        .set(
+          {
+            uid: firebaseActor.uid,
+            displayName: trimmedName,
+            role: firebaseActor.role,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+        .catch(() => {});
+
+      if (safeAvatarUrl) {
+        await db
+          .collection("users")
+          .doc(firebaseActor.uid)
+          .collection("private")
+          .doc("info")
+          .set(
+            {
+              avatarUrl: safeAvatarUrl,
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          )
+          .catch(() => {});
+      }
+    }
+
+    const updatedSession = createSignedSessionToken({
+      ...firebaseActor,
+      displayName: trimmedName,
+      avatarUrl: safeAvatarUrl,
+    });
+    const response = NextResponse.json(
+      {
+        fullName: trimmedName,
+        avatarUrl: safeAvatarUrl,
+        user: {
+          id: firebaseActor.uid,
+          name: trimmedName,
+          email: firebaseActor.email,
+          role: firebaseActor.role,
+          isSandbox: false,
+        },
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+    response.cookies.set(FIREBASE_SESSION_COOKIE_NAME, updatedSession, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 5,
+    });
+    return response;
+  }
+
+  if (!isFirebaseAuthConfigured()) {
+    const actor = await resolveCurrentActor({ request });
     if (!actor.user) {
       return NextResponse.json({ error: "Sign in required." }, { status: 401 });
     }
@@ -44,40 +127,5 @@ export async function PUT(request: Request) {
     );
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Sign in required." }, { status: 401 });
-  }
-
-  const { data, error } = await supabase.auth.updateUser({
-    data: { ...user.user_metadata, display_name: parsed.data.fullName },
-  });
-  if (error || !data.user) {
-    return NextResponse.json(
-      { error: error?.message ?? "Could not save your name." },
-      { status: 400 },
-    );
-  }
-
-  try {
-    await serviceClient().from("student_profiles").upsert(
-      {
-        id: user.id,
-        email: (user.email ?? "").toLowerCase(),
-        full_name: parsed.data.fullName,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "id" },
-    );
-  } catch {
-    // Non-fatal if student_profiles table has not been migrated yet.
-  }
-
-  return NextResponse.json(
-    { fullName: parsed.data.fullName },
-    { headers: { "Cache-Control": "no-store" } },
-  );
+  return NextResponse.json({ error: "Sign in required." }, { status: 401 });
 }

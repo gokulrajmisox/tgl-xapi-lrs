@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { FieldValue } from "firebase-admin/firestore";
 import {
   enrichedPathways,
   learningNodes,
@@ -7,6 +8,7 @@ import {
   findProjectBySlug,
 } from "./learning-graph";
 import { DEMO_STUDENT_ID, getMemoryStore } from "./certifications/store";
+import { getAdminFirestore, isFirestoreConfigured } from "./firebase/server";
 
 export type NodeProgressState = "not_started" | "active" | "completed";
 
@@ -21,6 +23,8 @@ export type SupportingFileMeta = {
   name: string;
   sizeBytes: number;
   mimeType: string;
+  storagePath?: string;
+  downloadUrl?: string;
 };
 
 export type ProjectSubmissionRecord = {
@@ -680,5 +684,248 @@ export function addAdminCohort(params: {
     status: "active",
   };
   store.cohorts.unshift(cohort);
+
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        void db.collection("settings").doc(`cohort_${cohort.id}`).set({
+          type: "cohort",
+          ...cohort,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+    } catch {
+      // Non-fatal
+    }
+  }
+
   return cohort;
+}
+
+export async function syncWorkspaceSubmissionToFirestore(
+  submission: ProjectSubmissionRecord,
+): Promise<void> {
+  if (!isFirestoreConfigured()) return;
+  try {
+    const db = getAdminFirestore();
+    if (!db) return;
+    await db
+      .collection("submissions")
+      .doc(submission.id)
+      .set(
+        {
+          id: submission.id,
+          userId: submission.userId,
+          learnerName: submission.learnerName,
+          projectSlug: submission.projectSlug,
+          pathwaySlug: submission.pathwaySlug,
+          cohortName: submission.cohortName,
+          githubUrl: submission.githubUrl || "",
+          deploymentUrl: submission.deploymentUrl ?? null,
+          supportingEvidence: submission.supportingEvidence ?? null,
+          supportingFiles: submission.supportingFiles ?? [],
+          summary: submission.summary,
+          reflection: submission.reflection ?? "",
+          status: submission.status,
+          mentorName: submission.mentorName,
+          mentorFeedback: submission.mentorFeedback ?? null,
+          submittedAtIso: submission.submittedAt,
+          reviewedAtIso: submission.reviewedAt ?? null,
+          submittedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+  } catch {
+    // Non-fatal fallback
+  }
+}
+
+export async function syncMentorMessageToFirestore(
+  msg: MentorMessageRecord,
+): Promise<void> {
+  if (!isFirestoreConfigured()) return;
+  try {
+    const db = getAdminFirestore();
+    if (!db) return;
+    await db
+      .collection("settings")
+      .doc(`mentor_msg_${msg.id}`)
+      .set(
+        {
+          type: "mentor_message",
+          ...msg,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+  } catch {
+    // Non-fatal fallback
+  }
+}
+
+function mergeSubmissionsIntoStore(rows: ProjectSubmissionRecord[]) {
+  const store = getWorkspaceStore();
+  for (const row of rows) {
+    const idx = store.submissions.findIndex((s) => s.id === row.id);
+    if (idx >= 0) {
+      store.submissions[idx] = row;
+    } else {
+      store.submissions.unshift(row);
+    }
+  }
+}
+
+function mapFirestoreSubmission(r: Record<string, unknown>): ProjectSubmissionRecord {
+  const projectSlug = String(r.projectSlug ?? "");
+  const project = findProjectBySlug(projectSlug);
+  const githubUrl = String(r.githubUrl ?? "");
+  return {
+    id: String(r.id),
+    userId: String(r.userId),
+    learnerName: String(r.learnerName ?? "Student"),
+    learnerEmail: String(r.learnerEmail ?? ""),
+    projectSlug,
+    projectTitle: project?.title ?? (projectSlug || "Project"),
+    pathwaySlug: String(r.pathwaySlug ?? project?.pathwaySlug ?? "web-development"),
+    cohortName: String(r.cohortName ?? project?.cohortName ?? "Cohort"),
+    githubUrl,
+    deploymentUrl: (r.deploymentUrl as string | null) ?? null,
+    supportingEvidence: (r.supportingEvidence as string | null) ?? null,
+    supportingFiles: Array.isArray(r.supportingFiles)
+      ? (r.supportingFiles as SupportingFileMeta[])
+      : [],
+    artifactUrl: githubUrl,
+    summary: String(r.summary ?? ""),
+    reflection: String(r.reflection ?? ""),
+    status: (r.status as ProjectSubmissionStatus) ?? "submitted",
+    mentorName: String(r.mentorName ?? project?.mentorName ?? "Mentor"),
+    mentorFeedback: (r.mentorFeedback as string | null) ?? null,
+    reviewedAt:
+      typeof r.reviewedAtIso === "string"
+        ? r.reviewedAtIso
+        : typeof r.reviewedAt === "string"
+          ? r.reviewedAt
+          : null,
+    submittedAt:
+      typeof r.submittedAtIso === "string"
+        ? r.submittedAtIso
+        : typeof r.submittedAt === "string"
+          ? r.submittedAt
+          : new Date().toISOString(),
+  };
+}
+
+export async function getLearnerSnapshotAsync(userId: string) {
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        const [subSnap, msgSnap] = await Promise.all([
+          db.collection("submissions").where("userId", "==", userId).get(),
+          db
+            .collection("settings")
+            .where("type", "==", "mentor_message")
+            .where("userId", "==", userId)
+            .get(),
+        ]);
+
+        if (!subSnap.empty) {
+          const mapped = subSnap.docs.map((d) =>
+            mapFirestoreSubmission(d.data() as Record<string, unknown>),
+          );
+          mergeSubmissionsIntoStore(mapped);
+        }
+
+        if (!msgSnap.empty) {
+          const store = getWorkspaceStore();
+          for (const d of msgSnap.docs) {
+            const m = d.data() as Record<string, unknown>;
+            const msgId = String(m.id ?? d.id);
+            if (!store.messages.some((existing) => existing.id === msgId)) {
+              store.messages.push({
+                id: msgId,
+                userId: String(m.userId),
+                learnerName: String(m.learnerName ?? "Student"),
+                projectSlug: (m.projectSlug as string | null) ?? null,
+                nodeId: (m.nodeId as string | null) ?? null,
+                topic: String(m.topic ?? "Support"),
+                authorRole: m.authorRole === "mentor" ? "mentor" : "student",
+                authorName: String(m.authorName ?? "User"),
+                body: String(m.body ?? ""),
+                resolved: Boolean(m.resolved),
+                createdAt: String(m.createdAt ?? new Date().toISOString()),
+              });
+            }
+          }
+        }
+      }
+    } catch {
+      // Non-fatal fallback
+    }
+  }
+
+  return getLearnerSnapshot(userId);
+}
+
+export async function getMentorConsoleDataAsync() {
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        const [subSnap, settingSnap] = await Promise.all([
+          db.collection("submissions").limit(200).get(),
+          db.collection("settings").limit(250).get(),
+        ]);
+
+        if (!subSnap.empty) {
+          const mapped = subSnap.docs.map((d) =>
+            mapFirestoreSubmission(d.data() as Record<string, unknown>),
+          );
+          mergeSubmissionsIntoStore(mapped);
+        }
+
+        const store = getWorkspaceStore();
+        for (const d of settingSnap.docs) {
+          const row = d.data() as Record<string, unknown>;
+          if (row.type === "cohort") {
+            const cid = String(row.id ?? d.id);
+            if (!store.cohorts.some((x) => x.id === cid)) {
+              store.cohorts.unshift({
+                id: cid,
+                name: String(row.name ?? "Cohort"),
+                pathwaySlug: String(row.pathwaySlug ?? "web-development"),
+                mentorName: String(row.mentorName ?? "Mentor"),
+                mentorEmail: String(row.mentorEmail ?? ""),
+                learnerCount: Number(row.learnerCount ?? 0),
+                status: (row.status as CohortRecord["status"]) ?? "active",
+              });
+            }
+          } else if (row.type === "mentor_message") {
+            const mid = String(row.id ?? d.id);
+            if (!store.messages.some((x) => x.id === mid)) {
+              store.messages.push({
+                id: mid,
+                userId: String(row.userId ?? ""),
+                learnerName: String(row.learnerName ?? "Learner"),
+                projectSlug: (row.projectSlug as string | null) ?? null,
+                nodeId: (row.nodeId as string | null) ?? null,
+                topic: String(row.topic ?? "Support"),
+                authorRole: row.authorRole === "mentor" ? "mentor" : "student",
+                authorName: String(row.authorName ?? "User"),
+                body: String(row.body ?? ""),
+                resolved: Boolean(row.resolved),
+                createdAt: String(row.createdAt ?? new Date().toISOString()),
+              });
+            }
+          }
+        }
+      }
+    } catch {
+      // Non-fatal fallback
+    }
+  }
+
+  return getMentorConsoleData();
 }

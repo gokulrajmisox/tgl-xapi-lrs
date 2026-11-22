@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { deriveStudentProfileSeed } from "@/lib/auth/profile-sync";
-import { createClient as createUserClient } from "@/lib/supabase/server";
-import { serviceClient, isSupabaseConfigured } from "@/lib/supabase/service";
+import { FieldValue } from "firebase-admin/firestore";
+import { isPrivilegedStaffEmail } from "@/lib/auth/access";
+import {
+  getAdminFirestore,
+  getAuthenticatedFirebaseActor,
+  isFirebaseAuthConfigured,
+  isFirestoreConfigured,
+} from "@/lib/firebase/server";
 import {
   activateCourseEnrollment,
   findCourseByIdOrSlug,
@@ -41,7 +46,15 @@ import {
   type InternshipTaskSubmission,
 } from "@/lib/internships/eligibility";
 
-export { isSupabaseConfigured };
+export { isFirestoreConfigured };
+
+function cleanForFirestore<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function safeFirestoreDocId(raw: string): string {
+  return raw.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120) || randomUUID();
+}
 
 export type InternshipRecord = {
   id: string;
@@ -156,6 +169,11 @@ export type CertificateIssuanceRecord = {
   revocation_reason: string | null;
   issued_at: string | null;
   revoked_at: string | null;
+  claimed_at?: string | null;
+  joined_at?: string | null;
+  completed_at?: string | null;
+  regeneration_count?: number;
+  regenerated_at?: string | null;
   created_at: string;
 };
 
@@ -539,8 +557,15 @@ export function resetMemoryStoreForTest(): void {
   globalStore.__tglCertStore = createSeedStore();
 }
 
-export function getCertificateClaimedAt(certificateId: string): string | null {
-  return getMemoryStore().claimedCertificateAtByCertId[certificateId] ?? null;
+export function getCertificateClaimedAt(
+  certificateId: string,
+  issuance?: Pick<CertificateIssuanceRecord, "claimed_at"> | null,
+): string | null {
+  return (
+    issuance?.claimed_at ??
+    getMemoryStore().claimedCertificateAtByCertId[certificateId] ??
+    null
+  );
 }
 
 export function markCertificateClaimed(certificateId: string): string {
@@ -548,7 +573,29 @@ export function markCertificateClaimed(certificateId: string): string {
   if (!store.claimedCertificateAtByCertId[certificateId]) {
     store.claimedCertificateAtByCertId[certificateId] = new Date().toISOString();
   }
-  return store.claimedCertificateAtByCertId[certificateId];
+  const claimedAt = store.claimedCertificateAtByCertId[certificateId];
+  const cert = store.issuances.find((i) => i.certificate_id === certificateId);
+  if (cert) {
+    cert.claimed_at = cert.claimed_at ?? claimedAt;
+  }
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        void db.collection("certificates").doc(safeFirestoreDocId(certificateId)).set(
+          {
+            claimed_at: claimedAt,
+            claimedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+      }
+    } catch {
+      // Non-fatal
+    }
+  }
+  return claimedAt;
 }
 
 export function updateSandboxDisplayName(userId: string, fullName: string): string {
@@ -569,25 +616,44 @@ export function updateSandboxDisplayName(userId: string, fullName: string): stri
 }
 
 export async function resolveCurrentActor(options?: {
+  request?: Request;
   allowSandboxAdmin?: boolean;
 }): Promise<{ user: SandboxUser | null; configured: boolean }> {
-  if (isSupabaseConfigured()) {
-    const supabase = await createUserClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return { user: null, configured: true };
-    const seed = deriveStudentProfileSeed(user);
+  const authConfigured = isFirebaseAuthConfigured();
+  const fbActor = await getAuthenticatedFirebaseActor(options?.request);
+  if (fbActor) {
+    let resolvedName = fbActor.displayName;
+    if (!resolvedName && isFirestoreConfigured()) {
+      try {
+        const db = getAdminFirestore();
+        const userSnap = await db?.collection("users").doc(fbActor.uid).get();
+        const profileName = userSnap?.data()?.displayName;
+        if (typeof profileName === "string" && profileName.trim()) {
+          resolvedName = profileName.trim();
+        }
+      } catch {
+        // Non-fatal
+      }
+    }
+    const verifiedRole: "student" | "admin" =
+      fbActor.emailVerified && isPrivilegedStaffEmail(fbActor.email)
+        ? "admin"
+        : "student";
     return {
       user: {
-        id: user.id,
-        email: seed.email || user.email || "",
-        name: seed.fullName,
-        role: seed.role,
+        id: fbActor.uid,
+        email: fbActor.email,
+        name: resolvedName,
+        role: verifiedRole,
         isSandbox: false,
       },
       configured: true,
     };
+  }
+
+  // Whenever Firebase Authentication is configured, NEVER fall back to any demo/sandbox account.
+  if (authConfigured || isFirestoreConfigured()) {
+    return { user: null, configured: true };
   }
 
   const sandboxId = options?.allowSandboxAdmin ? DEMO_ADMIN_ID : DEMO_STUDENT_ID;
@@ -606,41 +672,67 @@ export async function resolveCurrentActor(options?: {
   };
 }
 
-export async function requireAdminActor(): Promise<
+export async function requireAdminActor(
+  request?: Request,
+): Promise<
   { user: SandboxUser; error: null } | { user: null; error: { message: string; status: number } }
 > {
-  if (isSupabaseConfigured()) {
-    const { user } = await resolveCurrentActor();
+  const { user, configured } = await resolveCurrentActor({
+    request,
+    allowSandboxAdmin: !isFirebaseAuthConfigured() && !isFirestoreConfigured(),
+  });
+  if (configured) {
     if (!user) return { user: null, error: { message: "Sign in required.", status: 401 } };
-    if (user.role !== "admin") {
+    if (user.role !== "admin" || !isPrivilegedStaffEmail(user.email)) {
       return { user: null, error: { message: "Administrator access required.", status: 403 } };
     }
     return { user, error: null };
   }
-  const { user } = await resolveCurrentActor({ allowSandboxAdmin: true });
-  return { user: user!, error: null };
+  if (!user) return { user: null, error: { message: "Sign in required.", status: 401 } };
+  return { user, error: null };
 }
 
 export async function listInternships(): Promise<InternshipRecord[]> {
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data } = await client
-      .from("internships")
-      .select("*")
-      .eq("is_published", true)
-      .order("created_at", { ascending: true });
-    return (data ?? []) as InternshipRecord[];
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        const snap = await db.collection("internships").get();
+        if (!snap.empty) {
+          const rows = snap.docs
+            .map((d) => d.data() as InternshipRecord)
+            .filter((i) => i.is_published)
+            .sort((a, b) => a.created_at.localeCompare(b.created_at));
+          if (rows.length > 0) return rows;
+        }
+      }
+    } catch {
+      // Fallback to seed list
+    }
   }
   return getMemoryStore().internships.filter((i) => i.is_published);
 }
 
 export async function listProducts(includeDisabled = false): Promise<CertificationProductRecord[]> {
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    let query = client.from("certification_products").select("*").order("created_at", { ascending: true });
-    if (!includeDisabled) query = query.eq("enabled", true);
-    const { data } = await query;
-    return (data ?? []) as CertificationProductRecord[];
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        const snap = await db
+          .collection("settings")
+          .where("type", "==", "cert_product")
+          .get();
+        if (!snap.empty) {
+          const rows = snap.docs
+            .map((d) => d.data() as CertificationProductRecord)
+            .filter((p) => includeDisabled || p.enabled)
+            .sort((a, b) => a.created_at.localeCompare(b.created_at));
+          if (rows.length > 0) return rows;
+        }
+      }
+    } catch {
+      // Fallback
+    }
   }
   const products = getMemoryStore().products;
   return includeDisabled ? [...products] : products.filter((p) => p.enabled);
@@ -663,29 +755,24 @@ export async function createOrUpdateProduct(input: {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    if (input.id) {
-      const { data, error } = await client
-        .from("certification_products")
-        .update({
-          name: input.name,
-          description: input.description,
-          certificate_type: input.certificateType,
-          price_paise: input.pricePaise,
-          enabled: input.enabled,
-          ...(input.eligibilityRules ? { eligibility_rules: input.eligibilityRules } : {}),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", input.id)
-        .select("*")
-        .single();
-      if (error || !data) return { error: error?.message ?? "Could not update certification product." };
-      return { product: data as CertificationProductRecord };
-    }
-    const { data, error } = await client
-      .from("certification_products")
-      .insert({
+  const store = getMemoryStore();
+  const now = new Date().toISOString();
+  let product: CertificationProductRecord;
+
+  if (input.id) {
+    const existing = store.products.find((p) => p.id === input.id);
+    if (existing) {
+      existing.name = input.name;
+      existing.description = input.description;
+      existing.certificate_type = input.certificateType;
+      existing.price_paise = input.pricePaise;
+      existing.enabled = input.enabled;
+      if (input.eligibilityRules) existing.eligibility_rules = input.eligibilityRules;
+      existing.updated_at = now;
+      product = existing;
+    } else {
+      product = {
+        id: input.id,
         slug: `${slug}-${Date.now().toString(36)}`,
         name: input.name,
         description: input.description,
@@ -693,58 +780,71 @@ export async function createOrUpdateProduct(input: {
         price_paise: input.pricePaise,
         currency: CERTIFICATE_CURRENCY,
         enabled: input.enabled,
-        eligibility_rules: input.eligibilityRules ?? { requiresSubmission: true, requiresMentorApproval: true },
-      })
-      .select("*")
-      .single();
-    if (error || !data) return { error: error?.message ?? "Could not create certification product." };
-    return { product: data as CertificationProductRecord };
+        eligibility_rules: input.eligibilityRules ?? {
+          requiresSubmission: true,
+          requiresMentorApproval: true,
+        },
+        created_at: now,
+        updated_at: now,
+      };
+      store.products.push(product);
+    }
+  } else {
+    product = {
+      id: randomUUID(),
+      slug: `${slug}-${Date.now().toString(36)}`,
+      name: input.name,
+      description: input.description,
+      certificate_type: input.certificateType,
+      price_paise: input.pricePaise,
+      currency: "INR",
+      enabled: input.enabled,
+      eligibility_rules: input.eligibilityRules ?? {
+        requiresSubmission: true,
+        requiresMentorApproval: true,
+      },
+      created_at: now,
+      updated_at: now,
+    };
+    store.products.push(product);
   }
 
-  const store = getMemoryStore();
-  const now = new Date().toISOString();
-  if (input.id) {
-    const existing = store.products.find((p) => p.id === input.id);
-    if (!existing) return { error: "Certification product not found." };
-    existing.name = input.name;
-    existing.description = input.description;
-    existing.certificate_type = input.certificateType;
-    existing.price_paise = input.pricePaise;
-    existing.enabled = input.enabled;
-    if (input.eligibilityRules) existing.eligibility_rules = input.eligibilityRules;
-    existing.updated_at = now;
-    return { product: existing };
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        await db
+          .collection("settings")
+          .doc(`cert_product_${product.id}`)
+          .set({ type: "cert_product", ...cleanForFirestore(product) }, { merge: true });
+      }
+    } catch {
+      // Non-fatal
+    }
   }
 
-  const created: CertificationProductRecord = {
-    id: randomUUID(),
-    slug: `${slug}-${Date.now().toString(36)}`,
-    name: input.name,
-    description: input.description,
-    certificate_type: input.certificateType,
-    price_paise: input.pricePaise,
-    currency: "INR",
-    enabled: input.enabled,
-    eligibility_rules: input.eligibilityRules ?? {
-      requiresSubmission: true,
-      requiresMentorApproval: true,
-    },
-    created_at: now,
-    updated_at: now,
-  };
-  store.products.push(created);
-  return { product: created };
+  return { product };
 }
 
 export async function listStudentApplications(userId: string): Promise<InternshipApplicationRecord[]> {
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data } = await client
-      .from("internship_applications")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false });
-    return (data ?? []) as InternshipApplicationRecord[];
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        const snap = await db
+          .collection("settings")
+          .where("type", "==", "internship_application")
+          .where("user_id", "==", userId)
+          .get();
+        if (!snap.empty) {
+          return snap.docs
+            .map((d) => d.data() as InternshipApplicationRecord)
+            .sort((a, b) => b.created_at.localeCompare(a.created_at));
+        }
+      }
+    } catch {
+      // Fallback
+    }
   }
   return getMemoryStore().applications.filter((a) => a.user_id === userId);
 }
@@ -757,63 +857,63 @@ export async function applyForInternship(params: {
   motivation: string;
   portfolioUrl?: string;
 }): Promise<{ application?: InternshipApplicationRecord; error?: string }> {
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data, error } = await client
-      .from("internship_applications")
-      .upsert(
-        {
-          user_id: params.userId,
-          internship_id: params.internshipId,
-          applicant_name: params.applicantName,
-          applicant_email: params.applicantEmail,
-          motivation: params.motivation,
-          portfolio_url: params.portfolioUrl || null,
-          status: "in_progress",
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,internship_id" },
-      )
-      .select("*")
-      .single();
-    if (error || !data) return { error: error?.message ?? "Could not submit internship application." };
-    return { application: data as InternshipApplicationRecord };
-  }
-
-  const store = getMemoryStore();
-  const internship = store.internships.find((i) => i.id === params.internshipId);
+  const internships = await listInternships();
+  const internship = internships.find((i) => i.id === params.internshipId);
   if (!internship) return { error: "Internship track not found." };
 
-  const existing = store.applications.find(
-    (a) => a.user_id === params.userId && a.internship_id === params.internshipId,
-  );
+  const store = getMemoryStore();
+  const existingApps = await listStudentApplications(params.userId);
+  const existing = existingApps.find((a) => a.internship_id === params.internshipId);
   const now = new Date().toISOString();
+
+  let app: InternshipApplicationRecord;
   if (existing) {
-    existing.motivation = params.motivation;
-    existing.portfolio_url = params.portfolioUrl || null;
-    existing.updated_at = now;
-    return { application: existing };
+    app = {
+      ...existing,
+      motivation: params.motivation,
+      portfolio_url: params.portfolioUrl || null,
+      updated_at: now,
+    };
+    const idx = store.applications.findIndex((a) => a.id === app.id);
+    if (idx >= 0) store.applications[idx] = app;
+    else store.applications.unshift(app);
+  } else {
+    app = {
+      id: randomUUID(),
+      user_id: params.userId,
+      internship_id: params.internshipId,
+      applicant_name: params.applicantName,
+      applicant_email: params.applicantEmail,
+      motivation: params.motivation,
+      portfolio_url: params.portfolioUrl || null,
+      status: "in_progress",
+      submission_url: null,
+      submission_summary: null,
+      assessment_passed: false,
+      mentor_approved: false,
+      mentor_approved_by: null,
+      mentor_notes: null,
+      completed_at: null,
+      created_at: now,
+      updated_at: now,
+    };
+    store.applications.unshift(app);
   }
-  const app: InternshipApplicationRecord = {
-    id: randomUUID(),
-    user_id: params.userId,
-    internship_id: params.internshipId,
-    applicant_name: params.applicantName,
-    applicant_email: params.applicantEmail,
-    motivation: params.motivation,
-    portfolio_url: params.portfolioUrl || null,
-    status: "in_progress",
-    submission_url: null,
-    submission_summary: null,
-    assessment_passed: false,
-    mentor_approved: false,
-    mentor_approved_by: null,
-    mentor_notes: null,
-    completed_at: null,
-    created_at: now,
-    updated_at: now,
-  };
-  store.applications.unshift(app);
+
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        await db
+          .collection("settings")
+          .doc(`int_app_${app.id}`)
+          .set({ type: "internship_application", ...cleanForFirestore(app) }, { merge: true });
+      }
+    } catch {
+      return { error: "Could not submit internship application." };
+    }
+  }
+
   return { application: app };
 }
 
@@ -823,29 +923,26 @@ export async function submitInternshipWork(params: {
   submissionUrl: string;
   submissionSummary: string;
 }): Promise<{ application?: InternshipApplicationRecord; error?: string }> {
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data, error } = await client
-      .from("internship_applications")
-      .update({
-        submission_url: params.submissionUrl,
-        submission_summary: params.submissionSummary,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", params.applicationId)
-      .eq("user_id", params.userId)
-      .select("*")
-      .single();
-    if (error || !data) return { error: error?.message ?? "Could not record submission." };
-    return { application: data as InternshipApplicationRecord };
-  }
-
-  const store = getMemoryStore();
-  const app = store.applications.find((a) => a.id === params.applicationId && a.user_id === params.userId);
+  const apps = await listStudentApplications(params.userId);
+  const app = apps.find((a) => a.id === params.applicationId && a.user_id === params.userId);
   if (!app) return { error: "Internship application not found." };
   app.submission_url = params.submissionUrl;
   app.submission_summary = params.submissionSummary;
   app.updated_at = new Date().toISOString();
+
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        await db
+          .collection("settings")
+          .doc(`int_app_${app.id}`)
+          .set({ type: "internship_application", ...cleanForFirestore(app) }, { merge: true });
+      }
+    } catch {
+      return { error: "Could not record submission." };
+    }
+  }
   return { application: app };
 }
 
@@ -866,15 +963,21 @@ export async function evaluateProductEligibilityForUser(params: {
 
   let pathwayCompleted = false;
   let distinctionApproved = false;
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data: enrollments } = await client
-      .from("learning_progress")
-      .select("completion")
-      .eq("user_id", params.userId)
-      .eq("completion", true)
-      .limit(1);
-    pathwayCompleted = Boolean(enrollments?.length);
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        const completedSnap = await db
+          .collection("progress")
+          .where("userId", "==", params.userId)
+          .where("status", "==", "completed")
+          .limit(1)
+          .get();
+        pathwayCompleted = !completedSnap.empty;
+      }
+    } catch {
+      pathwayCompleted = false;
+    }
   } else {
     const store = getMemoryStore();
     pathwayCompleted = store.pathwayCompletedUserIds.has(params.userId);
@@ -924,21 +1027,23 @@ export async function sendAndLogLifecycleEmail(params: {
     forceFailure: params.forceFailure,
   });
 
-  if (isSupabaseConfigured()) {
-    await serviceClient().from("email_delivery_logs").insert({
-      recipient_email: record.recipient_email,
-      template_key: record.template_key,
-      subject: record.subject,
-      is_test: record.is_test,
-      provider: record.provider,
-      delivery_status: record.delivery_status,
-      provider_message_id: record.provider_message_id,
-      error_message: record.error_message,
-      attempt_count: record.attempt_count,
-      metadata: record.metadata,
-    });
-  } else {
-    getMemoryStore().emailLogs.unshift(record);
+  getMemoryStore().emailLogs.unshift(record);
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        await db
+          .collection("activity_logs")
+          .doc(`email_${safeFirestoreDocId(record.id)}`)
+          .set({
+            type: "email_log",
+            ...cleanForFirestore(record),
+            createdAt: FieldValue.serverTimestamp(),
+          });
+      }
+    } catch {
+      // Non-fatal
+    }
   }
 
   return record;
@@ -981,90 +1086,62 @@ export async function activateBundledProgrammeInternship(params: {
   if (!track) return null;
 
   const now = new Date().toISOString();
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data: existing } = await client
-      .from("internship_applications")
-      .select("*")
-      .eq("user_id", params.userId)
-      .eq("internship_id", track.id)
-      .maybeSingle();
-
-    if (existing) {
-      if (existing.status === "completed") {
-        return existing as InternshipApplicationRecord;
-      }
-      const { data: updated } = await client
-        .from("internship_applications")
-        .update({
-          status: "in_progress",
-          course_id: params.courseId,
-          updated_at: now,
-        })
-        .eq("id", existing.id)
-        .select("*")
-        .single();
-      return (updated as InternshipApplicationRecord | null) ?? (existing as InternshipApplicationRecord);
-    }
-
-    const { data: created } = await client
-      .from("internship_applications")
-      .upsert(
-        {
-          user_id: params.userId,
-          internship_id: track.id,
-          course_id: params.courseId,
-          applicant_name: params.userName,
-          applicant_email: params.userEmail,
-          motivation: `Activated automatically with Programme Enrolment: ${params.courseTitle}`,
-          portfolio_url: null,
-          status: "in_progress",
-          updated_at: now,
-        },
-        { onConflict: "user_id,internship_id" },
-      )
-      .select("*")
-      .single();
-    return (created as InternshipApplicationRecord | null) ?? null;
-  }
-
   const store = getMemoryStore();
-  const existing = store.applications.find(
-    (a) => a.user_id === params.userId && a.internship_id === track.id,
-  );
+  const existingApps = await listStudentApplications(params.userId);
+  const existing = existingApps.find((a) => a.internship_id === track.id);
+
+  let app: InternshipApplicationRecord;
   if (existing) {
-    existing.course_id = params.courseId;
-    if (existing.status !== "completed") {
-      existing.status = "in_progress";
-    }
-    existing.updated_at = now;
-    return existing;
+    app = {
+      ...existing,
+      course_id: params.courseId,
+      status: existing.status === "completed" ? "completed" : "in_progress",
+      updated_at: now,
+    };
+    const idx = store.applications.findIndex((a) => a.id === app.id);
+    if (idx >= 0) store.applications[idx] = app;
+    else store.applications.unshift(app);
+  } else {
+    app = {
+      id: randomUUID(),
+      user_id: params.userId,
+      internship_id: track.id,
+      course_id: params.courseId,
+      applicant_name: params.userName,
+      applicant_email: params.userEmail,
+      motivation: `Activated automatically with Programme Enrolment: ${params.courseTitle}`,
+      portfolio_url: null,
+      status: "in_progress",
+      submission_url: null,
+      submission_summary: null,
+      task_submissions: [],
+      final_evaluation_notes: null,
+      final_score_label: null,
+      assessment_passed: false,
+      mentor_approved: false,
+      mentor_approved_by: null,
+      mentor_notes: null,
+      completed_at: null,
+      created_at: now,
+      updated_at: now,
+    };
+    store.applications.unshift(app);
   }
 
-  const app: InternshipApplicationRecord = {
-    id: randomUUID(),
-    user_id: params.userId,
-    internship_id: track.id,
-    course_id: params.courseId,
-    applicant_name: params.userName,
-    applicant_email: params.userEmail,
-    motivation: `Activated automatically with Programme Enrolment: ${params.courseTitle}`,
-    portfolio_url: null,
-    status: "in_progress",
-    submission_url: null,
-    submission_summary: null,
-    task_submissions: [],
-    final_evaluation_notes: null,
-    final_score_label: null,
-    assessment_passed: false,
-    mentor_approved: false,
-    mentor_approved_by: null,
-    mentor_notes: null,
-    completed_at: null,
-    created_at: now,
-    updated_at: now,
-  };
-  store.applications.unshift(app);
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        await db
+          .collection("settings")
+          .doc(`int_app_${app.id}`)
+          .set({ type: "internship_application", ...cleanForFirestore(app) }, { merge: true });
+      }
+    } catch {
+      // Non-fatal
+    }
+  }
+
   return app;
 }
 
@@ -1109,61 +1186,45 @@ export async function createCourseEnrollmentOrder(params: {
   });
 
   const now = new Date().toISOString();
-  let order: CertificationOrderRecord;
+  const order: CertificationOrderRecord = {
+    id: randomUUID(),
+    user_id: params.user.id,
+    order_kind: resolvedKind,
+    product_id: null,
+    course_id: course.id,
+    internship_application_id: null,
+    razorpay_order_id: rpOrder.razorpayOrderId,
+    amount_paise: rpOrder.amountPaise,
+    currency: "INR",
+    order_status: "created",
+    payment_mode: rpOrder.mode,
+    metadata: {
+      courseId: course.id,
+      courseSlug: course.slug,
+      courseTitle: course.title,
+      linkedInternshipSlug: course.linkedInternshipSlug,
+      certificateIncluded: true,
+    },
+    created_at: now,
+    updated_at: now,
+  };
+  getMemoryStore().orders.unshift(order);
 
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data, error } = await client
-      .from("certification_orders")
-      .insert({
-        user_id: params.user.id,
-        order_kind: resolvedKind,
-        product_id: null,
-        course_id: course.id,
-        internship_application_id: null,
-        razorpay_order_id: rpOrder.razorpayOrderId,
-        amount_paise: rpOrder.amountPaise,
-        currency: "INR",
-        order_status: "created",
-        payment_mode: rpOrder.mode,
-        metadata: {
-          courseId: course.id,
-          courseSlug: course.slug,
-          courseTitle: course.title,
-          linkedInternshipSlug: course.linkedInternshipSlug,
-          certificateIncluded: true,
-        },
-      })
-      .select("*")
-      .single();
-    if (error || !data) {
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        await db
+          .collection("payment_orders")
+          .doc(order.id)
+          .set({
+            ...cleanForFirestore(order),
+            userId: order.user_id,
+          });
+      }
+    } catch {
       return { error: "Failed to persist programme enrolment order.", status: 500 };
     }
-    order = data as CertificationOrderRecord;
-  } else {
-    order = {
-      id: randomUUID(),
-      user_id: params.user.id,
-      order_kind: resolvedKind,
-      product_id: null,
-      course_id: course.id,
-      internship_application_id: null,
-      razorpay_order_id: rpOrder.razorpayOrderId,
-      amount_paise: rpOrder.amountPaise,
-      currency: "INR",
-      order_status: "created",
-      payment_mode: rpOrder.mode,
-      metadata: {
-        courseId: course.id,
-        courseSlug: course.slug,
-        courseTitle: course.title,
-        linkedInternshipSlug: course.linkedInternshipSlug,
-        certificateIncluded: true,
-      },
-      created_at: now,
-      updated_at: now,
-    };
-    getMemoryStore().orders.unshift(order);
   }
 
   await sendAndLogLifecycleEmail({
@@ -1192,22 +1253,9 @@ export async function findActiveIssuanceForUserProduct(
   productId: string,
   internshipApplicationId?: string | null,
 ): Promise<CertificateIssuanceRecord | null> {
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    let query = client
-      .from("certificate_issuances")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("product_id", productId)
-      .neq("issuance_status", "revoked");
-    if (internshipApplicationId) {
-      query = query.eq("internship_application_id", internshipApplicationId);
-    }
-    const { data } = await query.maybeSingle();
-    return (data as CertificateIssuanceRecord | null) ?? null;
-  }
+  const list = await listIssuances(userId);
   return (
-    getMemoryStore().issuances.find(
+    list.find(
       (i) =>
         i.user_id === userId &&
         i.product_id === productId &&
@@ -1222,14 +1270,22 @@ export async function findActiveIssuanceForUserProduct(
 export async function findActiveIssuanceForInternshipApplication(
   internshipApplicationId: string,
 ): Promise<CertificateIssuanceRecord | null> {
-  if (isSupabaseConfigured()) {
-    const { data } = await serviceClient()
-      .from("certificate_issuances")
-      .select("*")
-      .eq("internship_application_id", internshipApplicationId)
-      .neq("issuance_status", "revoked")
-      .maybeSingle();
-    return (data as CertificateIssuanceRecord | null) ?? null;
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        const snap = await db
+          .collection("certificates")
+          .where("internship_application_id", "==", internshipApplicationId)
+          .get();
+        const found = snap.docs
+          .map((d) => d.data() as CertificateIssuanceRecord)
+          .find((i) => i.issuance_status !== "revoked");
+        if (found) return found;
+      }
+    } catch {
+      // Fallback
+    }
   }
   return (
     getMemoryStore().issuances.find(
@@ -1238,6 +1294,32 @@ export async function findActiveIssuanceForInternshipApplication(
         i.issuance_status !== "revoked",
     ) ?? null
   );
+}
+
+async function persistCertificateIssuanceDoc(issuance: CertificateIssuanceRecord): Promise<void> {
+  if (!isFirestoreConfigured()) return;
+  try {
+    const db = getAdminFirestore();
+    if (!db) return;
+    await db
+      .collection("certificates")
+      .doc(safeFirestoreDocId(issuance.certificate_id))
+      .set(
+        {
+          ...cleanForFirestore(issuance),
+          certificateId: issuance.certificate_id,
+          userId: issuance.user_id,
+          recipientName: issuance.recipient_name,
+          achievementTitle: issuance.achievement_title,
+          issuanceStatus: issuance.issuance_status,
+          issuedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+  } catch {
+    // Non-fatal
+  }
 }
 
 export async function issueCertificateForVerifiedOrder(params: {
@@ -1275,52 +1357,27 @@ export async function issueCertificateForVerifiedOrder(params: {
   const certificateId = `TGL-CERT-2026-${Math.floor(1000 + Math.random() * 9000)}-${randomUUID().slice(0, 4).toUpperCase()}`;
   const now = new Date().toISOString();
 
-  let issuance: CertificateIssuanceRecord;
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data, error } = await client
-      .from("certificate_issuances")
-      .insert({
-        user_id: params.user.id,
-        product_id: product.id,
-        payment_id: params.payment?.id ?? null,
-        internship_application_id: matchedApplication?.id ?? null,
-        certificate_id: certificateId,
-        recipient_name: params.user.name,
-        recipient_email: params.user.email,
-        achievement_title: achievementTitle,
-        certificate_type: product.certificate_type,
-        eligibility_status: "eligible",
-        issuance_status: "issued",
-        approved_by: params.approvedBy ?? matchedApplication?.mentor_approved_by ?? null,
-        issued_at: now,
-      })
-      .select("*")
-      .single();
-    if (error || !data) return { error: error?.message ?? "Failed to issue certificate." };
-    issuance = data as CertificateIssuanceRecord;
-  } else {
-    issuance = {
-      id: randomUUID(),
-      user_id: params.user.id,
-      product_id: product.id,
-      payment_id: params.payment?.id ?? null,
-      internship_application_id: matchedApplication?.id ?? null,
-      certificate_id: certificateId,
-      recipient_name: params.user.name,
-      recipient_email: params.user.email,
-      achievement_title: achievementTitle,
-      certificate_type: product.certificate_type,
-      eligibility_status: "eligible",
-      issuance_status: "issued",
-      approved_by: params.approvedBy ?? matchedApplication?.mentor_approved_by ?? DEMO_ADMIN_ID,
-      revocation_reason: null,
-      issued_at: now,
-      revoked_at: null,
-      created_at: now,
-    };
-    getMemoryStore().issuances.unshift(issuance);
-  }
+  const issuance: CertificateIssuanceRecord = {
+    id: randomUUID(),
+    user_id: params.user.id,
+    product_id: product.id,
+    payment_id: params.payment?.id ?? null,
+    internship_application_id: matchedApplication?.id ?? null,
+    certificate_id: certificateId,
+    recipient_name: params.user.name,
+    recipient_email: params.user.email,
+    achievement_title: achievementTitle,
+    certificate_type: product.certificate_type,
+    eligibility_status: "eligible",
+    issuance_status: "issued",
+    approved_by: params.approvedBy ?? matchedApplication?.mentor_approved_by ?? DEMO_ADMIN_ID,
+    revocation_reason: null,
+    issued_at: now,
+    revoked_at: null,
+    created_at: now,
+  };
+  getMemoryStore().issuances.unshift(issuance);
+  await persistCertificateIssuanceDoc(issuance);
 
   const verificationUrl = `/verify/certificate/${issuance.certificate_id}`;
   const downloadUrl = `/api/certificates/${encodeURIComponent(issuance.certificate_id)}/pdf`;
@@ -1386,7 +1443,6 @@ export async function verifyAndCaptureCheckoutPayment(params: {
   let signatureValid = false;
 
   if (isSimulatedOrder && params.simulateTestCheckout) {
-    // Simulated sandbox mode explicitly checks a deterministic test signature token so invalid signatures still fail!
     signatureValid =
       params.razorpaySignature !== "invalid_signature" &&
       params.razorpaySignature.startsWith("sim_sig_");
@@ -1403,67 +1459,55 @@ export async function verifyAndCaptureCheckoutPayment(params: {
   }
 
   const now = new Date().toISOString();
+  const store = getMemoryStore();
+  const existingPayments = await listPayments(params.user.id);
+  const existingPay = existingPayments.find(
+    (p) => p.razorpay_payment_id === params.razorpayPaymentId,
+  );
   let payment: CertificationPaymentRecord;
   let isNewPayment = false;
 
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data: existingPay } = await client
-      .from("certification_payments")
-      .select("*")
-      .eq("razorpay_payment_id", params.razorpayPaymentId)
-      .maybeSingle();
-
-    if (existingPay) {
-      payment = existingPay as CertificationPaymentRecord;
-    } else {
-      const { data: insertedPay, error } = await client
-        .from("certification_payments")
-        .insert({
-          order_id: order.id,
-          user_id: params.user.id,
-          razorpay_payment_id: params.razorpayPaymentId,
-          razorpay_signature: params.razorpaySignature,
-          payment_status: "captured",
-          payment_method: params.paymentMethod ?? "upi",
-          verified_at: now,
-        })
-        .select("*")
-        .single();
-      if (error || !insertedPay) return { error: "Could not record payment.", status: 500 };
-      payment = insertedPay as CertificationPaymentRecord;
-      isNewPayment = true;
-    }
-
-    await client
-      .from("certification_orders")
-      .update({ order_status: "paid", updated_at: now })
-      .eq("id", order.id);
+  if (existingPay) {
+    payment = existingPay;
   } else {
-    const store = getMemoryStore();
-    const existingPay = store.payments.find((p) => p.razorpay_payment_id === params.razorpayPaymentId);
-    if (existingPay) {
-      payment = existingPay;
-    } else {
-      payment = {
-        id: randomUUID(),
-        order_id: order.id,
-        user_id: params.user.id,
-        razorpay_payment_id: params.razorpayPaymentId,
-        razorpay_signature: params.razorpaySignature,
-        payment_status: "captured",
-        payment_method: params.paymentMethod ?? "upi",
-        failure_reason: null,
-        verified_at: now,
-        refunded_at: null,
-        refund_id: null,
-        created_at: now,
-      };
-      store.payments.unshift(payment);
-      isNewPayment = true;
+    payment = {
+      id: randomUUID(),
+      order_id: order.id,
+      user_id: params.user.id,
+      razorpay_payment_id: params.razorpayPaymentId,
+      razorpay_signature: params.razorpaySignature,
+      payment_status: "captured",
+      payment_method: params.paymentMethod ?? "upi",
+      failure_reason: null,
+      verified_at: now,
+      refunded_at: null,
+      refund_id: null,
+      created_at: now,
+    };
+    store.payments.unshift(payment);
+    isNewPayment = true;
+  }
+  order.order_status = "paid";
+  order.updated_at = now;
+
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        await Promise.all([
+          db.collection("payments").doc(payment.id).set({
+            ...cleanForFirestore(payment),
+            userId: payment.user_id,
+          }, { merge: true }),
+          db.collection("payment_orders").doc(order.id).set({
+            order_status: "paid",
+            updated_at: now,
+          }, { merge: true }),
+        ]);
+      }
+    } catch {
+      return { error: "Could not record payment.", status: 500 };
     }
-    order.order_status = "paid";
-    order.updated_at = now;
   }
 
   const isCourseOrder =
@@ -1562,40 +1606,43 @@ export async function recordFailedOrCancelledPayment(params: {
   const now = new Date().toISOString();
   const paymentId = params.razorpayPaymentId || `pay_${params.status}_${randomUUID().slice(0, 8)}`;
 
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    await client
-      .from("certification_orders")
-      .update({ order_status: params.status, updated_at: now })
-      .eq("id", order.id);
-    await client.from("certification_payments").upsert(
-      {
-        order_id: order.id,
-        user_id: params.user.id,
-        razorpay_payment_id: paymentId,
-        payment_status: params.status,
-        failure_reason: params.reason,
-      },
-      { onConflict: "razorpay_payment_id" },
-    );
-  } else {
-    const store = getMemoryStore();
-    order.order_status = params.status;
-    order.updated_at = now;
-    store.payments.unshift({
-      id: randomUUID(),
-      order_id: order.id,
-      user_id: params.user.id,
-      razorpay_payment_id: paymentId,
-      razorpay_signature: null,
-      payment_status: params.status,
-      payment_method: null,
-      failure_reason: params.reason,
-      verified_at: null,
-      refunded_at: null,
-      refund_id: null,
-      created_at: now,
-    });
+  const store = getMemoryStore();
+  order.order_status = params.status;
+  order.updated_at = now;
+  const failedPayment: CertificationPaymentRecord = {
+    id: randomUUID(),
+    order_id: order.id,
+    user_id: params.user.id,
+    razorpay_payment_id: paymentId,
+    razorpay_signature: null,
+    payment_status: params.status,
+    payment_method: null,
+    failure_reason: params.reason,
+    verified_at: null,
+    refunded_at: null,
+    refund_id: null,
+    created_at: now,
+  };
+  store.payments.unshift(failedPayment);
+
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        await Promise.all([
+          db.collection("payment_orders").doc(order.id).set(
+            { order_status: params.status, updated_at: now },
+            { merge: true },
+          ),
+          db.collection("payments").doc(failedPayment.id).set({
+            ...cleanForFirestore(failedPayment),
+            userId: failedPayment.user_id,
+          }, { merge: true }),
+        ]);
+      }
+    } catch {
+      // Non-fatal
+    }
   }
 
   let itemName = "TGL Certificate";
@@ -1664,141 +1711,36 @@ export async function processRazorpayWebhookEvent(params: {
     params.eventIdHeader?.trim() ||
     `${eventType}:${paymentEntity?.id ?? refundEntity?.id ?? "none"}`;
 
-  // Idempotency check
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data: existingEvent } = await client
-      .from("payment_webhook_events")
-      .select("id,processing_status")
-      .eq("event_id", eventId)
-      .maybeSingle();
-
-    if (existingEvent) {
-      return {
-        status: 200,
-        processingStatus: "ignored_duplicate",
-        message: "Duplicate webhook event ignored idempotently.",
-      };
-    }
-
-    await client.from("payment_webhook_events").insert({
-      event_id: eventId,
-      event_type: eventType,
-      payload: parsed as Record<string, unknown>,
-      processing_status: "received",
-    });
-
-    const now = new Date().toISOString();
-    if (eventType === "payment.captured" && paymentEntity?.order_id && paymentEntity.id) {
-      const { data: order } = await client
-        .from("certification_orders")
-        .select("*")
-        .eq("razorpay_order_id", paymentEntity.order_id)
-        .maybeSingle();
-
-      if (order) {
-        await client
-          .from("certification_orders")
-          .update({ order_status: "paid", updated_at: now })
-          .eq("id", order.id);
-        const { data: capPay } = await client.from("certification_payments").upsert(
-          {
-            order_id: order.id,
-            user_id: order.user_id,
-            razorpay_payment_id: paymentEntity.id,
-            payment_status: "captured",
-            payment_method: paymentEntity.method ?? null,
-            verified_at: now,
-          },
-          { onConflict: "razorpay_payment_id" },
-        ).select("id").single();
-        if (
-          (order.order_kind === "programme_enrollment" ||
-            order.order_kind === "course_enrollment" ||
-            Boolean(order.course_id)) &&
-          order.course_id
-        ) {
-          await activateCourseEnrollment({
-            userId: order.user_id as string,
-            courseId: order.course_id as string,
-            paymentId: (capPay?.id as string | undefined) ?? paymentEntity.id,
-          });
-          const course = await findCourseByIdOrSlug(order.course_id as string);
-          if (course) {
-            await activateBundledProgrammeInternship({
-              userId: order.user_id as string,
-              userName:
-                (order.metadata?.studentName as string | undefined) ?? "TGL Learner",
-              userEmail:
-                (order.metadata?.studentEmail as string | undefined) ?? "learner@touchgrasslater.org",
-              courseId: course.id,
-              courseSlug: course.slug,
-              courseTitle: course.title,
-              linkedInternshipSlug: course.linkedInternshipSlug,
-            });
-          }
+  const store = getMemoryStore();
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        const eventRef = db
+          .collection("activity_logs")
+          .doc(`wh_${safeFirestoreDocId(eventId)}`);
+        const existingEvent = await eventRef.get();
+        if (existingEvent.exists) {
+          return {
+            status: 200,
+            processingStatus: "ignored_duplicate",
+            message: "Duplicate webhook event ignored idempotently.",
+          };
         }
+        await eventRef.set({
+          type: "webhook_event",
+          event_id: eventId,
+          event_type: eventType,
+          payload: cleanForFirestore(parsed),
+          processing_status: "processed",
+          received_at: new Date().toISOString(),
+        });
       }
-    } else if (eventType === "payment.failed" && paymentEntity?.order_id && paymentEntity.id) {
-      const { data: order } = await client
-        .from("certification_orders")
-        .select("*")
-        .eq("razorpay_order_id", paymentEntity.order_id)
-        .maybeSingle();
-
-      if (order) {
-        await client
-          .from("certification_orders")
-          .update({ order_status: "failed", updated_at: now })
-          .eq("id", order.id);
-        await client.from("certification_payments").upsert(
-          {
-            order_id: order.id,
-            user_id: order.user_id,
-            razorpay_payment_id: paymentEntity.id,
-            payment_status: "failed",
-            failure_reason: paymentEntity.error_description ?? "Payment failed via webhook",
-          },
-          { onConflict: "razorpay_payment_id" },
-        );
-      }
-    } else if (eventType === "refund.processed" && refundEntity?.payment_id) {
-      const { data: refPay } = await client
-        .from("certification_payments")
-        .update({ payment_status: "refunded", refunded_at: now, refund_id: refundEntity.id ?? null })
-        .eq("razorpay_payment_id", refundEntity.payment_id)
-        .select("order_id,user_id")
-        .maybeSingle();
-      if (refPay?.order_id) {
-        const { data: refOrder } = await client
-          .from("certification_orders")
-          .update({ order_status: "refunded", updated_at: now })
-          .eq("id", refPay.order_id)
-          .select("order_kind,course_id,user_id")
-          .maybeSingle();
-        if (
-          (refOrder?.order_kind === "programme_enrollment" ||
-            refOrder?.order_kind === "course_enrollment" ||
-            Boolean(refOrder?.course_id)) &&
-          refOrder?.course_id
-        ) {
-          await revokeCourseEnrollment({
-            userId: refOrder.user_id as string,
-            courseId: refOrder.course_id as string,
-          });
-        }
-      }
+    } catch {
+      // Fallback to in-memory duplicate guard
     }
-
-    await client
-      .from("payment_webhook_events")
-      .update({ processing_status: "processed", processed_at: now })
-      .eq("event_id", eventId);
-
-    return { status: 200, processingStatus: "processed", message: `Processed ${eventType}.` };
   }
 
-  const store = getMemoryStore();
   const duplicate = store.webhookEvents.find((e) => e.event_id === eventId);
   if (duplicate) {
     return {
@@ -1821,18 +1763,23 @@ export async function processRazorpayWebhookEvent(params: {
   };
   store.webhookEvents.unshift(webhookEntry);
 
+  const allOrders = await listOrders();
+  const allPayments = await listPayments();
+
   if (eventType === "payment.captured" && paymentEntity?.order_id && paymentEntity.id) {
-    const order = store.orders.find((o) => o.razorpay_order_id === paymentEntity.order_id);
+    const order = allOrders.find((o) => o.razorpay_order_id === paymentEntity.order_id);
     if (order) {
       order.order_status = "paid";
       order.updated_at = now;
-      const existingPay = store.payments.find((p) => p.razorpay_payment_id === paymentEntity.id);
+      const existingPay = allPayments.find((p) => p.razorpay_payment_id === paymentEntity.id);
       let paymentIdRef = existingPay?.id;
+      let targetPayment: CertificationPaymentRecord;
       if (existingPay) {
         existingPay.payment_status = "captured";
         existingPay.verified_at = existingPay.verified_at ?? now;
+        targetPayment = existingPay;
       } else {
-        const createdPay: CertificationPaymentRecord = {
+        targetPayment = {
           id: randomUUID(),
           order_id: order.id,
           user_id: order.user_id,
@@ -1846,9 +1793,26 @@ export async function processRazorpayWebhookEvent(params: {
           refund_id: null,
           created_at: now,
         };
-        store.payments.unshift(createdPay);
-        paymentIdRef = createdPay.id;
+        store.payments.unshift(targetPayment);
+        paymentIdRef = targetPayment.id;
       }
+
+      if (isFirestoreConfigured()) {
+        const db = getAdminFirestore();
+        if (db) {
+          await Promise.all([
+            db.collection("payment_orders").doc(order.id).set(
+              { order_status: "paid", updated_at: now },
+              { merge: true },
+            ),
+            db.collection("payments").doc(targetPayment.id).set(
+              { ...cleanForFirestore(targetPayment), userId: targetPayment.user_id },
+              { merge: true },
+            ),
+          ]).catch(() => {});
+        }
+      }
+
       if (
         (order.order_kind === "programme_enrollment" ||
           order.order_kind === "course_enrollment" ||
@@ -1864,8 +1828,10 @@ export async function processRazorpayWebhookEvent(params: {
         if (course) {
           await activateBundledProgrammeInternship({
             userId: order.user_id,
-            userName: "TGL Learner",
-            userEmail: "learner@touchgrasslater.org",
+            userName:
+              (order.metadata?.studentName as string | undefined) || "Learner",
+            userEmail:
+              (order.metadata?.studentEmail as string | undefined) || "",
             courseId: course.id,
             courseSlug: course.slug,
             courseTitle: course.title,
@@ -1875,11 +1841,11 @@ export async function processRazorpayWebhookEvent(params: {
       }
     }
   } else if (eventType === "payment.failed" && paymentEntity?.order_id && paymentEntity.id) {
-    const order = store.orders.find((o) => o.razorpay_order_id === paymentEntity.order_id);
+    const order = allOrders.find((o) => o.razorpay_order_id === paymentEntity.order_id);
     if (order) {
       order.order_status = "failed";
       order.updated_at = now;
-      store.payments.unshift({
+      const failedPay: CertificationPaymentRecord = {
         id: randomUUID(),
         order_id: order.id,
         user_id: order.user_id,
@@ -1892,17 +1858,34 @@ export async function processRazorpayWebhookEvent(params: {
         refunded_at: null,
         refund_id: null,
         created_at: now,
-      });
+      };
+      store.payments.unshift(failedPay);
+      if (isFirestoreConfigured()) {
+        const db = getAdminFirestore();
+        if (db) {
+          await Promise.all([
+            db.collection("payment_orders").doc(order.id).set(
+              { order_status: "failed", updated_at: now },
+              { merge: true },
+            ),
+            db.collection("payments").doc(failedPay.id).set(
+              { ...cleanForFirestore(failedPay), userId: failedPay.user_id },
+              { merge: true },
+            ),
+          ]).catch(() => {});
+        }
+      }
     }
   } else if (eventType === "refund.processed" && refundEntity?.payment_id) {
-    const pay = store.payments.find((p) => p.razorpay_payment_id === refundEntity.payment_id);
+    const pay = allPayments.find((p) => p.razorpay_payment_id === refundEntity.payment_id);
     if (pay) {
       pay.payment_status = "refunded";
       pay.refunded_at = now;
       pay.refund_id = refundEntity.id ?? null;
-      const order = store.orders.find((o) => o.id === pay.order_id);
+      const order = allOrders.find((o) => o.id === pay.order_id);
       if (order) {
         order.order_status = "refunded";
+        order.updated_at = now;
         if (
           (order.order_kind === "programme_enrollment" ||
             order.order_kind === "course_enrollment" ||
@@ -1913,6 +1896,23 @@ export async function processRazorpayWebhookEvent(params: {
             userId: order.user_id,
             courseId: order.course_id,
           });
+        }
+      }
+      if (isFirestoreConfigured()) {
+        const db = getAdminFirestore();
+        if (db) {
+          await Promise.all([
+            db.collection("payments").doc(pay.id).set(
+              { payment_status: "refunded", refunded_at: now, refund_id: pay.refund_id },
+              { merge: true },
+            ),
+            order
+              ? db.collection("payment_orders").doc(order.id).set(
+                  { order_status: "refunded", updated_at: now },
+                  { merge: true },
+                )
+              : Promise.resolve(),
+          ]).catch(() => {});
         }
       }
     }
@@ -1947,55 +1947,31 @@ export async function processAdminRefund(params: {
   });
 
   const now = new Date().toISOString();
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data, error } = await client
-      .from("certification_payments")
-      .update({
-        payment_status: "refunded",
-        refunded_at: now,
-        refund_id: rpRefund.refundId,
-      })
-      .eq("id", payment.id)
-      .select("*")
-      .single();
-    if (error || !data) return { error: "Could not update payment refund state." };
-    await client
-      .from("certification_orders")
-      .update({ order_status: "refunded", updated_at: now })
-      .eq("id", order.id);
-
-    if ((order.order_kind === "course_enrollment" || order.course_id) && order.course_id) {
-      await revokeCourseEnrollment({
-        userId: order.user_id,
-        courseId: order.course_id,
-      });
-    }
-
-    const issuances = await listIssuances();
-    const linkedIssuance = issuances.find((i) => i.payment_id === payment.id);
-    if (linkedIssuance) {
-      await sendAndLogLifecycleEmail({
-        recipientEmail: linkedIssuance.recipient_email,
-        templateKey: "payment_refunded",
-        variables: {
-          studentName: linkedIssuance.recipient_name,
-          certificateName: linkedIssuance.achievement_title,
-          amountFormatted: formatInrFromPaise(order.amount_paise),
-          refundId: rpRefund.refundId,
-          reason: params.reason,
-        },
-        isSimulatedTransaction: rpRefund.isSimulated,
-      });
-    }
-    return { payment: data as CertificationPaymentRecord };
-  }
-
   payment.payment_status = "refunded";
   payment.refunded_at = now;
   payment.refund_id = rpRefund.refundId;
   order.order_status = "refunded";
   order.updated_at = now;
+
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        await Promise.all([
+          db.collection("payments").doc(payment.id).set(
+            { payment_status: "refunded", refunded_at: now, refund_id: rpRefund.refundId },
+            { merge: true },
+          ),
+          db.collection("payment_orders").doc(order.id).set(
+            { order_status: "refunded", updated_at: now },
+            { merge: true },
+          ),
+        ]);
+      }
+    } catch {
+      return { error: "Could not update payment refund state." };
+    }
+  }
 
   if ((order.order_kind === "course_enrollment" || order.course_id) && order.course_id) {
     await revokeCourseEnrollment({
@@ -2004,56 +1980,89 @@ export async function processAdminRefund(params: {
     });
   }
 
-  const store = getMemoryStore();
-  const linkedIssuance = store.issuances.find((i) => i.payment_id === payment.id);
+  const issuances = await listIssuances();
+  const linkedIssuance = issuances.find((i) => i.payment_id === payment.id);
   const refundedCourse = order.course_id ? await findCourseByIdOrSlug(order.course_id) : null;
-  await sendAndLogLifecycleEmail({
-    recipientEmail: linkedIssuance?.recipient_email ?? "aarav.sharma@example.edu",
-    templateKey: "payment_refunded",
-    variables: {
-      studentName: linkedIssuance?.recipient_name ?? "Aarav Sharma",
-      certificateName: refundedCourse?.title ?? linkedIssuance?.achievement_title ?? "TGL Certificate",
-      amountFormatted: formatInrFromPaise(order.amount_paise),
-      refundId: rpRefund.refundId,
-      reason: params.reason,
-    },
-    isSimulatedTransaction: rpRefund.isSimulated,
-  });
+  if (linkedIssuance?.recipient_email || !isFirestoreConfigured()) {
+    await sendAndLogLifecycleEmail({
+      recipientEmail: linkedIssuance?.recipient_email ?? "aarav.sharma@example.edu",
+      templateKey: "payment_refunded",
+      variables: {
+        studentName: linkedIssuance?.recipient_name ?? "Aarav Sharma",
+        certificateName:
+          refundedCourse?.title ?? linkedIssuance?.achievement_title ?? "TGL Certificate",
+        amountFormatted: formatInrFromPaise(order.amount_paise),
+        refundId: rpRefund.refundId,
+        reason: params.reason,
+      },
+      isSimulatedTransaction: rpRefund.isSimulated,
+    });
+  }
 
   return { payment };
 }
 
 export async function listOrders(userId?: string): Promise<CertificationOrderRecord[]> {
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    let query = client.from("certification_orders").select("*").order("created_at", { ascending: false });
-    if (userId) query = query.eq("user_id", userId);
-    const { data } = await query;
-    return (data ?? []) as CertificationOrderRecord[];
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        const snap = userId
+          ? await db.collection("payment_orders").where("user_id", "==", userId).get()
+          : await db.collection("payment_orders").limit(200).get();
+        if (!snap.empty) {
+          return snap.docs
+            .map((d) => d.data() as CertificationOrderRecord)
+            .sort((a, b) => b.created_at.localeCompare(a.created_at));
+        }
+      }
+    } catch {
+      // Fallback
+    }
   }
   const orders = getMemoryStore().orders;
   return userId ? orders.filter((o) => o.user_id === userId) : [...orders];
 }
 
 export async function listPayments(userId?: string): Promise<CertificationPaymentRecord[]> {
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    let query = client.from("certification_payments").select("*").order("created_at", { ascending: false });
-    if (userId) query = query.eq("user_id", userId);
-    const { data } = await query;
-    return (data ?? []) as CertificationPaymentRecord[];
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        const snap = userId
+          ? await db.collection("payments").where("user_id", "==", userId).get()
+          : await db.collection("payments").limit(200).get();
+        if (!snap.empty) {
+          return snap.docs
+            .map((d) => d.data() as CertificationPaymentRecord)
+            .sort((a, b) => b.created_at.localeCompare(a.created_at));
+        }
+      }
+    } catch {
+      // Fallback
+    }
   }
   const payments = getMemoryStore().payments;
   return userId ? payments.filter((p) => p.user_id === userId) : [...payments];
 }
 
 export async function listIssuances(userId?: string): Promise<CertificateIssuanceRecord[]> {
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    let query = client.from("certificate_issuances").select("*").order("created_at", { ascending: false });
-    if (userId) query = query.eq("user_id", userId);
-    const { data } = await query;
-    return (data ?? []) as CertificateIssuanceRecord[];
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        const snap = userId
+          ? await db.collection("certificates").where("user_id", "==", userId).get()
+          : await db.collection("certificates").limit(200).get();
+        if (!snap.empty) {
+          return snap.docs
+            .map((d) => d.data() as CertificateIssuanceRecord)
+            .sort((a, b) => b.created_at.localeCompare(a.created_at));
+        }
+      }
+    } catch {
+      // Fallback
+    }
   }
   const issuances = getMemoryStore().issuances;
   return userId ? issuances.filter((i) => i.user_id === userId) : [...issuances];
@@ -2062,14 +2071,29 @@ export async function listIssuances(userId?: string): Promise<CertificateIssuanc
 export async function getCertificateByPublicId(
   certificateId: string,
 ): Promise<CertificateIssuanceRecord | null> {
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data } = await client
-      .from("certificate_issuances")
-      .select("*")
-      .eq("certificate_id", certificateId)
-      .maybeSingle();
-    return (data as CertificateIssuanceRecord | null) ?? null;
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        const directSnap = await db
+          .collection("certificates")
+          .doc(safeFirestoreDocId(certificateId))
+          .get();
+        if (directSnap.exists) {
+          return directSnap.data() as CertificateIssuanceRecord;
+        }
+        const querySnap = await db
+          .collection("certificates")
+          .where("certificate_id", "==", certificateId)
+          .limit(1)
+          .get();
+        if (!querySnap.empty) {
+          return querySnap.docs[0].data() as CertificateIssuanceRecord;
+        }
+      }
+    } catch {
+      // Fallback
+    }
   }
   return getMemoryStore().issuances.find((i) => i.certificate_id === certificateId) ?? null;
 }
@@ -2087,16 +2111,25 @@ export async function getCertificatePdfData(
   const application = issuance.internship_application_id
     ? applications.find((item) => item.id === issuance.internship_application_id)
     : applications.find((item) => item.status === "completed" && item.mentor_approved);
-  const matchingOrder = orders.find((order) =>
-    order.course_id &&
-    (application?.course_id === order.course_id || order.metadata?.linkedInternshipSlug),
-  ) ?? orders.find((order) => order.order_status === "paid");
+  const matchingOrder =
+    orders.find(
+      (order) =>
+        order.course_id &&
+        (application?.course_id === order.course_id || order.metadata?.linkedInternshipSlug),
+    ) ?? orders.find((order) => order.order_status === "paid");
   return {
     certificateId: issuance.certificate_id,
     studentName: issuance.recipient_name,
     programmeName: issuance.achievement_title,
-    joinedOn: matchingOrder?.created_at ?? application?.created_at ?? issuance.created_at,
-    completedOn: application?.completed_at ?? issuance.issued_at,
+    joinedOn:
+      issuance.joined_at ??
+      matchingOrder?.created_at ??
+      application?.created_at ??
+      issuance.created_at,
+    completedOn:
+      issuance.completed_at ??
+      application?.completed_at ??
+      issuance.issued_at,
     issuedOn: issuance.issued_at,
     authorizedSignatory: process.env.CERTIFICATE_SIGNATORY?.trim() || "Gokulraj",
     organization: "TGL Learning Portal",
@@ -2173,58 +2206,39 @@ async function issueIncludedProgrammeCertificate(params: {
       )
     : undefined;
 
-  const achievementTitle =
-    params.internship?.title ?? internProduct.name;
+  const achievementTitle = params.internship?.title ?? internProduct.name;
   const certificateId = `TGL-CERT-2026-${Math.floor(1000 + Math.random() * 9000)}-${randomUUID().slice(0, 4).toUpperCase()}`;
   const now = new Date().toISOString();
 
-  let issuance: CertificateIssuanceRecord;
-  if (isSupabaseConfigured()) {
-    const { data, error } = await serviceClient()
-      .from("certificate_issuances")
-      .insert({
-        user_id: params.application.user_id,
-        product_id: internProduct.id,
-        payment_id: matchingPayment?.id ?? null,
-        internship_application_id: params.application.id,
-        certificate_id: certificateId,
-        recipient_name: params.application.applicant_name,
-        recipient_email: params.application.applicant_email,
-        achievement_title: achievementTitle,
-        certificate_type: "internship",
-        eligibility_status: "eligible",
-        issuance_status: "issued",
-        approved_by: params.adminId,
-        issued_at: now,
-      })
-      .select("*")
-      .single();
-    if (error || !data) {
-      return { error: error?.message ?? "Failed to issue included certificate." };
-    }
-    issuance = data as CertificateIssuanceRecord;
-  } else {
-    issuance = {
-      id: randomUUID(),
-      user_id: params.application.user_id,
-      product_id: internProduct.id,
-      payment_id: matchingPayment?.id ?? null,
-      internship_application_id: params.application.id,
-      certificate_id: certificateId,
-      recipient_name: params.application.applicant_name,
-      recipient_email: params.application.applicant_email,
-      achievement_title: achievementTitle,
-      certificate_type: "internship",
-      eligibility_status: "eligible",
-      issuance_status: "issued",
-      approved_by: params.adminId,
-      revocation_reason: null,
-      issued_at: now,
-      revoked_at: null,
-      created_at: now,
-    };
-    getMemoryStore().issuances.unshift(issuance);
-  }
+  const joinedAt =
+    matchingCourseOrder?.created_at ?? params.application.created_at ?? now;
+  const completedAt = params.application.completed_at ?? now;
+
+  const issuance: CertificateIssuanceRecord = {
+    id: randomUUID(),
+    user_id: params.application.user_id,
+    product_id: internProduct.id,
+    payment_id: matchingPayment?.id ?? null,
+    internship_application_id: params.application.id,
+    certificate_id: certificateId,
+    recipient_name: params.application.applicant_name,
+    recipient_email: params.application.applicant_email,
+    achievement_title: achievementTitle,
+    certificate_type: "internship",
+    eligibility_status: "eligible",
+    issuance_status: "issued",
+    approved_by: params.adminId,
+    revocation_reason: null,
+    issued_at: now,
+    revoked_at: null,
+    joined_at: joinedAt,
+    completed_at: completedAt,
+    regeneration_count: 0,
+    regenerated_at: null,
+    created_at: now,
+  };
+  getMemoryStore().issuances.unshift(issuance);
+  await persistCertificateIssuanceDoc(issuance);
 
   const verificationUrl = `/verify/certificate/${issuance.certificate_id}`;
   const downloadUrl = `/api/certificates/${encodeURIComponent(issuance.certificate_id)}/pdf`;
@@ -2301,54 +2315,12 @@ export async function approveInternshipApplication(params: {
   error?: string;
 }> {
   const now = new Date().toISOString();
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data, error } = await client
-      .from("internship_applications")
-      .update({
-        status: "completed",
-        assessment_passed: true,
-        mentor_approved: true,
-        mentor_approved_by: params.adminId,
-        mentor_notes: params.mentorNotes ?? "Approved by TGL mentor/admin.",
-        final_evaluation_notes: params.mentorNotes ?? "All assigned internship tasks and final evaluation approved.",
-        final_score_label: params.finalScoreLabel ?? "Pass (Mentor Approved)",
-        completed_at: now,
-        updated_at: now,
-      })
-      .eq("id", params.applicationId)
-      .select("*")
-      .single();
-    if (error || !data) return { error: "Could not approve internship application." };
-    const app = data as InternshipApplicationRecord;
-    const internships = await listInternships();
-    const internship = internships.find((i) => i.id === app.internship_id);
-    const title = internship?.title ?? "TGL Internship";
-
-    const issuedRes = await issueIncludedProgrammeCertificate({
-      application: app,
-      internship,
-      adminId: params.adminId,
-    });
-
-    await sendAndLogLifecycleEmail({
-      recipientEmail: app.applicant_email,
-      templateKey: "internship_approved",
-      variables: { studentName: app.applicant_name, achievementTitle: title },
-    });
-    await sendAndLogLifecycleEmail({
-      recipientEmail: app.applicant_email,
-      templateKey: "internship_eligibility_confirmed",
-      variables: { studentName: app.applicant_name, achievementTitle: title },
-    });
-    return { application: app, issuance: issuedRes.issuance };
-  }
-
-  const store = getMemoryStore();
-  const app = store.applications.find((a) => a.id === params.applicationId);
+  const allApps = await listAllApplicationsForAdmin();
+  const app = allApps.find((a) => a.id === params.applicationId);
   if (!app) return { error: "Internship application not found." };
 
-  const internship = store.internships.find((i) => i.id === app.internship_id);
+  const internships = await listInternships();
+  const internship = internships.find((i) => i.id === app.internship_id);
   const tasks = internship?.tasks ?? [];
   const taskStatus = checkAllInternshipTasksApproved({
     tasks,
@@ -2370,6 +2342,20 @@ export async function approveInternshipApplication(params: {
   app.final_score_label = params.finalScoreLabel ?? "Pass (Mentor Approved)";
   app.completed_at = now;
   app.updated_at = now;
+
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        await db
+          .collection("settings")
+          .doc(`int_app_${app.id}`)
+          .set({ type: "internship_application", ...cleanForFirestore(app) }, { merge: true });
+      }
+    } catch {
+      return { error: "Could not approve internship application." };
+    }
+  }
 
   const issuedRes = await issueIncludedProgrammeCertificate({
     application: app,
@@ -2399,10 +2385,7 @@ export async function submitInternshipTaskWork(params: {
   summary: string;
 }): Promise<{ application?: InternshipApplicationRecord; error?: string }> {
   const now = new Date().toISOString();
-  const store = getMemoryStore();
-  const apps = isSupabaseConfigured()
-    ? await listStudentApplications(params.userId)
-    : store.applications;
+  const apps = await listStudentApplications(params.userId);
   const app = apps.find((a) => a.id === params.applicationId && a.user_id === params.userId);
   if (!app) return { error: "Internship application not found." };
 
@@ -2425,33 +2408,25 @@ export async function submitInternshipTaskWork(params: {
     existingTasks.push(nextItem);
   }
 
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data, error } = await client
-      .from("internship_applications")
-      .update({
-        task_submissions_json: existingTasks,
-        submission_url: params.submissionUrl.trim(),
-        submission_summary: params.summary.trim(),
-        updated_at: now,
-      })
-      .eq("id", params.applicationId)
-      .eq("user_id", params.userId)
-      .select("*")
-      .single();
-    if (error || !data) return { error: error?.message ?? "Could not submit internship task." };
-    return {
-      application: {
-        ...(data as InternshipApplicationRecord),
-        task_submissions: existingTasks,
-      },
-    };
-  }
-
   app.task_submissions = existingTasks;
   app.submission_url = app.submission_url ?? params.submissionUrl.trim();
   app.submission_summary = app.submission_summary ?? params.summary.trim();
   app.updated_at = now;
+
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        await db
+          .collection("settings")
+          .doc(`int_app_${app.id}`)
+          .set({ type: "internship_application", ...cleanForFirestore(app) }, { merge: true });
+      }
+    } catch {
+      return { error: "Could not submit internship task." };
+    }
+  }
+
   return { application: app };
 }
 
@@ -2463,10 +2438,8 @@ export async function evaluateInternshipTaskSubmission(params: {
   scoreLabel?: string;
 }): Promise<{ application?: InternshipApplicationRecord; error?: string }> {
   const now = new Date().toISOString();
-  const store = getMemoryStore();
-  const app = isSupabaseConfigured()
-    ? (await listAllApplicationsForAdmin()).find((a) => a.id === params.applicationId)
-    : store.applications.find((a) => a.id === params.applicationId);
+  const allApps = await listAllApplicationsForAdmin();
+  const app = allApps.find((a) => a.id === params.applicationId);
 
   if (!app) return { error: "Internship application not found." };
 
@@ -2478,27 +2451,27 @@ export async function evaluateInternshipTaskSubmission(params: {
 
   target.status = params.decision;
   target.mentorFeedback = params.mentorFeedback.trim();
-  target.scoreLabel = params.scoreLabel?.trim() || (params.decision === "approved" ? "Approved" : "Revision Required");
+  target.scoreLabel =
+    params.scoreLabel?.trim() || (params.decision === "approved" ? "Approved" : "Revision Required");
   target.evaluatedAt = now;
-
-  if (isSupabaseConfigured()) {
-    const { data, error } = await serviceClient()
-      .from("internship_applications")
-      .update({ task_submissions_json: taskSubmissions, updated_at: now })
-      .eq("id", app.id)
-      .select("*")
-      .single();
-    if (error || !data) return { error: "Could not save task evaluation." };
-    return {
-      application: {
-        ...(data as InternshipApplicationRecord),
-        task_submissions: taskSubmissions,
-      },
-    };
-  }
 
   app.task_submissions = taskSubmissions;
   app.updated_at = now;
+
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        await db
+          .collection("settings")
+          .doc(`int_app_${app.id}`)
+          .set({ type: "internship_application", ...cleanForFirestore(app) }, { merge: true });
+      }
+    } catch {
+      return { error: "Could not save task evaluation." };
+    }
+  }
+
   return { application: app };
 }
 
@@ -2540,32 +2513,21 @@ export async function createAdminInternship(params: {
     created_at: now,
   };
 
-  if (isSupabaseConfigured()) {
+  getMemoryStore().internships.unshift(created);
+  if (isFirestoreConfigured()) {
     try {
-      const { data } = await serviceClient()
-        .from("internships")
-        .insert({
-          id: created.id,
-          slug: created.slug,
-          title: created.title,
-          track: created.track,
-          description: created.description,
-          duration_weeks: created.duration_weeks,
-          required_course_slug: created.required_course_slug,
-          required_project_slug: created.required_project_slug,
-          require_project_approval: created.require_project_approval,
-          tasks_json: created.tasks,
-          is_published: true,
-        })
-        .select("*")
-        .single();
-      if (data) return { internship: data as InternshipRecord };
+      const db = getAdminFirestore();
+      if (db) {
+        await db.collection("internships").doc(created.id).set({
+          ...cleanForFirestore(created),
+          durationWeeks: created.duration_weeks,
+          isPublished: true,
+        });
+      }
     } catch {
-      // Fallback
+      // Non-fatal
     }
   }
-
-  getMemoryStore().internships.unshift(created);
   return { internship: created };
 }
 
@@ -2577,8 +2539,8 @@ export async function addInternshipTask(params: {
   deliverableFormat: string;
   requireProjectApproval?: boolean;
 }): Promise<{ internship?: InternshipRecord; error?: string }> {
-  const store = getMemoryStore();
-  const internship = store.internships.find((i) => i.id === params.internshipId);
+  const internships = await listInternships();
+  const internship = internships.find((i) => i.id === params.internshipId);
   if (!internship) return { error: "Internship programme not found." };
 
   const newTask: InternshipTaskDefinition = {
@@ -2594,17 +2556,20 @@ export async function addInternshipTask(params: {
     internship.require_project_approval = params.requireProjectApproval;
   }
 
-  if (isSupabaseConfigured()) {
+  if (isFirestoreConfigured()) {
     try {
-      await serviceClient()
-        .from("internships")
-        .update({
-          tasks_json: internship.tasks,
-          require_project_approval: internship.require_project_approval,
-        })
-        .eq("id", internship.id);
+      const db = getAdminFirestore();
+      if (db) {
+        await db.collection("internships").doc(internship.id).set(
+          cleanForFirestore({
+            tasks: internship.tasks,
+            require_project_approval: internship.require_project_approval,
+          }),
+          { merge: true },
+        );
+      }
     } catch {
-      // Fallback
+      // Non-fatal
     }
   }
 
@@ -2618,35 +2583,54 @@ export async function revokeCertificateWithReason(params: {
   if (!params.reason.trim()) return { error: "An audit revocation reason is required." };
   const now = new Date().toISOString();
 
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data, error } = await client
-      .from("certificate_issuances")
-      .update({
-        issuance_status: "revoked",
-        revocation_reason: params.reason.trim(),
-        revoked_at: now,
-      })
-      .eq("certificate_id", params.certificateId)
-      .select("*")
-      .single();
-    if (error || !data) return { error: "Certificate not found." };
-    return { issuance: data as CertificateIssuanceRecord };
-  }
-
-  const cert = getMemoryStore().issuances.find((i) => i.certificate_id === params.certificateId);
+  const cert = await getCertificateByPublicId(params.certificateId);
   if (!cert) return { error: "Certificate not found." };
   cert.issuance_status = "revoked";
   cert.revocation_reason = params.reason.trim();
   cert.revoked_at = now;
+
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        await db
+          .collection("certificates")
+          .doc(safeFirestoreDocId(cert.certificate_id))
+          .set(
+            {
+              issuance_status: "revoked",
+              issuanceStatus: "revoked",
+              revocation_reason: params.reason.trim(),
+              revoked_at: now,
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          );
+      }
+    } catch {
+      return { error: "Could not revoke certificate." };
+    }
+  }
+
   return { issuance: cert };
 }
 
 export async function listEmailTemplates(): Promise<EmailTemplateDefinition[]> {
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data } = await client.from("email_templates").select("*").order("template_key");
-    if (data?.length) return data as EmailTemplateDefinition[];
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        const snap = await db
+          .collection("settings")
+          .where("type", "==", "email_template")
+          .get();
+        if (!snap.empty) {
+          return snap.docs.map((d) => d.data() as EmailTemplateDefinition);
+        }
+      }
+    } catch {
+      // Fallback
+    }
   }
   return getMemoryStore().emailTemplates;
 }
@@ -2657,63 +2641,237 @@ export async function updateEmailTemplate(params: {
   bodyTemplate: string;
 }): Promise<EmailTemplateDefinition> {
   const now = new Date().toISOString();
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data } = await client
-      .from("email_templates")
-      .upsert(
-        {
-          template_key: params.templateKey,
-          subject_template: params.subjectTemplate,
-          body_template: params.bodyTemplate,
-          updated_at: now,
-        },
-        { onConflict: "template_key" },
-      )
-      .select("*")
-      .single();
-    if (data) return data as EmailTemplateDefinition;
-  }
   const store = getMemoryStore();
-  const existing = store.emailTemplates.find((t) => t.template_key === params.templateKey);
-  if (existing) {
-    existing.subject_template = params.subjectTemplate;
-    existing.body_template = params.bodyTemplate;
-    existing.updated_at = now;
-    return existing;
+  let target = store.emailTemplates.find((t) => t.template_key === params.templateKey);
+  if (target) {
+    target.subject_template = params.subjectTemplate;
+    target.body_template = params.bodyTemplate;
+    target.updated_at = now;
+  } else {
+    target = {
+      template_key: params.templateKey,
+      subject_template: params.subjectTemplate,
+      body_template: params.bodyTemplate,
+      description: "",
+      updated_at: now,
+    };
+    store.emailTemplates.push(target);
   }
-  const created: EmailTemplateDefinition = {
-    template_key: params.templateKey,
-    subject_template: params.subjectTemplate,
-    body_template: params.bodyTemplate,
-    description: "",
-    updated_at: now,
-  };
-  store.emailTemplates.push(created);
-  return created;
+
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        await db
+          .collection("settings")
+          .doc(`email_tpl_${params.templateKey}`)
+          .set({ type: "email_template", ...cleanForFirestore(target) }, { merge: true });
+      }
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  return target;
 }
 
 export async function listEmailLogs(): Promise<EmailDeliveryRecord[]> {
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data } = await client
-      .from("email_delivery_logs")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(100);
-    return (data ?? []) as EmailDeliveryRecord[];
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        const snap = await db
+          .collection("activity_logs")
+          .where("type", "==", "email_log")
+          .limit(100)
+          .get();
+        if (!snap.empty) {
+          return snap.docs
+            .map((d) => d.data() as EmailDeliveryRecord)
+            .sort((a, b) => b.created_at.localeCompare(a.created_at));
+        }
+      }
+    } catch {
+      // Fallback
+    }
   }
   return [...getMemoryStore().emailLogs];
 }
 
 export async function listAllApplicationsForAdmin(): Promise<InternshipApplicationRecord[]> {
-  if (isSupabaseConfigured()) {
-    const client = serviceClient();
-    const { data } = await client
-      .from("internship_applications")
-      .select("*")
-      .order("created_at", { ascending: false });
-    return (data ?? []) as InternshipApplicationRecord[];
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        const snap = await db
+          .collection("settings")
+          .where("type", "==", "internship_application")
+          .get();
+        if (!snap.empty) {
+          return snap.docs
+            .map((d) => d.data() as InternshipApplicationRecord)
+            .sort((a, b) => b.created_at.localeCompare(a.created_at));
+        }
+      }
+    } catch {
+      // Fallback
+    }
   }
   return [...getMemoryStore().applications];
+}
+
+export async function regenerateCertificateByAdmin(params: {
+  certificateId: string;
+  adminId: string;
+  recipientName?: string;
+  reason?: string;
+}): Promise<{ issuance?: CertificateIssuanceRecord; error?: string }> {
+  const existing = await getCertificateByPublicId(params.certificateId);
+  if (!existing) {
+    return { error: "Certificate issuance not found." };
+  }
+  if (existing.issuance_status === "revoked") {
+    return { error: "Revoked certificates cannot be regenerated." };
+  }
+
+  const now = new Date().toISOString();
+  const nextCount = (existing.regeneration_count ?? 0) + 1;
+  const nextName = params.recipientName?.trim() || existing.recipient_name;
+  const pdfCheck = await getCertificatePdfData(existing.certificate_id);
+
+  existing.recipient_name = nextName;
+  existing.regeneration_count = nextCount;
+  existing.regenerated_at = now;
+
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        await db
+          .collection("certificates")
+          .doc(safeFirestoreDocId(existing.certificate_id))
+          .set(
+            {
+              recipient_name: nextName,
+              recipientName: nextName,
+              regeneration_count: nextCount,
+              regenerated_at: now,
+              metadata: {
+                lastRegeneratedBy: params.adminId,
+                lastRegeneratedAt: now,
+                lastRegenerationReason: params.reason?.trim() || "Admin verified regeneration",
+              },
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          );
+      }
+    } catch {
+      return { error: "Failed to update regenerated certificate." };
+    }
+  }
+
+  if (pdfCheck) {
+    await sendAndLogLifecycleEmail({
+      recipientEmail: existing.recipient_email,
+      templateKey: "certificate_ready",
+      variables: {
+        studentName: nextName,
+        programmeName: existing.achievement_title,
+        certificateName: existing.achievement_title,
+        achievementTitle: existing.achievement_title,
+        certificateId: existing.certificate_id,
+        verificationUrl: `/verify/certificate/${existing.certificate_id}`,
+        downloadUrl: `/api/certificates/${encodeURIComponent(existing.certificate_id)}/pdf`,
+        joinedOn: pdfCheck.joinedOn,
+        completedOn: pdfCheck.completedOn,
+      },
+    });
+  }
+  return { issuance: existing };
+}
+
+export type AdminDirectoryUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  cohort: string;
+  enrolledCount?: number;
+  certificatesCount?: number;
+  joinedAt?: string | null;
+};
+
+export async function listAdminDirectoryUsers(): Promise<AdminDirectoryUser[]> {
+  if (isFirestoreConfigured()) {
+    try {
+      const db = getAdminFirestore();
+      if (db) {
+        const [usersSnap, enrollSnap, certSnap] = await Promise.all([
+          db.collection("users").limit(200).get(),
+          db.collection("enrollments").where("status", "==", "active").get(),
+          db.collection("certificates").where("issuance_status", "==", "issued").get(),
+        ]);
+
+        const enrollMap = new Map<string, number>();
+        for (const docSnap of enrollSnap.docs) {
+          const uid = String(docSnap.data().userId ?? "");
+          if (uid) enrollMap.set(uid, (enrollMap.get(uid) ?? 0) + 1);
+        }
+        const certMap = new Map<string, number>();
+        for (const docSnap of certSnap.docs) {
+          const uid = String(docSnap.data().user_id ?? docSnap.data().userId ?? "");
+          if (uid) certMap.set(uid, (certMap.get(uid) ?? 0) + 1);
+        }
+
+        if (!usersSnap.empty) {
+          const results: AdminDirectoryUser[] = [];
+          for (const docSnap of usersSnap.docs) {
+            const p = docSnap.data() as Record<string, unknown>;
+            const uid = String(p.uid ?? docSnap.id);
+            const privSnap = await db
+              .collection("users")
+              .doc(uid)
+              .collection("private")
+              .doc("info")
+              .get();
+            const privEmail = privSnap.exists ? String(privSnap.data()?.email ?? "") : "";
+            const displayName =
+              typeof p.displayName === "string" && p.displayName.trim()
+                ? p.displayName.trim()
+                : "Learner";
+            const role = typeof p.role === "string" ? p.role : "student";
+            results.push({
+              id: uid,
+              name: displayName,
+              email: privEmail,
+              role,
+              cohort:
+                typeof p.cohort === "string" && p.cohort
+                  ? p.cohort
+                  : role === "admin"
+                    ? "Platform Administration"
+                    : "Registered Learner",
+              enrolledCount: enrollMap.get(uid) ?? 0,
+              certificatesCount: certMap.get(uid) ?? 0,
+              joinedAt:
+                typeof p.createdAt === "string" ? p.createdAt : null,
+            });
+          }
+          return results;
+        }
+      }
+    } catch {
+      // Fallback cleanly to demo directory
+    }
+  }
+
+  return [
+    { id: DEMO_STUDENT_ID, name: "Aarav Sharma", email: "aarav.sharma@example.edu", role: "student", cohort: "Autumn Engineering Cohort", enrolledCount: 2, certificatesCount: 0, joinedAt: "2026-11-10T09:00:00.000Z" },
+    { id: DEMO_GRADUATE_ID, name: "Meera Krishnan", email: "meera.krishnan@example.edu", role: "student", cohort: "Autumn Engineering Cohort", enrolledCount: 1, certificatesCount: 1, joinedAt: "2026-11-05T09:00:00.000Z" },
+    { id: "00000000-0000-4000-8000-000000000103", name: "Diya Nair", email: "diya.nair@example.edu", role: "student", cohort: "Product Craft Cohort", enrolledCount: 1, certificatesCount: 0, joinedAt: "2026-11-11T09:00:00.000Z" },
+    { id: "mentor-kabir", name: "Kabir Malhotra", email: "kabir.mentor@touchgrasslater.org", role: "mentor", cohort: "Autumn Engineering Cohort", enrolledCount: 0, certificatesCount: 0, joinedAt: "2026-10-01T09:00:00.000Z" },
+    { id: "mentor-nisha", name: "Dr. Nisha Menon", email: "nisha.mentor@touchgrasslater.org", role: "mentor", cohort: "Applied AI Studio", enrolledCount: 0, certificatesCount: 0, joinedAt: "2026-10-01T09:00:00.000Z" },
+    { id: DEMO_ADMIN_ID, name: "TGL Operations Admin", email: "admin@touchgrasslater.org", role: "admin", cohort: "All Cohorts", enrolledCount: 0, certificatesCount: 0, joinedAt: "2026-10-01T09:00:00.000Z" },
+  ];
 }

@@ -81,9 +81,9 @@
 }
 
 @theme inline {
-  --font-sans: var(--font-jakarta), 'Inter', system-ui, sans-serif;
+  --font-sans: var(--font-jakarta), system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), 'JetBrains Mono', monospace;
-  --font-display: var(--font-jakarta), 'Inter', system-ui, sans-serif;
+  --font-display: var(--font-jakarta), system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -136,6 +136,17 @@
   }
   .dark body {
     background-image: none;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  html,
+  body {
+    overflow-x: clip;
   }
 
   html {

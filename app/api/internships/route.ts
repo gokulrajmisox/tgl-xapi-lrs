@@ -37,10 +37,10 @@ const SubmitTaskSchema = z.object({
   summary: z.string().trim().min(8, "Include a clear summary of your task deliverable").max(2000),
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   const [internships, actor] = await Promise.all([
     listInternships(),
-    resolveCurrentActor(),
+    resolveCurrentActor({ request }),
   ]);
   const [applications, courses] = await Promise.all([
     actor.user ? listStudentApplications(actor.user.id) : Promise.resolve([]),
@@ -79,7 +79,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const actor = await resolveCurrentActor();
+  const actor = await resolveCurrentActor({ request });
   if (!actor.user) {
     return NextResponse.json({ error: "Sign in required to apply or submit work." }, { status: 401 });
   }

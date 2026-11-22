@@ -2,7 +2,7 @@ import { RoleShell } from "@/components/role-shell";
 import { ExploreNetwork } from "@/components/explore-network";
 import { enrichedPathways, learningNodes, learningProjects } from "@/lib/learning-graph";
 import { getLearnerSnapshot } from "@/lib/learning-workspace-store";
-import { DEMO_STUDENT_ID, resolveCurrentActor } from "@/lib/certifications/store";
+import { resolveCurrentActor } from "@/lib/certifications/store";
 
 export const metadata = {
   title: "Explore Pathways, Projects & Concepts — Touch Grass Later",
@@ -12,8 +12,7 @@ export const metadata = {
 
 export default async function ExplorePage() {
   const { user } = await resolveCurrentActor();
-  const actorId = user?.id ?? DEMO_STUDENT_ID;
-  const workspace = getLearnerSnapshot(actorId);
+  const workspace = user ? getLearnerSnapshot(user.id) : null;
 
   return (
     <RoleShell
@@ -26,7 +25,7 @@ export default async function ExplorePage() {
         pathways={enrichedPathways}
         projects={learningProjects}
         nodes={learningNodes}
-        initialSavedItems={workspace.savedItems}
+        initialSavedItems={workspace?.savedItems ?? []}
       />
     </RoleShell>
   );

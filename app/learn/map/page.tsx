@@ -5,7 +5,6 @@ import { learningNodes, learningProjects } from "@/lib/learning-graph";
 import { getLearnerSnapshot } from "@/lib/learning-workspace-store";
 import {
   DEMO_STUDENT_ID,
-  isSupabaseConfigured,
   resolveCurrentActor,
 } from "@/lib/certifications/store";
 
@@ -16,8 +15,7 @@ export const metadata = {
 };
 
 export default async function PersonalLearningMapPage() {
-  const configured = isSupabaseConfigured();
-  const { user } = await resolveCurrentActor();
+  const { user, configured } = await resolveCurrentActor();
 
   if (configured && !user) {
     redirect("/auth/login?next=/learn/map");

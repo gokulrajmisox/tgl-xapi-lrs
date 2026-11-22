@@ -2,9 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { RoleShell } from "@/components/role-shell";
 import { MentorConsoleClient } from "@/components/mentor-console-client";
-import { getMentorConsoleData } from "@/lib/learning-workspace-store";
+import { getMentorConsoleDataAsync } from "@/lib/learning-workspace-store";
 import { isPrivilegedStaffEmail } from "@/lib/auth/access";
-import { isSupabaseConfigured, resolveCurrentActor } from "@/lib/certifications/store";
+import { resolveCurrentActor } from "@/lib/certifications/store";
 
 export const metadata = {
   title: "Mentor Workspace — Touch Grass Later",
@@ -13,8 +13,7 @@ export const metadata = {
 };
 
 export default async function MentorPage() {
-  const configured = isSupabaseConfigured();
-  const { user } = await resolveCurrentActor({ allowSandboxAdmin: !configured });
+  const { user, configured } = await resolveCurrentActor();
 
   if (configured && !user) {
     redirect("/auth/login?next=/mentor");
@@ -39,14 +38,14 @@ export default async function MentorPage() {
     );
   }
 
-  const mentorData = getMentorConsoleData();
+  const mentorData = await getMentorConsoleDataAsync();
 
   return (
     <RoleShell
       role="mentor"
       title="Mentor review studio"
       subtitle="Inspect project submissions, post critique notes, approve work for certification eligibility, and guide cohorts"
-      primaryAction={{ label: "Explore network", href: "/explore" }}
+      primaryAction={{ label: "Explore Programmes", href: "/programmes" }}
     >
       <MentorConsoleClient
         initialCohorts={mentorData.cohorts}

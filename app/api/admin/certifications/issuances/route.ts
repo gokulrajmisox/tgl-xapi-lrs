@@ -9,6 +9,7 @@ import {
   listOrders,
   listPayments,
   listProducts,
+  regenerateCertificateByAdmin,
   requireAdminActor,
   revokeCertificateWithReason,
 } from "@/lib/certifications/store";
@@ -62,10 +63,16 @@ const ActionSchema = z.discriminatedUnion("action", [
     certificateId: z.string().trim().min(4).max(120),
     reason: z.string().trim().min(5).max(500),
   }),
+  z.object({
+    action: z.literal("regenerate_certificate"),
+    certificateId: z.string().trim().min(4).max(120),
+    recipientName: z.string().trim().min(2).max(120).optional(),
+    reason: z.string().trim().max(500).optional(),
+  }),
 ]);
 
 export async function POST(request: Request) {
-  const auth = await requireAdminActor();
+  const auth = await requireAdminActor(request);
   if (auth.error) return NextResponse.json({ error: auth.error.message }, { status: auth.error.status });
 
   const parsed = ActionSchema.safeParse(await request.json().catch(() => null));
@@ -142,6 +149,17 @@ export async function POST(request: Request) {
   if (data.action === "revoke_certificate") {
     const result = await revokeCertificateWithReason({
       certificateId: data.certificateId,
+      reason: data.reason,
+    });
+    if (result.error) return NextResponse.json({ error: result.error }, { status: 400 });
+    return NextResponse.json({ issuance: result.issuance });
+  }
+
+  if (data.action === "regenerate_certificate") {
+    const result = await regenerateCertificateByAdmin({
+      certificateId: data.certificateId,
+      adminId: auth.user.id,
+      recipientName: data.recipientName,
       reason: data.reason,
     });
     if (result.error) return NextResponse.json({ error: result.error }, { status: 400 });

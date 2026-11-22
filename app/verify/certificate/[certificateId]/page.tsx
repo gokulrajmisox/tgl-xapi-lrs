@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { headers } from "next/headers";
-import { ArrowLeft, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react";
+import { ArrowLeft, Download, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react";
 import { Header } from "@/components/header";
+import { SiteFooter } from "@/components/site-footer";
 import { getCertificateByPublicId } from "@/lib/certifications/store";
 import { generateCertificateQrSvg } from "@/lib/certifications/qr";
 import { CERTIFICATE_TYPE_LABELS, type CertificateType } from "@/lib/certifications/pricing";
@@ -33,6 +34,15 @@ export default async function VerifyCertificatePage({
       ? "INTERNSHIP CERTIFICATE"
       : CERTIFICATE_TYPE_LABELS[cert.certificate_type as CertificateType] ?? cert.certificate_type
     : "";
+
+  const formatDate = (value?: string | null, fallback = "Recorded") =>
+    value
+      ? new Date(value).toLocaleDateString("en-IN", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : fallback;
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -95,9 +105,21 @@ export default async function VerifyCertificatePage({
                       </p>
                     </div>
                   </div>
-                  <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                    {cert.issuance_status}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                      {cert.issuance_status}
+                    </span>
+                    {isAuthentic && (
+                      <a
+                        href={`/api/certificates/${encodeURIComponent(cert.certificate_id)}/pdf`}
+                        download={`${cert.certificate_id}.pdf`}
+                        className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-xs font-medium text-accent-foreground hover:opacity-90 whitespace-nowrap shrink-0"
+                      >
+                        <Download size={13} aria-hidden="true" />
+                        Download PDF
+                      </a>
+                    )}
+                  </div>
                 </div>
 
                 {isRevoked && cert.revocation_reason && (
@@ -111,7 +133,7 @@ export default async function VerifyCertificatePage({
                 <div className="flex flex-col justify-between gap-6 border-b border-black/10 pb-6 sm:flex-row sm:items-end">
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-black/55">
-                      Issuing Organization: Touch Grass Later
+                      Issuing Organization: TGL Learning Portal
                     </p>
                     <h2 className="mt-2 text-2xl font-medium tracking-[-0.04em] sm:text-3xl">
                       {certTitle}
@@ -133,7 +155,7 @@ export default async function VerifyCertificatePage({
                   </div>
                   <div>
                     <dt className="text-[11px] uppercase tracking-[0.14em] text-black/50">
-                      Internship / Course / Project
+                      Programme / Internship
                     </dt>
                     <dd className="mt-1 text-sm font-medium text-[#111111]">
                       {cert.achievement_title}
@@ -141,24 +163,34 @@ export default async function VerifyCertificatePage({
                   </div>
                   <div>
                     <dt className="text-[11px] uppercase tracking-[0.14em] text-black/50">
-                      Issue Date
+                      Joined On
                     </dt>
                     <dd className="mt-1 text-sm tabular-nums text-[#111111]">
-                      {cert.issued_at
-                        ? new Date(cert.issued_at).toLocaleDateString("en-IN", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          })
-                        : "Not issued"}
+                      {formatDate(cert.joined_at ?? cert.created_at)}
                     </dd>
                   </div>
                   <div>
                     <dt className="text-[11px] uppercase tracking-[0.14em] text-black/50">
-                      Verification Status
+                      Completed On
                     </dt>
-                    <dd className="mt-1 text-sm font-medium capitalize text-[#111111]">
-                      {cert.issuance_status}
+                    <dd className="mt-1 text-sm tabular-nums text-[#111111]">
+                      {formatDate(cert.completed_at ?? cert.issued_at)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-[0.14em] text-black/50">
+                      Issue Date
+                    </dt>
+                    <dd className="mt-1 text-sm tabular-nums text-[#111111]">
+                      {formatDate(cert.issued_at, "Not issued")}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-[0.14em] text-black/50">
+                      Authorized Signatory &amp; Status
+                    </dt>
+                    <dd className="mt-1 text-sm font-medium text-[#111111]">
+                      Gokulraj · <span className="capitalize">{cert.issuance_status}</span>
                     </dd>
                   </div>
                 </dl>
@@ -183,6 +215,7 @@ export default async function VerifyCertificatePage({
           )}
         </div>
       </section>
+      <SiteFooter note="Every issued Touch Grass Later certificate includes an immutable ID and live verification URL." />
     </main>
   );
 }

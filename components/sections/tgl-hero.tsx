@@ -116,12 +116,12 @@ export function TglHero() {
       </div>
       <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-r from-[#f5f5f7]/80 via-[#f5f5f7]/35 to-transparent dark:from-[#090909]/85 dark:via-[#090909]/45 dark:to-transparent" />
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_72%_42%,rgba(0,122,255,0.10),transparent_40%),radial-gradient(ellipse_at_12%_88%,rgba(94,92,230,0.08),transparent_38%)] dark:bg-[radial-gradient(ellipse_at_72%_42%,rgba(138,125,163,0.16),transparent_37%),radial-gradient(ellipse_at_12%_88%,rgba(80,77,91,0.12),transparent_36%)]" />
-      <div className="mx-auto grid min-h-[790px] max-w-[1440px] items-center gap-2 px-6 pb-20 pt-32 md:min-h-[860px] md:grid-cols-[1.04fr_.96fr] md:px-12 md:pb-14 md:pt-28 lg:px-20">
-        <div className="relative z-10 max-w-[720px]">
-          <p className="mb-7 text-[10px] font-medium uppercase tracking-[0.24em] text-muted-foreground">
+      <div className="mx-auto grid min-h-[760px] w-full max-w-[1440px] grid-cols-1 items-center gap-4 px-5 pb-20 pt-28 sm:px-6 md:min-h-[860px] md:grid-cols-[1.04fr_.96fr] md:gap-2 md:px-12 md:pb-14 md:pt-28 lg:px-20">
+        <div className="relative z-10 w-full min-w-0 max-w-[720px]">
+          <p className="mb-5 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground sm:mb-7 sm:tracking-[0.24em]">
             Project-based learning, built for what&apos;s next
           </p>
-          <h1 className="max-w-[760px] text-[clamp(3.75rem,9.1vw,8.6rem)] font-medium leading-[0.86] tracking-[-0.085em]">
+          <h1 className="max-w-[760px] text-[clamp(2.8rem,11.2vw,8.6rem)] font-medium leading-[0.88] tracking-[-0.07em] md:leading-[0.86] md:tracking-[-0.085em]">
             Your potential<br />
             isn&apos;t{" "}
             <StrokeText
@@ -132,10 +132,10 @@ export function TglHero() {
               className="font-serif font-normal italic tracking-[-0.09em]"
             />
           </h1>
-          <p className="mt-8 max-w-[490px] text-[15px] leading-7 text-muted-foreground md:text-base">
+          <p className="mt-6 max-w-[490px] text-[14px] leading-6 text-muted-foreground sm:mt-8 sm:text-[15px] sm:leading-7 md:text-base">
             Enrol in one bundled internship-training programme: study clear notes and curated videos, ship a real project, finish your mentor-reviewed internship, and claim your included certificate at ₹0 extra.
           </p>
-          <div className="mt-9 flex flex-wrap items-center gap-3">
+          <div className="mt-8 flex flex-wrap items-center gap-3 sm:mt-9">
             <Magnet padding={65} magnetStrength={2.8} maxOffset={8} scale={1.03}>
               <Link
                 href="/programmes"
@@ -156,11 +156,11 @@ export function TglHero() {
               My Learning
             </Link>
           </div>
-          <div className="mt-16 flex items-center gap-4 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          <div className="mt-12 flex items-center gap-4 text-[10px] uppercase tracking-[0.18em] text-muted-foreground sm:mt-16">
             <span className="h-px w-10 bg-border" /> Learn. Build. Grow.
           </div>
         </div>
-        <div className="relative mx-auto h-[350px] w-full max-w-[580px] md:h-[590px]">
+        <div className="relative mx-auto h-[320px] w-full min-w-0 max-w-[580px] md:h-[590px]">
           <div className="absolute inset-[12%] rounded-full bg-accent/10 blur-[70px]" />
           <Scene isDark={isDark} />
           <div className="tgl-glass absolute bottom-[12%] left-[2%] hidden rounded-2xl px-4 py-3 md:block">

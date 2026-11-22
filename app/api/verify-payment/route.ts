@@ -5,7 +5,6 @@ import {
   resolveCurrentActor,
   verifyAndCaptureCheckoutPayment,
 } from "@/lib/certifications/store";
-import { verifyRazorpayPaymentSignature } from "@/lib/payments/razorpay";
 
 const CanonicalVerifySchema = z.object({
   razorpay_order_id: z.string().trim().min(4).max(120).optional(),
@@ -19,9 +18,9 @@ const CanonicalVerifySchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const actor = await resolveCurrentActor();
-  if (!actor.user) {
-    return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  const actor = await resolveCurrentActor({ request });
+  if (!actor.user || actor.user.isSandbox) {
+    return NextResponse.json({ verified: false, error: "Sign in required." }, { status: 401 });
   }
 
   const parsed = CanonicalVerifySchema.safeParse(await request.json().catch(() => null));
@@ -49,51 +48,29 @@ export async function POST(request: Request) {
 
   const userOrders = await listOrders(actor.user.id);
   const matchedOrder = userOrders.find((o) => o.razorpay_order_id === orderId);
-
-  if (matchedOrder) {
-    const result = await verifyAndCaptureCheckoutPayment({
-      user: actor.user,
-      razorpayOrderId: orderId,
-      razorpayPaymentId: paymentId,
-      razorpaySignature: signature,
-      paymentMethod: parsed.data.paymentMethod,
-      simulateTestCheckout: parsed.data.simulateTestCheckout,
-    });
-
-    if (result.error && !result.payment) {
-      return NextResponse.json(
-        { verified: false, error: result.error },
-        { status: result.status ?? 400 },
-      );
-    }
-
-    return NextResponse.json(
-      {
-        verified: true,
-        order_id: orderId,
-        payment_id: paymentId,
-        payment: result.payment,
-        enrollment: result.enrollment ?? null,
-        internshipApplication: result.internshipApplication ?? null,
-        issuance: result.issuance ?? null,
-      },
-      { status: 200, headers: { "Cache-Control": "no-store" } },
-    );
-  }
-
-  const signatureOk = verifyRazorpayPaymentSignature({
-    orderId,
-    paymentId,
-    signature,
-  });
-
-  if (!signatureOk) {
+  if (!matchedOrder) {
     return NextResponse.json(
       {
         verified: false,
-        error: "Invalid Razorpay payment signature. Payment rejected.",
+        error: "Order record not found for the signed-in student.",
       },
-      { status: 400 },
+      { status: 404 },
+    );
+  }
+
+  const result = await verifyAndCaptureCheckoutPayment({
+    user: actor.user,
+    razorpayOrderId: orderId,
+    razorpayPaymentId: paymentId,
+    razorpaySignature: signature,
+    paymentMethod: parsed.data.paymentMethod,
+    simulateTestCheckout: parsed.data.simulateTestCheckout,
+  });
+
+  if (result.error && !result.payment) {
+    return NextResponse.json(
+      { verified: false, error: result.error },
+      { status: result.status ?? 400 },
     );
   }
 
@@ -102,6 +79,10 @@ export async function POST(request: Request) {
       verified: true,
       order_id: orderId,
       payment_id: paymentId,
+      payment: result.payment,
+      enrollment: result.enrollment ?? null,
+      internshipApplication: result.internshipApplication ?? null,
+      issuance: result.issuance ?? null,
     },
     { status: 200, headers: { "Cache-Control": "no-store" } },
   );

@@ -83,7 +83,15 @@ export function WorkspaceCertificatePanel({
             {certificateTitle}
           </h3>
         </div>
-        <span className={`rounded-full px-3 py-1 text-[11px] font-medium ${badge.tone}`}>
+        <span
+          className={`text-xs font-semibold ${
+            effectiveState === "issued" || effectiveState === "claimed"
+              ? "text-emerald-700 dark:text-emerald-300"
+              : effectiveState === "eligible" || effectiveState === "generating"
+                ? "text-accent"
+                : "text-muted-foreground"
+          }`}
+        >
           {badge.label}
         </span>
       </div>
@@ -162,7 +170,10 @@ export function WorkspaceCertificatePanel({
                 certificateTitle: certificateTitle,
                 achievementTitle: programmeTitle,
                 organization: "TGL Learning Portal",
+                joinedAt: joinedOn ?? issuedCertificate.joined_at ?? null,
+                completedAt: completedOn ?? issuedCertificate.completed_at ?? issuedCertificate.issued_at,
                 issuedAt: issuedCertificate.issued_at,
+                authorizedSignatory: "Gokulraj · TGL Portal",
                 status:
                   issuedCertificate.issuance_status === "revoked"
                     ? "revoked"

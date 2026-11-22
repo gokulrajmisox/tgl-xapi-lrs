@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isPrivilegedStaffEmail } from "@/lib/auth/access";
-import { isSupabaseConfigured, resolveCurrentActor } from "@/lib/certifications/store";
+import { requireAdminActor } from "@/lib/certifications/store";
 import {
   getMentorConsoleData,
+  getMentorConsoleDataAsync,
   postMentorMessage,
   reviewLearnerSubmission,
+  syncMentorMessageToFirestore,
+  syncWorkspaceSubmissionToFirestore,
 } from "@/lib/learning-workspace-store";
 
 const MentorActionSchema = z.discriminatedUnion("action", [
@@ -28,30 +30,20 @@ const MentorActionSchema = z.discriminatedUnion("action", [
   }),
 ]);
 
-async function checkMentorAccess() {
-  const configured = isSupabaseConfigured();
-  const { user } = await resolveCurrentActor({ allowSandboxAdmin: !configured });
-  if (configured && !user) {
-    return { allowed: false, status: 401, error: "Sign in required." };
+export async function GET(request: Request) {
+  const auth = await requireAdminActor(request);
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error.message }, { status: auth.error.status });
   }
-  if (configured && (!user || user.role !== "admin" || !isPrivilegedStaffEmail(user.email))) {
-    return { allowed: false, status: 403, error: "Mentor or administrator claim required." };
-  }
-  return { allowed: true, user };
-}
-
-export async function GET() {
-  const access = await checkMentorAccess();
-  if (!access.allowed) {
-    return NextResponse.json({ error: access.error }, { status: access.status });
-  }
-  return NextResponse.json(getMentorConsoleData());
+  return NextResponse.json(await getMentorConsoleDataAsync(), {
+    headers: { "Cache-Control": "no-store" },
+  });
 }
 
 export async function POST(request: Request) {
-  const access = await checkMentorAccess();
-  if (!access.allowed) {
-    return NextResponse.json({ error: access.error }, { status: access.status });
+  const auth = await requireAdminActor(request);
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error.message }, { status: auth.error.status });
   }
 
   const parsed = MentorActionSchema.safeParse(await request.json().catch(() => null));
@@ -64,6 +56,7 @@ export async function POST(request: Request) {
 
   const input = parsed.data;
   if (input.action === "review_submission") {
+    await getMentorConsoleDataAsync();
     const result = reviewLearnerSubmission({
       submissionId: input.submissionId,
       decision: input.decision,
@@ -72,6 +65,9 @@ export async function POST(request: Request) {
     });
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 404 });
+    }
+    if (result.submission) {
+      await syncWorkspaceSubmissionToFirestore(result.submission);
     }
     return NextResponse.json({
       submission: result.submission,
@@ -89,6 +85,7 @@ export async function POST(request: Request) {
     authorName: input.mentorName,
     body: input.body,
   });
+  await syncMentorMessageToFirestore(message);
 
   return NextResponse.json({
     message,

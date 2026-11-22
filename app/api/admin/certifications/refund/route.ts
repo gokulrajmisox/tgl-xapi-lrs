@@ -8,7 +8,7 @@ const RefundSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const auth = await requireAdminActor();
+  const auth = await requireAdminActor(request);
   if (auth.error) return NextResponse.json({ error: auth.error.message }, { status: auth.error.status });
 
   const parsed = RefundSchema.safeParse(await request.json().catch(() => null));

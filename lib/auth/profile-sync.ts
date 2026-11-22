@@ -1,11 +1,20 @@
-import type { User } from "@supabase/supabase-js";
+import { FieldValue } from "firebase-admin/firestore";
 import { isPrivilegedStaffEmail } from "@/lib/auth/access";
-import { isSupabaseConfigured, serviceClient } from "@/lib/supabase/service";
+import {
+  getAdminFirestore,
+  isFirebaseAdminConfigured,
+  type VerifiedFirebaseActor,
+} from "@/lib/firebase/server";
 
 export type AuthUserLike = {
-  id: string;
+  id?: string;
+  uid?: string;
   email?: string | null;
+  emailVerified?: boolean;
   email_confirmed_at?: string | null;
+  displayName?: string | null;
+  photoURL?: string | null;
+  authProvider?: string | null;
   user_metadata?: Record<string, unknown> | null;
   app_metadata?: Record<string, unknown> | null;
 };
@@ -34,43 +43,47 @@ function cleanSafeAvatarUrl(value: unknown): string | null {
 }
 
 /**
- * Pure helper deriving a safe student profile seed from a Supabase user object.
- * - Preserves an existing `display_name` so custom student names are never overwritten.
- * - Falls back to Google OAuth `full_name` / `name` when `display_name` is absent.
- * - Requires verified email before trusting profile sync/account linking.
- * - Never elevates roles beyond `app_metadata.role === "admin"`.
+ * Pure helper deriving a safe student profile seed from a Firebase Auth user
+ * or compatible identity record. Never derives full names from email prefixes
+ * and restricts admin role exclusively to the allowlisted verified staff emails.
  */
-export function deriveStudentProfileSeed(user: AuthUserLike | User): StudentProfileSeed {
+export function deriveStudentProfileSeed(user: AuthUserLike): StudentProfileSeed {
   const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
   const appMeta = (user.app_metadata ?? {}) as Record<string, unknown>;
 
+  const userId = cleanString(user.uid || user.id, 128);
   const email = cleanString(user.email, 254).toLowerCase();
-  const existingDisplayName = cleanString(metadata.display_name, 120);
+  const existingDisplayName =
+    cleanString(user.displayName, 120) || cleanString(metadata.display_name, 120);
   const providerName =
     cleanString(metadata.full_name, 120) || cleanString(metadata.name, 120);
 
   const fullName = existingDisplayName || providerName;
   const avatarUrl =
-    cleanSafeAvatarUrl(metadata.avatar_url) || cleanSafeAvatarUrl(metadata.picture);
+    cleanSafeAvatarUrl(user.photoURL) ||
+    cleanSafeAvatarUrl(metadata.avatar_url) ||
+    cleanSafeAvatarUrl(metadata.picture);
 
   const authProvider =
+    cleanString(user.authProvider, 40) ||
     cleanString(appMeta.provider, 40) ||
     (Array.isArray(appMeta.providers) && typeof appMeta.providers[0] === "string"
       ? cleanString(appMeta.providers[0], 40)
-      : "email");
+      : "firebase");
 
-  // Explicitly block untrusted / unverified emails from syncing or linking profiles.
-  const explicitFalse = metadata.email_verified === false;
+  const explicitFalse = metadata.email_verified === false || user.emailVerified === false;
   const emailVerified =
     !explicitFalse &&
-    Boolean(user.email_confirmed_at || metadata.email_verified === true);
+    Boolean(
+      user.emailVerified === true ||
+        user.email_confirmed_at ||
+        metadata.email_verified === true,
+    );
 
-  // Roles are derived server-side. Only the two verified allowlisted emails
-  // can ever receive the privileged admin/mentor role in this application.
-  const role = isPrivilegedStaffEmail(email) ? "admin" : "student";
+  const role = emailVerified && isPrivilegedStaffEmail(email) ? "admin" : "student";
 
   return {
-    userId: user.id,
+    userId,
     email,
     fullName,
     avatarUrl,
@@ -82,63 +95,94 @@ export function deriveStudentProfileSeed(user: AuthUserLike | User): StudentProf
 }
 
 /**
- * Syncs an authenticated Supabase user (Google OAuth or email/password) into
- * `student_profiles` and backfills `display_name` metadata on first OAuth sign-in
- * without overwriting an existing saved name or bypassing role/enrolment guards.
+ * Syncs an authenticated Firebase user into Firestore `users/{uid}`,
+ * `users/{uid}/private/info`, and (when allowlisted) `admins/{uid}`.
+ * Preserves any previously saved certificate displayName.
  */
+export async function syncFirebaseUserRecord(
+  actor: VerifiedFirebaseActor,
+): Promise<{ synced: boolean }> {
+  if (!isFirebaseAdminConfigured() || !actor.uid || !actor.email || !actor.emailVerified) {
+    return { synced: false };
+  }
+
+  const db = getAdminFirestore();
+  if (!db) return { synced: false };
+
+  try {
+    const userRef = db.collection("users").doc(actor.uid);
+    const privateRef = userRef.collection("private").doc("info");
+    const existingSnap = await userRef.get();
+    const existingData = existingSnap.exists ? existingSnap.data() : undefined;
+    const existingName =
+      existingData && typeof existingData.displayName === "string"
+        ? existingData.displayName.trim()
+        : "";
+    const finalName = existingName || actor.displayName;
+    const resolvedRole = isPrivilegedStaffEmail(actor.email) ? "admin" : "student";
+
+    await userRef.set(
+      {
+        uid: actor.uid,
+        displayName: finalName,
+        role: resolvedRole,
+        cohort:
+          typeof existingData?.cohort === "string" && existingData.cohort
+            ? existingData.cohort
+            : resolvedRole === "admin"
+              ? "Platform Administration"
+              : "Registered Learner",
+        createdAt: existingData?.createdAt ?? FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    await privateRef.set(
+      {
+        uid: actor.uid,
+        email: actor.email,
+        emailVerified: actor.emailVerified,
+        authProvider: actor.authProvider,
+        ...(actor.avatarUrl ? { avatarUrl: actor.avatarUrl } : {}),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    if (resolvedRole === "admin") {
+      await db.collection("admins").doc(actor.uid).set(
+        {
+          uid: actor.uid,
+          email: actor.email,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    }
+
+    return { synced: true };
+  } catch {
+    return { synced: false };
+  }
+}
+
 export async function syncAuthenticatedStudentProfile(
-  user: User | AuthUserLike | null | undefined,
+  user: AuthUserLike | null | undefined,
 ): Promise<{ synced: boolean; seed: StudentProfileSeed | null }> {
   if (!user) return { synced: false, seed: null };
   const seed = deriveStudentProfileSeed(user);
-
-  if (!isSupabaseConfigured() || !seed.email || !seed.emailVerified) {
+  if (!seed.userId || !seed.email || !seed.emailVerified) {
     return { synced: false, seed };
   }
-
-  try {
-    const admin = serviceClient();
-
-    // Check existing profile first so an already-saved student full_name is preserved.
-    const { data: existingProfile, error: readErr } = await admin
-      .from("student_profiles")
-      .select("id, full_name, avatar_url")
-      .eq("id", seed.userId)
-      .maybeSingle();
-
-    if (!readErr) {
-      const existingName =
-        existingProfile && typeof existingProfile.full_name === "string"
-          ? existingProfile.full_name.trim()
-          : "";
-      const finalName = existingName || seed.fullName;
-
-      await admin.from("student_profiles").upsert(
-        {
-          id: seed.userId,
-          email: seed.email,
-          full_name: finalName,
-          avatar_url: seed.avatarUrl ?? existingProfile?.avatar_url ?? null,
-          auth_provider: seed.authProvider,
-          email_verified: seed.emailVerified,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "id" },
-      );
-
-      if (seed.needsMetadataBackfill && finalName) {
-        await admin.auth.admin.updateUserById(seed.userId, {
-          user_metadata: {
-            ...(user.user_metadata ?? {}),
-            display_name: finalName,
-          },
-        });
-      }
-    }
-
-    return { synced: true, seed };
-  } catch {
-    // Non-fatal if student_profiles table has not been migrated yet on external Supabase.
-    return { synced: false, seed };
-  }
+  const { synced } = await syncFirebaseUserRecord({
+    uid: seed.userId,
+    email: seed.email,
+    displayName: seed.fullName,
+    avatarUrl: seed.avatarUrl,
+    emailVerified: seed.emailVerified,
+    authProvider: seed.authProvider,
+    role: seed.role,
+  });
+  return { synced, seed };
 }

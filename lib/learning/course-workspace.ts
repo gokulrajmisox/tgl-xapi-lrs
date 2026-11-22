@@ -14,7 +14,7 @@ import {
   type CourseDetailResponse,
 } from "@/lib/courses/store";
 import {
-  getLearnerSnapshot,
+  getLearnerSnapshotAsync,
   type ProjectSubmissionRecord,
 } from "@/lib/learning-workspace-store";
 import {
@@ -47,11 +47,12 @@ export async function buildProgrammeWorkspacePayload(params: {
 
   if (!detail) return null;
 
-  const [internships, applications, issuances, enrollments] = await Promise.all([
+  const [internships, applications, issuances, enrollments, snapshot] = await Promise.all([
     listInternships(),
     userId ? listStudentApplications(userId) : Promise.resolve([]),
     userId ? listIssuances(userId) : Promise.resolve([]),
     userId ? listUserCourseEnrollments(userId) : Promise.resolve([]),
+    userId ? getLearnerSnapshotAsync(userId) : Promise.resolve(null),
   ]);
 
   const internshipTrack =
@@ -79,7 +80,6 @@ export async function buildProgrammeWorkspacePayload(params: {
       (e) => e.courseId === detail.course.id && e.status === "active",
     ) ?? null;
 
-  const snapshot = userId ? getLearnerSnapshot(userId) : null;
   const projectSubmissions = snapshot
     ? snapshot.submissions.filter(
         (s) => s.projectSlug === detail.course.projectSlug,
@@ -87,7 +87,7 @@ export async function buildProgrammeWorkspacePayload(params: {
     : [];
 
   const claimedAt = issuedCertificate
-    ? getCertificateClaimedAt(issuedCertificate.certificate_id)
+    ? getCertificateClaimedAt(issuedCertificate.certificate_id, issuedCertificate)
     : null;
 
   let progression: UnifiedProgrammeProgression | null = null;
@@ -122,9 +122,10 @@ export async function buildProgrammeWorkspacePayload(params: {
     internshipApplication,
     issuedCertificate,
     progression,
-    enrolledAt: matchingEnrollment?.enrolledAt ?? null,
+    enrolledAt: matchingEnrollment?.enrolledAt ?? issuedCertificate?.joined_at ?? null,
     completedOn:
       internshipApplication?.completed_at ??
+      issuedCertificate?.completed_at ??
       issuedCertificate?.issued_at ??
       null,
     claimedAt,

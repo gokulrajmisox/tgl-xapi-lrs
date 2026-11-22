@@ -6,12 +6,16 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { GoogleIcon } from "@hugeicons/core-free-icons";
-import { createClient } from "@/lib/supabase/client";
 import {
-  buildOAuthCallbackUrl,
-  mapOAuthErrorToMessage,
-  sanitizeRedirectPath,
-} from "@/lib/auth/redirects";
+  completePasswordReset,
+  loginStudentWithEmail,
+  logoutStudent,
+  registerStudentWithEmail,
+  requestPasswordReset,
+  signInWithGooglePopup,
+} from "@/lib/firebase/client";
+import { useFirebaseAuth } from "@/components/firebase-provider";
+import { mapOAuthErrorToMessage, sanitizeRedirectPath } from "@/lib/auth/redirects";
 
 type Mode = "login" | "sign-up" | "forgot-password" | "reset-password";
 
@@ -21,22 +25,28 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const [password, setPassword] = useState("");
   const [passwordAgain, setPasswordAgain] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [oobCode, setOobCode] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [safeNext, setSafeNext] = useState("/learn");
   const router = useRouter();
+  const { user, loading: authLoading } = useFirebaseAuth();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setSafeNext(sanitizeRedirectPath(params.get("next"), "/learn"));
+    setOobCode(params.get("oobCode"));
 
     const oauthErr = params.get("error");
     const oauthErrDesc = params.get("error_description");
     const updatedFlag = params.get("updated");
+    const verifiedFlag = params.get("verified");
     if (oauthErr) {
       setError(mapOAuthErrorToMessage(oauthErr, oauthErrDesc));
+    } else if (verifiedFlag === "1" && mode === "login") {
+      setMessage("Email verified. Sign in with your email and password or continue with Google.");
     } else if (updatedFlag === "1" && mode === "login") {
       setMessage("Password updated. Sign in with your new password.");
     }
@@ -48,42 +58,28 @@ export function AuthForm({ mode }: { mode: Mode }) {
     return sanitizeRedirectPath(requestedNext, "/learn");
   };
 
+  const handleSwitchSignOut = async () => {
+    setError("");
+    setMessage("");
+    setBusy(true);
+    try {
+      await logoutStudent();
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleGoogleAuth = async () => {
     setError("");
     setMessage("");
     setGoogleBusy(true);
 
     try {
-      const supabase = createClient();
-      const redirectTo = buildOAuthCallbackUrl(
-        window.location.origin,
-        getSafeNext(),
-        process.env.NEXT_PUBLIC_SITE_URL,
-      );
-
-      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo,
-          queryParams: {
-            access_type: "offline",
-            prompt: "select_account",
-          },
-        },
-      });
-
-      if (oauthError) {
-        const mappedCode =
-          (oauthError as { code?: string }).code ?? "oauth_config";
-        throw new Error(mapOAuthErrorToMessage(mappedCode, oauthError.message));
-      }
-
-      if (!data?.url) {
-        throw new Error(
-          mapOAuthErrorToMessage("oauth_config", "OAuth redirect URL was not returned."),
-        );
-      }
-      // Supabase automatically navigates to Google's consent URL when URL is returned.
+      await signInWithGooglePopup();
+      const next = getSafeNext();
+      router.push(next);
+      router.refresh();
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -103,63 +99,28 @@ export function AuthForm({ mode }: { mode: Mode }) {
       return;
     }
     setBusy(true);
-    const supabase = createClient();
     try {
       if (mode === "login") {
-        const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
-        if (authError) {
-          if (authError.code === "email_not_confirmed") {
-            throw new Error("Please confirm your email address from the link we sent you.");
-          }
-          if (authError.status === 429) {
-            throw new Error("Too many attempts. Please wait and try again.");
-          }
-          if ((authError as { code?: string }).code === "not_configured") {
-            throw new Error(
-              "Email/password sign-in requires Supabase environment variables. Sandbox demo mode is active across the portal.",
-            );
-          }
-          throw new Error("Invalid email or password.");
+        const result = await loginStudentWithEmail(email, password);
+        if (!result.emailVerified) {
+          setMessage("Signed in. Check your inbox to verify your email for full certificate eligibility.");
         }
         const next = getSafeNext();
         router.push(next);
         router.refresh();
       } else if (mode === "sign-up") {
-        const { error: authError } = await supabase.auth.signUp({
+        await registerStudentWithEmail({
           email,
           password,
-          options: {
-            emailRedirectTo:
-              process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
-              buildOAuthCallbackUrl(
-                window.location.origin,
-                getSafeNext(),
-                process.env.NEXT_PUBLIC_SITE_URL,
-              ),
-            ...(name.trim() ? { data: { display_name: name.trim() } } : {}),
-          },
+          fullName: name.trim(),
+          continueUrl: `${window.location.origin}/auth/login?verified=1&next=${encodeURIComponent(getSafeNext())}`,
         });
-        if (authError) {
-          if (authError.code === "weak_password") throw new Error("Choose a stronger password.");
-          if (authError.code === "email_address_invalid") throw new Error("Enter a valid email address.");
-          if (authError.status === 429) throw new Error("Too many attempts. Please wait and try again.");
-          if ((authError as { code?: string }).code === "not_configured") {
-            throw new Error(
-              "Creating accounts requires Supabase environment variables. Sandbox demo mode is active across the portal.",
-            );
-          }
-          throw new Error("Unable to create your account. Please try again.");
-        }
         router.push(`/auth/sign-up-success?next=${encodeURIComponent(getSafeNext())}`);
       } else if (mode === "forgot-password") {
-        const { error: authError } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/auth/reset-password`,
-        });
-        if (authError) throw new Error("We could not send a reset link just now. Please try again later.");
-        setMessage("If an account exists for that email, a reset link will arrive shortly.");
+        await requestPasswordReset(email, `${window.location.origin}/auth/login?updated=1`);
+        setMessage("If an account exists for that email, a Firebase password reset link will arrive shortly.");
       } else {
-        const { error: authError } = await supabase.auth.updateUser({ password });
-        if (authError) throw new Error("The password could not be updated. Open a fresh reset link and try again.");
+        await completePasswordReset({ oobCode, newPassword: password });
         router.push("/auth/login?updated=1");
       }
     } catch (cause) {
@@ -203,6 +164,34 @@ export function AuthForm({ mode }: { mode: Mode }) {
       <h1 className="mt-3 text-4xl font-semibold tracking-[-0.06em]">{title}</h1>
       <p className="mt-3 text-sm leading-6 text-muted-foreground">{description}</p>
 
+      {!authLoading && user && (mode === "login" || mode === "sign-up") && (
+        <div
+          role="status"
+          className="tgl-subsurface mt-6 rounded-2xl border border-border p-4 text-xs"
+        >
+          <p className="text-muted-foreground">
+            Currently signed in as{" "}
+            <strong className="font-medium text-foreground">{user.email}</strong>
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Link
+              href={safeNext}
+              className="inline-flex min-h-9 items-center rounded-full bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
+            >
+              Continue to workspace
+            </Link>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void handleSwitchSignOut()}
+              className="inline-flex min-h-9 items-center rounded-full border border-border px-4 py-1.5 text-xs font-medium text-foreground hover:border-foreground/30 disabled:opacity-50"
+            >
+              Sign out &amp; switch account
+            </button>
+          </div>
+        </div>
+      )}
+
       {supportsGoogle && (
         <div className="mt-8 space-y-5">
           <button
@@ -222,7 +211,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
                 aria-hidden="true"
               />
             )}
-            <span>{googleBusy ? "Redirecting to Google…" : "Continue with Google"}</span>
+            <span>{googleBusy ? "Connecting with Google…" : "Continue with Google"}</span>
           </button>
 
           <div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
@@ -372,7 +361,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
         )}
       </div>
       <p className="mt-8 border-t border-border pt-5 text-[11px] leading-5 text-muted-foreground">
-        Your enrolled programmes, project submissions, mentor feedback, and internship progress stay saved to your student account.
+        Your enrolled programmes, project submissions, mentor feedback, and internship progress stay saved to your Firebase-authenticated TGL student account.
       </p>
     </section>
   );

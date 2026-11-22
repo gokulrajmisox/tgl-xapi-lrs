@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Award,
   BookOpen,
-  Compass,
   GraduationCap,
   Home,
   LayoutGrid,
+  Loader2,
   Menu,
   MessageSquare,
   Shield,
@@ -17,7 +17,9 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { useFirebaseAuth } from "@/components/firebase-provider";
 import { SignOutButton } from "@/components/sign-out-button";
+import { SiteFooter } from "@/components/site-footer";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 
 export type AppRole = "student" | "mentor" | "admin";
@@ -40,7 +42,8 @@ const MENTOR_NAV: NavItem[] = [
   { label: "Review Queue", href: "/mentor", icon: MessageSquare },
   { label: "Assigned Learners", href: "/mentor#learners", icon: Users },
   { label: "Explore Programmes", href: "/programmes", icon: BookOpen },
-  { label: "Projects", href: "/explore", icon: Compass },
+  { label: "Certificates", href: "/certificates", icon: Award },
+  { label: "Admin Console", href: "/admin", icon: Shield },
 ];
 
 const ADMIN_NAV: NavItem[] = [
@@ -65,10 +68,30 @@ export function RoleShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { user, loading: authLoading, isStaff, configured } = useFirebaseAuth();
+
+  useEffect(() => {
+    if (!configured || authLoading) return;
+    if ((role === "mentor" || role === "admin") && !isStaff) {
+      router.replace(user ? "/learn" : "/auth/login");
+    }
+  }, [authLoading, configured, isStaff, role, router, user]);
+
+  const effectiveRole: AppRole =
+    role === "mentor" && isStaff
+      ? "mentor"
+      : role === "admin" && isStaff
+        ? "admin"
+        : "student";
 
   const navItems =
-    role === "mentor" ? MENTOR_NAV : role === "admin" ? ADMIN_NAV : STUDENT_NAV;
+    effectiveRole === "mentor"
+      ? MENTOR_NAV
+      : effectiveRole === "admin"
+        ? ADMIN_NAV
+        : STUDENT_NAV;
 
   const isActive = (href: string) => {
     const clean = href.split("#")[0].split("?")[0];
@@ -82,11 +105,13 @@ export function RoleShell({
     return false;
   };
 
-  const roleSwitchLinks: Array<{ id: AppRole; label: string; href: string }> = [
-    { id: "student", label: "Student", href: "/learn" },
-    { id: "mentor", label: "Mentor", href: "/mentor" },
-    { id: "admin", label: "Admin", href: "/admin" },
-  ];
+  const roleSwitchLinks: Array<{ id: AppRole; label: string; href: string }> = isStaff
+    ? [
+        { id: "student", label: "Student", href: "/learn" },
+        { id: "mentor", label: "Mentor", href: "/mentor" },
+        { id: "admin", label: "Admin", href: "/admin" },
+      ]
+    : [];
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -109,26 +134,28 @@ export function RoleShell({
             </span>
           </Link>
 
-          <div className="border-t border-sidebar-border pt-5">
-            <p className="px-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-              Role workspace
-            </p>
-            <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl border border-border bg-background/60 p-1">
-              {roleSwitchLinks.map((item) => (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  className={`shrink-0 whitespace-nowrap rounded-lg py-1.5 text-center text-[11px] font-medium transition-colors ${
-                    role === item.id
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              ))}
+          {roleSwitchLinks.length > 0 && (
+            <div className="border-t border-sidebar-border pt-5">
+              <p className="px-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                Role workspace
+              </p>
+              <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl border border-border bg-background/60 p-1">
+                {roleSwitchLinks.map((item) => (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    className={`shrink-0 whitespace-nowrap rounded-lg py-1.5 text-center text-[11px] font-medium transition-colors ${
+                      effectiveRole === item.id
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <nav aria-label={`${role} menu`} className="space-y-1">
             {navItems.map((item) => {
@@ -164,7 +191,21 @@ export function RoleShell({
             <ThemeSwitcher variant="segmented" />
           </div>
           <div className="flex min-h-10 items-center justify-between px-2 py-1">
-            <SignOutButton />
+            {authLoading ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                Verifying session…
+              </span>
+            ) : user ? (
+              <SignOutButton />
+            ) : (
+              <Link
+                href="/auth/login"
+                className="text-xs font-medium text-accent hover:underline"
+              >
+                Sign in
+              </Link>
+            )}
           </div>
         </div>
       </aside>
@@ -199,25 +240,29 @@ export function RoleShell({
           aria-label="Workspace navigation drawer"
           className="tgl-glass-strong fixed inset-x-0 top-14 bottom-14 z-40 overflow-y-auto border-b border-border p-4 lg:hidden"
         >
-          <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-            Switch role
-          </p>
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            {roleSwitchLinks.map((item) => (
-              <Link
-                key={item.id}
-                href={item.href}
-                onClick={() => setDrawerOpen(false)}
-                className={`rounded-xl border py-2.5 text-center text-xs font-medium ${
-                  role === item.id
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border text-foreground/75"
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </div>
+          {roleSwitchLinks.length > 0 && (
+            <>
+              <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                Switch role
+              </p>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {roleSwitchLinks.map((item) => (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    onClick={() => setDrawerOpen(false)}
+                    className={`rounded-xl border py-2.5 text-center text-xs font-medium ${
+                      effectiveRole === item.id
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border text-foreground/75"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            </>
+          )}
 
           <nav className="mt-5 space-y-1">
             {navItems.map((item) => {
@@ -266,7 +311,7 @@ export function RoleShell({
           )}
         </div>
 
-        <main className="mx-auto max-w-[1200px] px-4 pb-24 pt-6 sm:px-6 lg:px-8 lg:pb-16 lg:pt-8">
+        <main className="mx-auto max-w-[1200px] px-4 pb-16 pt-6 sm:px-6 lg:px-8 lg:pb-16 lg:pt-8">
           <div className="mb-6 lg:hidden">
             <h1 className="text-2xl font-semibold tracking-[-0.04em] text-foreground">{title}</h1>
             {subtitle && (
@@ -275,6 +320,9 @@ export function RoleShell({
           </div>
           {children}
         </main>
+        <div className="pb-14 lg:pb-0">
+          <SiteFooter />
+        </div>
       </div>
 
       {/* Compact Mobile Bottom Nav Bar */}

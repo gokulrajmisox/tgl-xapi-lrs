@@ -22,14 +22,14 @@ const ActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("query"), query: QuerySchema.default({}) }),
 ]);
 
-export async function GET() {
-  const auth = await requireAdminActor();
+export async function GET(request: Request) {
+  const auth = await requireAdminActor(request);
   if (auth.error) return NextResponse.json({ error: auth.error.message }, { status: auth.error.status });
   return NextResponse.json({ status: getTestmailStatus() }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
-  const auth = await requireAdminActor();
+  const auth = await requireAdminActor(request);
   if (auth.error) return NextResponse.json({ error: auth.error.message }, { status: auth.error.status });
   const parsed = ActionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid Testmail request." }, { status: 400 });

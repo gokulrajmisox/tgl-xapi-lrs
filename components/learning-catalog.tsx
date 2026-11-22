@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Bookmark, Search } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { ResourceProgressControl } from "@/components/resource-progress-control";
 
 type Path = { id: string; slug: string; title: string; description: string; category: string; difficulty: string; estimated_hours: number | null };
@@ -16,18 +15,27 @@ export function SaveResourceButton({ resourceId, initiallySaved = false }: { res
   const toggle = async () => {
     setBusy(true);
     setNotice("");
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      window.location.assign("/auth/login?next=/learning-hub");
-      return;
+    try {
+      const res = await fetch("/api/learning-hub", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "toggle_save", resourceId }),
+      });
+      if (res.status === 401) {
+        window.location.assign("/auth/login?next=/learning-hub");
+        return;
+      }
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.error ?? "Could not update your saved list. Please try again.");
+      } else {
+        setSaved(Boolean(data.saved));
+      }
+    } catch {
+      setNotice("Could not update your saved list. Please try again.");
+    } finally {
+      setBusy(false);
     }
-    const result = saved
-      ? await supabase.from("saved_resources").delete().eq("resource_id", resourceId).eq("student_id", user.id)
-      : await supabase.from("saved_resources").insert({ resource_id: resourceId, student_id: user.id });
-    if (result.error) setNotice("Could not update your saved list. Please try again.");
-    else setSaved(!saved);
-    setBusy(false);
   };
   return <div className="flex items-center gap-2"><button type="button" onClick={toggle} disabled={busy} aria-pressed={saved} aria-label={saved ? "Remove saved resource" : "Save resource"} className={`grid size-9 place-items-center rounded-full border transition-colors ${saved ? "border-[var(--accent)]/50 bg-[var(--accent)]/12 text-[var(--accent)]" : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground"}`}><Bookmark size={15} fill={saved ? "currentColor" : "none"} /></button>{notice && <span role="status" className="text-[10px] text-rose-500 dark:text-rose-300">{notice}</span>}</div>;
 }

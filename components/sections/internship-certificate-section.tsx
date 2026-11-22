@@ -266,7 +266,7 @@ export function InternshipCertificateSection() {
               showActions={Boolean(activeIssuance)}
               data={{
                 certificateId: activeIssuance?.certificate_id ?? "TGL-CERT-2026-8419",
-                recipientName: activeIssuance?.recipient_name ?? user?.name ?? "Aarav Sharma",
+                recipientName: activeIssuance?.recipient_name ?? user?.name ?? "Your Verified Name",
                 certificateTitle: "INTERNSHIP CERTIFICATE",
                 achievementTitle:
                   activeIssuance?.achievement_title ??

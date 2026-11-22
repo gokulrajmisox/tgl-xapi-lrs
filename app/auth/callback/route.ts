@@ -1,21 +1,30 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { sanitizeRedirectPath } from "@/lib/auth/redirects";
-import {
-  deriveStudentProfileSeed,
-  syncAuthenticatedStudentProfile,
-} from "@/lib/auth/profile-sync";
 
+/**
+ * Legacy OAuth callback route preserved cleanly for external bookmarks or
+ * Firebase email action continue URLs. Firebase Google Sign-In completes
+ * via popup directly on `/auth/login` and `/auth/sign-up`.
+ */
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
-  const code = searchParams.get("code");
-  const oauthError = searchParams.get("error");
-  const errorDescription = searchParams.get("error_description");
   const safeNext = sanitizeRedirectPath(searchParams.get("next"), "/learn");
+  const mode = searchParams.get("mode");
+  const oobCode = searchParams.get("oobCode");
+  const authError = searchParams.get("error");
+  const errorDescription = searchParams.get("error_description");
 
-  if (oauthError) {
+  if (mode && oobCode) {
+    const actionUrl = new URL("/auth/action", request.url);
+    actionUrl.searchParams.set("mode", mode);
+    actionUrl.searchParams.set("oobCode", oobCode);
+    actionUrl.searchParams.set("next", safeNext);
+    return NextResponse.redirect(actionUrl);
+  }
+
+  if (authError) {
     const mappedCode =
-      oauthError === "access_denied" ? "oauth_cancelled" : oauthError;
+      authError === "access_denied" ? "oauth_cancelled" : authError;
     const loginUrl = new URL("/auth/login", request.url);
     loginUrl.searchParams.set("error", mappedCode);
     if (errorDescription) {
@@ -25,25 +34,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (code) {
-    const supabase = await createClient();
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error && data.user) {
-      const seed = deriveStudentProfileSeed(data.user);
-      if (!seed.emailVerified) {
-        const loginUrl = new URL("/auth/login", request.url);
-        loginUrl.searchParams.set("error", "oauth_unverified_email");
-        loginUrl.searchParams.set("next", safeNext);
-        return NextResponse.redirect(loginUrl);
-      }
-
-      await syncAuthenticatedStudentProfile(data.user);
-      return NextResponse.redirect(new URL(safeNext, request.url));
-    }
-  }
-
   const loginUrl = new URL("/auth/login", request.url);
-  loginUrl.searchParams.set("error", "callback");
   loginUrl.searchParams.set("next", safeNext);
   return NextResponse.redirect(loginUrl);
 }

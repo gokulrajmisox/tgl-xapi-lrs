@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Header } from "@/components/header";
+import { SiteFooter } from "@/components/site-footer";
 import { CoursesDiscoveryClient } from "@/components/courses-discovery-client";
 import { resolveCurrentActor } from "@/lib/certifications/store";
 import { listCoursesCatalog } from "@/lib/courses/store";
@@ -18,7 +19,7 @@ export default async function CoursesCatalogPage() {
   return (
     <div className="min-h-screen overflow-x-clip bg-background text-foreground">
       <Header />
-      <main className="mx-auto max-w-[1280px] px-5 pb-24 pt-32 sm:px-6 md:px-12 md:pt-40">
+      <main className="mx-auto max-w-[1280px] px-5 pb-20 pt-32 sm:px-6 md:px-12 md:pt-40">
         <div className="flex flex-wrap items-end justify-between gap-6 border-b border-border pb-10">
           <div className="min-w-0">
             <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-accent">
@@ -54,6 +55,7 @@ export default async function CoursesCatalogPage() {
           <CoursesDiscoveryClient courses={courses} />
         </div>
       </main>
+      <SiteFooter note="One bundled INR enrolment fee covers all course modules, project evaluation, internship track access, and your official completion certificate." />
     </div>
   );
 }

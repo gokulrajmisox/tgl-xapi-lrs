@@ -12,7 +12,7 @@ import {
   learningProjects,
 } from "@/lib/learning-graph";
 import { getLearnerSnapshot } from "@/lib/learning-workspace-store";
-import { DEMO_STUDENT_ID, resolveCurrentActor } from "@/lib/certifications/store";
+import { resolveCurrentActor } from "@/lib/certifications/store";
 
 export async function generateMetadata({
   params,
@@ -41,8 +41,7 @@ export default async function PathwayMapPage({
   if (!pathway) notFound();
 
   const { user } = await resolveCurrentActor();
-  const actorId = user?.id ?? DEMO_STUDENT_ID;
-  const workspace = getLearnerSnapshot(actorId);
+  const workspace = user ? getLearnerSnapshot(user.id) : null;
 
   const pathwayNodes = getNodesForPathway(pathway.slug);
   const pathwayProjects = getProjectsForPathway(pathway.slug);
@@ -115,8 +114,8 @@ export default async function PathwayMapPage({
           nodes={pathwayNodes}
           allNodes={learningNodes}
           projects={learningProjects}
-          initialNodeStates={workspace.nodeStates}
-          initialSavedItems={workspace.savedItems}
+          initialNodeStates={workspace?.nodeStates ?? {}}
+          initialSavedItems={workspace?.savedItems ?? []}
           heading="Connected concepts, projects & mentor touchpoints"
           subheading="Select any node to mark progress, jump into a linked project brief, traverse adjacent pathways, or message your mentor."
         />

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { RoleShell } from "@/components/role-shell";
 import { ProfileClient } from "@/components/profile-client";
-import { isSupabaseConfigured, resolveCurrentActor } from "@/lib/certifications/store";
+import { resolveCurrentActor } from "@/lib/certifications/store";
 
 export const metadata = {
   title: "Profile & Appearance — Touch Grass Later",
@@ -10,8 +10,7 @@ export const metadata = {
 };
 
 export default async function ProfilePage() {
-  const configured = isSupabaseConfigured();
-  const { user } = await resolveCurrentActor();
+  const { user, configured } = await resolveCurrentActor();
 
   if (configured && !user) {
     redirect("/auth/login?next=/profile");
@@ -25,10 +24,11 @@ export default async function ProfilePage() {
       primaryAction={{ label: "My Learning", href: "/learn" }}
     >
       <ProfileClient
-        initialName={user?.name ?? "Aarav Sharma"}
-        email={user?.email ?? "aarav.sharma@example.edu"}
+        uid={user?.id ?? ""}
+        initialName={user?.name ?? ""}
+        email={user?.email ?? ""}
         role={user?.role ?? "student"}
-        isSandbox={!configured}
+        isSandbox={Boolean(user?.isSandbox)}
       />
     </RoleShell>
   );

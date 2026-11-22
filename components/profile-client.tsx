@@ -1,27 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Palette, Shield, UserCheck } from "lucide-react";
+import { Camera, CheckCircle2, Palette, Shield, UserCheck } from "lucide-react";
+import { useFirebaseAuth } from "@/components/firebase-provider";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { SignOutButton } from "@/components/sign-out-button";
+import {
+  getFirebaseAuth,
+  saveStudentAvatarClient,
+  saveStudentDisplayNameClient,
+} from "@/lib/firebase/client";
+import { uploadProfileImageToStorage } from "@/lib/firebase/storage";
 
 export function ProfileClient({
+  uid,
   initialName,
   email,
   role,
   isSandbox,
 }: {
+  uid?: string;
   initialName: string;
   email: string;
   role: string;
   isSandbox: boolean;
 }) {
   const router = useRouter();
-  const [fullName, setFullName] = useState(initialName);
+  const { user, profile, loading: authLoading } = useFirebaseAuth();
+  const resolvedName = profile?.displayName || initialName || user?.displayName || "";
+  const resolvedEmail = profile?.email || email || user?.email || "";
+  const resolvedRole = profile?.role || role || "student";
+  const resolvedUid = user?.uid || uid || "";
+
+  const [fullName, setFullName] = useState(resolvedName);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(profile?.avatarUrl ?? null);
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setFullName(resolvedName);
+    setAvatarPreview(profile?.avatarUrl ?? null);
+    setNotice("");
+    setError("");
+  }, [resolvedUid, resolvedName, profile?.avatarUrl]);
 
   const handleSaveName = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,10 +58,18 @@ export function ProfileClient({
     setError("");
     setNotice("");
     try {
+      const currentUser = getFirebaseAuth().currentUser;
+      if (currentUser) {
+        await saveStudentDisplayNameClient(trimmed);
+      }
+
       const res = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName: trimmed }),
+        body: JSON.stringify({
+          fullName: trimmed,
+          ...(avatarPreview?.startsWith("https://") ? { avatarUrl: avatarPreview } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -47,8 +79,39 @@ export function ProfileClient({
       setFullName(data.fullName ?? trimmed);
       setNotice("Verified profile name updated. All future and active certificate previews reflect this name.");
       router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save profile.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    setError("");
+    setNotice("");
+    try {
+      const currentUser = getFirebaseAuth().currentUser;
+      if (!currentUser) {
+        setNotice("Sign in with Firebase Authentication to upload and persist a profile photo to Cloud Storage.");
+        return;
+      }
+      const { downloadUrl } = await uploadProfileImageToStorage(file);
+      setAvatarPreview(downloadUrl);
+      await saveStudentAvatarClient(downloadUrl);
+      await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fullName: fullName.trim() || initialName, avatarUrl: downloadUrl }),
+      });
+      setNotice("Profile photo uploaded to Firebase Storage and synced to Firestore.");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload profile photo.");
+    } finally {
+      setUploadingPhoto(false);
     }
   };
 
@@ -73,6 +136,42 @@ export function ProfileClient({
         </div>
 
         <form onSubmit={handleSaveName} className="mt-6 space-y-4">
+          <div className="tgl-subsurface flex flex-wrap items-center justify-between gap-4 rounded-2xl p-4">
+            <div className="flex items-center gap-3">
+              {avatarPreview ? (
+                <img
+                  src={avatarPreview}
+                  alt={fullName || "Learner avatar"}
+                  referrerPolicy="no-referrer"
+                  className="size-11 rounded-full object-cover"
+                />
+              ) : (
+                <span className="grid size-11 place-items-center rounded-full bg-accent/12 text-xs font-semibold text-accent">
+                  {(fullName || "TG")
+                    .split(/\s+/)
+                    .slice(0, 2)
+                    .map((part) => part[0]?.toUpperCase() ?? "")
+                    .join("") || "TG"}
+                </span>
+              )}
+              <div>
+                <p className="text-xs font-medium text-foreground">Profile photo (Firebase Storage)</p>
+                <p className="text-[11px] text-muted-foreground">PNG, JPEG, or WebP up to 5 MB</p>
+              </div>
+            </div>
+            <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-foreground hover:border-foreground/30">
+              <Camera size={14} aria-hidden="true" />
+              <span>{uploadingPhoto ? "Uploading..." : "Upload photo"}</span>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(e) => void handlePhotoUpload(e)}
+                disabled={uploadingPhoto}
+                className="sr-only"
+              />
+            </label>
+          </div>
+
           <label className="block text-xs font-medium text-foreground">
             Verified full name
             <input
@@ -87,13 +186,15 @@ export function ProfileClient({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="tgl-subsurface rounded-2xl p-4 text-xs">
               <p className="text-muted-foreground">Account email</p>
-              <p className="mt-1 font-medium text-foreground">{email}</p>
+              <p className="mt-1 break-all font-medium text-foreground">
+                {authLoading && !resolvedEmail ? "Verifying session…" : resolvedEmail}
+              </p>
             </div>
             <div className="tgl-subsurface rounded-2xl p-4 text-xs">
               <p className="text-muted-foreground">Portal role</p>
               <p className="mt-1 inline-flex items-center gap-1.5 font-medium capitalize text-foreground">
                 <Shield size={13} className="text-accent" aria-hidden="true" />
-                {role} {isSandbox ? "(Sandbox preview)" : ""}
+                {resolvedRole} {isSandbox ? "(Sandbox preview)" : ""}
               </p>
             </div>
           </div>

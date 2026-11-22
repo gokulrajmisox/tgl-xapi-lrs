@@ -1,10 +1,8 @@
 import { notFound } from "next/navigation";
 import { Header } from "@/components/header";
+import { SiteFooter } from "@/components/site-footer";
 import { CourseWorkspaceClient } from "@/components/course-workspace-client";
-import {
-  isSupabaseConfigured,
-  resolveCurrentActor,
-} from "@/lib/certifications/store";
+import { resolveCurrentActor } from "@/lib/certifications/store";
 import { getCourseDetailForActor } from "@/lib/courses/store";
 import { buildProgrammeWorkspacePayload } from "@/lib/learning/course-workspace";
 
@@ -30,7 +28,6 @@ export default async function CourseDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const configured = isSupabaseConfigured();
   const actor = await resolveCurrentActor();
 
   const payload = await buildProgrammeWorkspacePayload({
@@ -57,9 +54,10 @@ export default async function CourseDetailPage({
           initialClaimedAt={payload.claimedAt}
           initialProjectSubmissions={payload.projectSubmissions}
           user={actor.user}
-          isSandbox={!configured}
+          isSandbox={Boolean(actor.user?.isSandbox)}
         />
       </main>
+      <SiteFooter />
     </div>
   );
 }

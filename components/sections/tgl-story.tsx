@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { enrichedPathways } from "@/lib/learning-graph";
 import { InternshipCertificateSection } from "@/components/sections/internship-certificate-section";
+import { SiteFooter } from "@/components/site-footer";
 import ScrollExpand from "@/components/react-bits/ScrollExpand";
 import TextLoop from "@/components/react-bits/TextLoop";
 
@@ -206,22 +207,7 @@ export function TglStory() {
 
       <InternshipCertificateSection />
 
-      <footer className="border-t border-border bg-background px-6 py-8 text-muted-foreground md:px-12 lg:px-20">
-        <div className="mx-auto flex max-w-[1280px] flex-col justify-between gap-4 text-[11px] sm:flex-row">
-          <span className="font-semibold tracking-[0.16em] text-foreground">
-            TOUCH GRASS LATER
-          </span>
-          <span>Learn. Build. Grow.</span>
-          <span className="flex flex-wrap gap-3">
-            <Link href="/programmes" className="hover:text-foreground">Explore</Link> ·{" "}
-            <Link href="/learn" className="hover:text-foreground">My Learning</Link> ·{" "}
-            <Link href="/certificates" className="hover:text-foreground">Certificates</Link> ·{" "}
-            <Link href="/profile" className="hover:text-foreground">Profile</Link> ·{" "}
-            <Link href="/mentor" className="hover:text-foreground">Mentor</Link> ·{" "}
-            <Link href="/admin" className="hover:text-foreground">Admin</Link>
-          </span>
-        </div>
-      </footer>
+      <SiteFooter />
     </>
   );
 }

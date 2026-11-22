@@ -10,7 +10,7 @@ const FailSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const actor = await resolveCurrentActor();
+  const actor = await resolveCurrentActor({ request });
   if (!actor.user) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   }

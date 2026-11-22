@@ -9,8 +9,8 @@ import {
   requireAdminActor,
 } from "@/lib/certifications/store";
 
-export async function GET() {
-  const auth = await requireAdminActor();
+export async function GET(request: Request) {
+  const auth = await requireAdminActor(request);
   if (auth.error) return NextResponse.json({ error: auth.error.message }, { status: auth.error.status });
 
   const [products, orders, payments, issuances, applications, internships] = await Promise.all([

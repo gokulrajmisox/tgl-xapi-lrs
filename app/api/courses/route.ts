@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { resolveCurrentActor } from "@/lib/certifications/store";
+import { requireAdminActor, resolveCurrentActor } from "@/lib/certifications/store";
 import {
   createAdminCourse,
   listCoursesCatalog,
@@ -46,10 +46,12 @@ const PatchCourseSchema = z.object({
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const includeUnpublished = searchParams.get("all") === "true";
-  const actor = await resolveCurrentActor({
-    allowSandboxAdmin: includeUnpublished,
-  });
-  const isAdmin = actor.user?.role === "admin";
+  const actor = await resolveCurrentActor({ request });
+  let isAdmin = false;
+  if (includeUnpublished) {
+    const adminAuth = await requireAdminActor(request);
+    isAdmin = !adminAuth.error;
+  }
   const courses = await listCoursesCatalog(
     actor.user?.id ?? null,
     includeUnpublished && isAdmin,
@@ -61,9 +63,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const actor = await resolveCurrentActor({ allowSandboxAdmin: true });
-  if (!actor.user || actor.user.role !== "admin") {
-    return NextResponse.json({ error: "Admin role required." }, { status: 403 });
+  const auth = await requireAdminActor(request);
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error.message }, { status: auth.error.status });
   }
 
   const parsed = CreateCourseSchema.safeParse(await request.json().catch(() => null));
@@ -86,9 +88,9 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const actor = await resolveCurrentActor({ allowSandboxAdmin: true });
-  if (!actor.user || actor.user.role !== "admin") {
-    return NextResponse.json({ error: "Admin role required." }, { status: 403 });
+  const auth = await requireAdminActor(request);
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error.message }, { status: auth.error.status });
   }
 
   const parsed = PatchCourseSchema.safeParse(await request.json().catch(() => null));

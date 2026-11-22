@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Download, ExternalLink, Printer, ShieldCheck, ShieldX } from "lucide-react";
+import { Check, Copy, Download, ExternalLink, Printer, ShieldCheck, ShieldX } from "lucide-react";
 import QRCode from "qrcode";
 
 export type CertificatePreviewData = {
@@ -11,7 +11,10 @@ export type CertificatePreviewData = {
   certificateTitle: string;
   achievementTitle: string;
   organization?: string;
+  joinedAt?: string | null;
+  completedAt?: string | null;
   issuedAt: string | null;
+  authorizedSignatory?: string;
   status: "issued" | "revoked" | "preview";
   revocationReason?: string | null;
 };
@@ -26,6 +29,7 @@ export function CertificateDocument({
   showActions?: boolean;
 }) {
   const [qrSvg, setQrSvg] = useState<string>("");
+  const [copiedLink, setCopiedLink] = useState(false);
   const origin = typeof window !== "undefined" ? window.location.origin : "https://touchgrasslater.org";
   const verifyPath = `/verify/certificate/${encodeURIComponent(data.certificateId)}`;
   const verificationUrl = `${origin}${verifyPath}`;
@@ -48,13 +52,26 @@ export function CertificateDocument({
     };
   }, [verificationUrl, compact]);
 
-  const formattedDate = data.issuedAt
-    ? new Date(data.issuedAt).toLocaleDateString("en-IN", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })
-    : "Pending verification";
+  const formatOptionalDate = (val?: string | null, fallback = "Pending verification") =>
+    val
+      ? new Date(val).toLocaleDateString("en-IN", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        })
+      : fallback;
+
+  const formattedDate = formatOptionalDate(data.issuedAt);
+  const formattedJoined = formatOptionalDate(data.joinedAt, "Enrolled");
+  const formattedCompleted = formatOptionalDate(data.completedAt ?? data.issuedAt, "Completed");
+
+  const handleCopyVerifyLink = () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard) return;
+    void navigator.clipboard.writeText(verificationUrl).then(() => {
+      setCopiedLink(true);
+      window.setTimeout(() => setCopiedLink(false), 2200);
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -67,7 +84,7 @@ export function CertificateDocument({
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black/10 pb-5">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-black/55">
-              {data.organization ?? "Touch Grass Later"}
+              {data.organization ?? "TGL Learning Portal"}
             </p>
             <h3
               className={`mt-2 font-medium tracking-[-0.04em] text-[#111111] ${
@@ -114,17 +131,29 @@ export function CertificateDocument({
         </div>
 
         <div className="flex flex-col justify-between gap-5 border-t border-black/10 pt-5 sm:flex-row sm:items-end">
-          <div className="space-y-1 text-xs text-black/65">
+          <div className="grid gap-x-8 gap-y-1.5 text-xs text-black/65 sm:grid-cols-2">
+            <p>
+              Joined on: <span className="font-medium tabular-nums text-[#111111]">{formattedJoined}</span>
+            </p>
+            <p>
+              Completed on: <span className="font-medium tabular-nums text-[#111111]">{formattedCompleted}</span>
+            </p>
             <p>
               Issue date: <span className="font-medium tabular-nums text-[#111111]">{formattedDate}</span>
             </p>
             <p>
+              Authorized signatory:{" "}
+              <span className="font-medium text-[#111111]">
+                {data.authorizedSignatory ?? "Gokulraj · TGL Portal"}
+              </span>
+            </p>
+            <p className="sm:col-span-2">
               Certificate ID:{" "}
               <span className="font-mono text-[11px] font-medium tabular-nums text-[#111111]">
                 {data.certificateId}
               </span>
             </p>
-            <p className="truncate text-[11px] text-black/50">
+            <p className="truncate text-[11px] text-black/50 sm:col-span-2">
               Verify: {verifyPath}
             </p>
           </div>
@@ -152,24 +181,32 @@ export function CertificateDocument({
               <a
                 href={`/api/certificates/${encodeURIComponent(data.certificateId)}/pdf`}
                 download={`${data.certificateId}.pdf`}
-                className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-xs font-medium text-accent-foreground transition-opacity hover:opacity-90 whitespace-nowrap shrink-0"
+                className="inline-flex min-h-10 items-center gap-2 rounded-full bg-accent px-4 py-2 text-xs font-medium text-accent-foreground transition-opacity hover:opacity-90 whitespace-nowrap shrink-0"
               >
                 <Download size={14} aria-hidden="true" />
-                Download certificate
+                Download certificate PDF
               </a>
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30 whitespace-nowrap shrink-0"
+                className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30 whitespace-nowrap shrink-0"
               >
                 <Printer size={14} aria-hidden="true" />
                 Print / Save PDF
               </button>
             </>
           )}
+          <button
+            type="button"
+            onClick={handleCopyVerifyLink}
+            className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30 whitespace-nowrap shrink-0"
+          >
+            {copiedLink ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+            {copiedLink ? "Verification link copied" : "Copy verification link"}
+          </button>
           <Link
             href={verifyPath}
-            className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-accent transition-colors hover:border-accent/50 whitespace-nowrap shrink-0"
+            className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-accent transition-colors hover:border-accent/50 whitespace-nowrap shrink-0"
           >
             Public verification <ExternalLink size={13} aria-hidden="true" />
           </Link>

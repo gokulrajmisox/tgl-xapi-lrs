@@ -3,11 +3,11 @@ import { resolveCurrentActor } from "@/lib/certifications/store";
 import { buildProgrammeWorkspacePayload } from "@/lib/learning/course-workspace";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params;
-  const actor = await resolveCurrentActor();
+  const actor = await resolveCurrentActor({ request });
   const payload = await buildProgrammeWorkspacePayload({
     slug,
     user: actor.user,

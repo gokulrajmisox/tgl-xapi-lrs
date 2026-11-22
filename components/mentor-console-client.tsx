@@ -9,6 +9,7 @@ import type {
   ProjectSubmissionRecord,
   ProjectSubmissionStatus,
 } from "@/lib/learning-workspace-store";
+import { syncMentorReviewToFirestore } from "@/lib/firebase/firestore-sync";
 
 type AssignedLearner = {
   userId: string;
@@ -70,6 +71,17 @@ export function MentorConsoleClient({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Review update failed.");
+      const targetSub = submissions.find((s) => s.id === submissionId);
+      if (targetSub) {
+        void syncMentorReviewToFirestore({
+          submissionId,
+          studentUid: targetSub.userId,
+          projectSlug: targetSub.projectSlug,
+          decision,
+          mentorFeedback: feedback,
+          mentorName: "Kabir Malhotra",
+        });
+      }
       setSubmissions(data.submissions ?? []);
       setNotice(
         decision === "approved"

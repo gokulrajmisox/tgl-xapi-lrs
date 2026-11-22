@@ -9,8 +9,12 @@ import {
   POST as workspacePost,
 } from "../../app/api/workspace/learner/route";
 import { resetCoursesStoreForTest } from "../../lib/courses/store";
-import { resetMemoryStoreForTest } from "../../lib/certifications/store";
+import { DEMO_STUDENT_ID, resetMemoryStoreForTest } from "../../lib/certifications/store";
 import { resetWorkspaceStoreForTest } from "../../lib/learning-workspace-store";
+import {
+  createSignedSessionToken,
+  FIREBASE_SESSION_COOKIE_NAME,
+} from "../../lib/firebase/server";
 
 test("progression steps strictly remain locked until prerequisites complete in order", () => {
   // 1. Freshly enrolled student with partial lessons
@@ -192,10 +196,37 @@ test("POST /api/workspace/learner blocks project start/submit with 403 when cour
   resetCoursesStoreForTest();
   resetWorkspaceStoreForTest();
 
+  // Unauthenticated request must return 401 (never auto-login)
+  const unauthRes = await workspacePost(
+    new Request("http://localhost:3000/api/workspace/learner", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "start_project",
+        projectSlug: "cli-telemetry-analyzer",
+      }),
+    }),
+  );
+  assert.equal(unauthRes.status, 401);
+
+  const studentToken = createSignedSessionToken({
+    uid: DEMO_STUDENT_ID,
+    email: "aarav.sharma@example.edu",
+    displayName: "Aarav Sharma",
+    avatarUrl: null,
+    emailVerified: true,
+    authProvider: "password",
+    role: "student",
+  });
+  const authHeaders = {
+    "Content-Type": "application/json",
+    cookie: `${FIREBASE_SESSION_COOKIE_NAME}=${studentToken}`,
+  };
+
   // Demo student is enrolled in python-systems-cli ("cli-telemetry-analyzer") with 1/5 lessons done and no quiz pass
   const req = new Request("http://localhost:3000/api/workspace/learner", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders,
     body: JSON.stringify({
       action: "start_project",
       projectSlug: "cli-telemetry-analyzer",
@@ -209,7 +240,7 @@ test("POST /api/workspace/learner blocks project start/submit with 403 when cour
   // Attempting to submit web project directly without enrolling in web-architecture-systems also returns 403
   const submitReq = new Request("http://localhost:3000/api/workspace/learner", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders,
     body: JSON.stringify({
       action: "submit_project",
       projectSlug: "accessible-learning-portfolio",

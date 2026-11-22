@@ -1,0 +1,74 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isVerified() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isVerified() && request.auth.token.email in [
+        'gokulrajmisox@gmail.com',
+        'gokulrajmathsmaths@gmail.com'
+      ];
+    }
+
+    function isAllowedImage() {
+      return request.resource.size > 0
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(png|jpeg|jpg|webp|svg\\+xml)');
+    }
+
+    function isAllowedSubmissionFile() {
+      return request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && (
+          request.resource.contentType.matches('image/(png|jpeg|jpg|webp)')
+          || request.resource.contentType == 'application/pdf'
+          || request.resource.contentType == 'application/zip'
+          || request.resource.contentType == 'text/plain'
+          || request.resource.contentType == 'text/markdown'
+        );
+    }
+
+    // Private profile images: readable/writable only by owner or verified admin
+    match /profile_images/{userId}/{fileName} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) && isAllowedImage();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Private student project & assignment deliverables: NEVER public
+    match /submissions/{userId}/{fileName} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) && isAllowedSubmissionFile();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Admin-managed course thumbnails and lesson resources
+    match /courses/{courseId}/{allPaths=**} {
+      allow read: if isSignedIn() || isAdmin();
+      allow write: if isAdmin() && isAllowedSubmissionFile();
+      allow delete: if isAdmin();
+    }
+
+    // Generated certificate PDFs: server/admin write only; readable by verification flow
+    match /certificates/{certificateId}/{fileName} {
+      allow read: if isSignedIn() || isAdmin();
+      allow write: if false;
+    }
+
+    // Default deny catch-all
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

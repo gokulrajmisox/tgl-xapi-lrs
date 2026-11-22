@@ -70,6 +70,8 @@ type Issuance = {
   issuance_status: "issued" | "revoked" | "pending_approval";
   revocation_reason: string | null;
   issued_at: string | null;
+  regeneration_count?: number;
+  regenerated_at?: string | null;
 };
 
 import type {
@@ -155,6 +157,7 @@ export function AdminCertificationsPanel({
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [refundReasons, setRefundReasons] = useState<Record<string, string>>({});
   const [revokeReasons, setRevokeReasons] = useState<Record<string, string>>({});
+  const [regenNames, setRegenNames] = useState<Record<string, string>>({});
 
   const [selectedTemplateKey, setSelectedTemplateKey] = useState<EmailTemplateKey>("payment_success");
   const [editSubject, setEditSubject] = useState("");
@@ -386,6 +389,33 @@ export function AdminCertificationsPanel({
     }
   };
 
+  const handleRegenerateCertificate = async (cert: Issuance) => {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const updatedName = (regenNames[cert.certificate_id] ?? cert.recipient_name).trim();
+      const res = await fetch("/api/admin/certifications/issuances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "regenerate_certificate",
+          certificateId: cert.certificate_id,
+          recipientName: updatedName || undefined,
+          reason: "Admin credential regeneration",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Regeneration failed.");
+      setNotice(`Regenerated ${cert.certificate_id} (revision #${data.issuance?.regeneration_count ?? 1}).`);
+      await loadAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Certificate regeneration failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleSaveTemplate = async () => {
     setBusy(true);
     setError("");
@@ -546,7 +576,7 @@ export function AdminCertificationsPanel({
 
       {isSandbox && (
         <p className="mt-5 rounded-xl border border-[var(--accent)]/35 bg-[var(--accent)]/10 px-4 py-3 text-xs text-foreground">
-          Sandbox mode active (Supabase env vars not set). All state updates, refunds, revocations, auto-issued certificates, and test email logs run in server memory.
+          Sandbox mode active (Firebase Admin service account credentials not set). All state updates, refunds, revocations, auto-issued certificates, and test email logs run in server memory.
         </p>
       )}
 
@@ -970,6 +1000,9 @@ export function AdminCertificationsPanel({
                         <strong className={cert.issuance_status === "revoked" ? "text-rose-600 dark:text-rose-300" : "text-emerald-600 dark:text-emerald-300"}>
                           {cert.issuance_status}
                         </strong>
+                        {cert.regeneration_count && cert.regeneration_count > 0
+                          ? ` · Regenerated ${cert.regeneration_count}x`
+                          : ""}
                       </p>
                       {cert.revocation_reason && (
                         <p className="mt-1 text-rose-700 dark:text-rose-200">Audit reason: {cert.revocation_reason}</p>
@@ -984,40 +1017,64 @@ export function AdminCertificationsPanel({
                   </div>
 
                   {cert.issuance_status !== "revoked" && (
-                    <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
-                      <input
-                        type="text"
-                        placeholder="Mandatory audit reason for revocation..."
-                        value={revokeReasons[cert.certificate_id] ?? ""}
-                        onChange={(e) =>
-                          setRevokeReasons((prev) => ({
-                            ...prev,
-                            [cert.certificate_id]: e.target.value,
-                          }))
-                        }
-                        className="h-9 flex-1 rounded-lg border border-border bg-input px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                      />
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => {
-                          const reason = (revokeReasons[cert.certificate_id] || "").trim();
-                          if (reason.length < 5) {
-                            setError("Enter an audit reason (at least 5 characters) before revoking a certificate.");
-                            return;
+                    <div className="mt-4 space-y-2.5 border-t border-border pt-3">
+                      <div className="flex flex-wrap gap-2">
+                        <input
+                          type="text"
+                          placeholder="Recipient name (optional update)"
+                          value={regenNames[cert.certificate_id] ?? cert.recipient_name}
+                          onChange={(e) =>
+                            setRegenNames((prev) => ({
+                              ...prev,
+                              [cert.certificate_id]: e.target.value,
+                            }))
                           }
-                          setError("");
-                          setPendingConfirm({
-                            type: "revoke",
-                            certificateId: cert.certificate_id,
-                            recipientName: cert.recipient_name,
-                            reason,
-                          });
-                        }}
-                        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-rose-500/35 px-3.5 py-2 text-xs text-rose-700 transition-colors hover:bg-rose-500/10 dark:text-rose-200"
-                      >
-                        <ShieldX size={13} /> Revoke
-                      </button>
+                          className="h-9 flex-1 rounded-lg border border-border bg-input px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void handleRegenerateCertificate(cert)}
+                          className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
+                        >
+                          <RefreshCw size={12} aria-hidden="true" /> Regenerate
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <input
+                          type="text"
+                          placeholder="Mandatory audit reason for revocation..."
+                          value={revokeReasons[cert.certificate_id] ?? ""}
+                          onChange={(e) =>
+                            setRevokeReasons((prev) => ({
+                              ...prev,
+                              [cert.certificate_id]: e.target.value,
+                            }))
+                          }
+                          className="h-9 flex-1 rounded-lg border border-border bg-input px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            const reason = (revokeReasons[cert.certificate_id] || "").trim();
+                            if (reason.length < 5) {
+                              setError("Enter an audit reason (at least 5 characters) before revoking a certificate.");
+                              return;
+                            }
+                            setError("");
+                            setPendingConfirm({
+                              type: "revoke",
+                              certificateId: cert.certificate_id,
+                              recipientName: cert.recipient_name,
+                              reason,
+                            });
+                          }}
+                          className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-rose-500/35 px-3.5 py-2 text-xs text-rose-700 transition-colors hover:bg-rose-500/10 dark:text-rose-200"
+                        >
+                          <ShieldX size={13} /> Revoke
+                        </button>
+                      </div>
                     </div>
                   )}
                 </article>

@@ -17,7 +17,7 @@ import {
   verifyAndCaptureCheckoutPayment,
   type SandboxUser,
 } from "../../lib/certifications/store";
-import { DEMO_STUDENT_ID } from "../../lib/supabase/service";
+import { DEMO_STUDENT_ID } from "../../lib/firebase/server";
 import { computeWebhookSignatureForTest } from "../../lib/payments/razorpay";
 
 const studentUser: SandboxUser = {

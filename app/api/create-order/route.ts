@@ -4,30 +4,17 @@ import {
   createCourseEnrollmentOrder,
   resolveCurrentActor,
 } from "@/lib/certifications/store";
-import {
-  createRazorpayOrder,
-  RazorpayGatewayError,
-} from "@/lib/payments/razorpay";
+import { RazorpayGatewayError } from "@/lib/payments/razorpay";
 
-const CourseOrderSchema = z.object({
-  courseId: z.string().trim().min(2).max(120),
-  orderKind: z.enum(["programme_enrollment", "course_enrollment"]).optional(),
-});
-
-const DirectAmountOrderSchema = z.object({
-  amount: z.number(),
-  currency: z.literal("INR").optional().default("INR"),
-  receipt: z.string().trim().min(2).max(40).optional(),
-  notes: z.record(z.string(), z.string()).optional(),
-});
-
-const CreateOrderRequestSchema = z.union([
-  CourseOrderSchema,
-  DirectAmountOrderSchema,
-]);
+const CourseOrderSchema = z
+  .object({
+    courseId: z.string().trim().min(2).max(120),
+    orderKind: z.enum(["programme_enrollment", "course_enrollment"]).optional(),
+  })
+  .strict();
 
 export async function POST(request: Request) {
-  const actor = await resolveCurrentActor();
+  const actor = await resolveCurrentActor({ request });
   if (!actor.user || actor.user.isSandbox) {
     return NextResponse.json(
       { error: "Sign in required to create an order." },
@@ -36,56 +23,39 @@ export async function POST(request: Request) {
   }
 
   const rawBody = await request.json().catch(() => null);
-  const parsed = CreateOrderRequestSchema.safeParse(rawBody);
+  const parsed = CourseOrderSchema.safeParse(rawBody);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Invalid order request payload." },
+      {
+        error:
+          "Invalid order payload. Programme prices are derived strictly on the server from the courseId catalog record.",
+      },
       { status: 400 },
     );
   }
 
   try {
-    if ("courseId" in parsed.data) {
-      const result = await createCourseEnrollmentOrder({
-        user: actor.user,
-        courseId: parsed.data.courseId,
-        orderKind: parsed.data.orderKind ?? "programme_enrollment",
-      });
-      if (result.error || !result.order) {
-        return NextResponse.json(
-          { error: result.error ?? "Unable to create Razorpay order." },
-          { status: result.status ?? 400 },
-        );
-      }
-
+    const result = await createCourseEnrollmentOrder({
+      user: actor.user,
+      courseId: parsed.data.courseId,
+      orderKind: parsed.data.orderKind ?? "programme_enrollment",
+    });
+    if (result.error || !result.order) {
       return NextResponse.json(
-        {
-          order_id: result.order.razorpay_order_id,
-          amount: result.order.amount_paise,
-          currency: result.order.currency,
-          key_id: result.keyId ?? null,
-          isSimulated: Boolean(result.isSimulated),
-          order: result.order,
-          courseTitle: result.courseTitle ?? null,
-        },
-        { status: 201, headers: { "Cache-Control": "no-store" } },
+        { error: result.error ?? "Unable to create Razorpay order." },
+        { status: result.status ?? 400 },
       );
     }
 
-    const rpOrder = await createRazorpayOrder({
-      amountPaise: parsed.data.amount,
-      currency: parsed.data.currency,
-      receipt: parsed.data.receipt ?? `tgl_ord_${Date.now()}`,
-      notes: parsed.data.notes,
-    });
-
     return NextResponse.json(
       {
-        order_id: rpOrder.razorpayOrderId,
-        amount: rpOrder.amountPaise,
-        currency: rpOrder.currency,
-        key_id: rpOrder.keyId,
-        isSimulated: rpOrder.isSimulated,
+        order_id: result.order.razorpay_order_id,
+        amount: result.order.amount_paise,
+        currency: result.order.currency,
+        key_id: result.keyId ?? null,
+        isSimulated: Boolean(result.isSimulated),
+        order: result.order,
+        courseTitle: result.courseTitle ?? null,
       },
       { status: 201, headers: { "Cache-Control": "no-store" } },
     );

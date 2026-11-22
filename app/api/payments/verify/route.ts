@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { resolveCurrentActor, verifyAndCaptureCheckoutPayment } from "@/lib/certifications/store";
+import {
+  listOrders,
+  resolveCurrentActor,
+  verifyAndCaptureCheckoutPayment,
+} from "@/lib/certifications/store";
 
 const VerifySchema = z.object({
   razorpayOrderId: z.string().trim().min(4).max(120),
@@ -11,14 +15,25 @@ const VerifySchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const actor = await resolveCurrentActor();
-  if (!actor.user) {
+  const actor = await resolveCurrentActor({ request });
+  if (!actor.user || actor.user.isSandbox) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   }
 
   const parsed = VerifySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "Missing required Razorpay verification fields." }, { status: 400 });
+  }
+
+  const userOrders = await listOrders(actor.user.id);
+  const matchedOrder = userOrders.find(
+    (o) => o.razorpay_order_id === parsed.data.razorpayOrderId,
+  );
+  if (!matchedOrder) {
+    return NextResponse.json(
+      { error: "Order record not found for the signed-in student." },
+      { status: 404 },
+    );
   }
 
   const result = await verifyAndCaptureCheckoutPayment({

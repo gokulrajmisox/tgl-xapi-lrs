@@ -10,10 +10,13 @@ import {
 import { canAccessCourseProject } from "@/lib/learning/progression";
 import {
   getLearnerSnapshot,
+  getLearnerSnapshotAsync,
   postMentorMessage,
   setLearnerNodeState,
   startLearnerProjectWork,
   submitLearnerProjectWork,
+  syncMentorMessageToFirestore,
+  syncWorkspaceSubmissionToFirestore,
   toggleLearnerSavedItem,
 } from "@/lib/learning-workspace-store";
 
@@ -97,37 +100,27 @@ async function checkLinkedCourseProjectPrerequisite(params: {
   });
 }
 
-export async function GET() {
-  const { user, configured } = await resolveCurrentActor();
-  if (configured && !user) {
+export async function GET(request: Request) {
+  const { user } = await resolveCurrentActor({ request });
+  if (!user) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   }
-  const actor = user ?? {
-    id: "00000000-0000-4000-8000-000000000101",
-    name: "Aarav Sharma",
-    email: "aarav.sharma@example.edu",
-    role: "student" as const,
-    isSandbox: true,
-  };
 
-  return NextResponse.json({
-    user: actor,
-    workspace: getLearnerSnapshot(actor.id),
-  });
+  return NextResponse.json(
+    {
+      user,
+      workspace: await getLearnerSnapshotAsync(user.id),
+    },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 export async function POST(request: Request) {
-  const { user, configured } = await resolveCurrentActor();
-  if (configured && !user) {
+  const { user } = await resolveCurrentActor({ request });
+  if (!user) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   }
-  const actor = user ?? {
-    id: "00000000-0000-4000-8000-000000000101",
-    name: "Aarav Sharma",
-    email: "aarav.sharma@example.edu",
-    role: "student" as const,
-    isSandbox: true,
-  };
+  const actor = user;
 
   const parsed = ActionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
@@ -177,6 +170,9 @@ export async function POST(request: Request) {
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 404 });
     }
+    if (result.submission) {
+      await syncWorkspaceSubmissionToFirestore(result.submission);
+    }
     return NextResponse.json({
       submission: result.submission,
       workspace: getLearnerSnapshot(actor.id),
@@ -219,6 +215,9 @@ export async function POST(request: Request) {
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 404 });
     }
+    if (result.submission) {
+      await syncWorkspaceSubmissionToFirestore(result.submission);
+    }
     return NextResponse.json({
       submission: result.submission,
       workspace: getLearnerSnapshot(actor.id),
@@ -235,6 +234,7 @@ export async function POST(request: Request) {
     authorName: actor.name,
     body: input.body,
   });
+  await syncMentorMessageToFirestore(message);
 
   return NextResponse.json({
     message,

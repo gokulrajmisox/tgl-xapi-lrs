@@ -6,7 +6,6 @@ import { StudentCertificationsPanel } from "@/components/student-certifications-
 import { getLearnerSnapshot } from "@/lib/learning-workspace-store";
 import {
   DEMO_STUDENT_ID,
-  isSupabaseConfigured,
   resolveCurrentActor,
 } from "@/lib/certifications/store";
 
@@ -17,8 +16,7 @@ export const metadata = {
 };
 
 export default async function StudentPortfolioPage() {
-  const configured = isSupabaseConfigured();
-  const { user } = await resolveCurrentActor();
+  const { user, configured } = await resolveCurrentActor();
 
   if (configured && !user) {
     redirect("/auth/login?next=/learn/portfolio");

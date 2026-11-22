@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Header } from "@/components/header";
-import { AdminCertificationsPanel } from "@/components/admin-certifications-panel";
-import { isSupabaseConfigured, resolveCurrentActor } from "@/lib/certifications/store";
+import { isPrivilegedStaffEmail } from "@/lib/auth/access";
+import { resolveCurrentActor } from "@/lib/certifications/store";
 
 export const metadata = {
   title: "Admin: Payments, Certificates & Email — Touch Grass Later",
@@ -10,14 +9,13 @@ export const metadata = {
 };
 
 export default async function AdminCertificationsPage() {
-  const configured = isSupabaseConfigured();
-  const { user } = await resolveCurrentActor({ allowSandboxAdmin: !configured });
+  const { user, configured } = await resolveCurrentActor();
 
   if (configured && !user) {
-    redirect("/auth/login?next=/admin/certifications");
+    redirect("/auth/login?next=/admin?section=payments");
   }
 
-  if (configured && user?.role !== "admin") {
+  if (configured && (!user || user.role !== "admin" || !isPrivilegedStaffEmail(user.email))) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
         <section className="tgl-glass max-w-lg rounded-2xl p-8">
@@ -26,21 +24,16 @@ export default async function AdminCertificationsPage() {
             Administrator claim required.
           </h1>
           <p className="mt-4 text-sm leading-6 text-muted-foreground">
-            This account does not hold the server-managed Supabase app metadata claim{" "}
+            This account does not hold the Firebase Authentication server-verified claim{" "}
             <code className="text-[var(--accent)]">role=admin</code>.
           </p>
-          <Link href="/" className="mt-6 inline-flex text-xs text-[var(--accent)] underline underline-offset-4">
-            Return to TGL
+          <Link href="/learn" className="mt-6 inline-flex text-xs text-[var(--accent)] underline underline-offset-4">
+            Return to My Learning
           </Link>
         </section>
       </main>
     );
   }
 
-  return (
-    <main className="min-h-screen bg-background text-foreground">
-      <Header />
-      <AdminCertificationsPanel isSandbox={!configured} />
-    </main>
-  );
+  redirect("/admin?section=payments");
 }

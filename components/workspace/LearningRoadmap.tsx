@@ -17,8 +17,10 @@ import {
   Send,
   ShieldCheck,
 } from "lucide-react";
-import type { CourseLesson } from "@/lib/courses/catalog";
-import type { CourseDetailResponse } from "@/lib/courses/store";
+import type {
+  CourseDetailResponse,
+  SanitizedCourseLesson,
+} from "@/lib/courses/store";
 import type {
   CertificateIssuanceRecord,
   InternshipApplicationRecord,
@@ -33,6 +35,8 @@ import type {
   ProgressionStepKey,
   UnifiedProgrammeProgression,
 } from "@/lib/learning/progression";
+import { LessonStudyViewer } from "./LessonStudyViewer";
+import { ModuleQuizCard } from "./ModuleQuizCard";
 import { WorkspaceProjectPanel } from "./WorkspaceProjectPanel";
 import { WorkspaceInternshipTasksPanel } from "./WorkspaceInternshipTasksPanel";
 import { WorkspaceCertificatePanel } from "./WorkspaceCertificatePanel";
@@ -55,6 +59,13 @@ export function LearningRoadmap({
   onSelectLessonId,
   busyLessonId,
   onToggleLessonComplete,
+  busyExerciseLessonId,
+  onToggleExerciseComplete,
+  busyKnowledgeLessonId,
+  onSubmitKnowledgeCheck,
+  busyModuleQuizId,
+  moduleQuizExplanations,
+  onSubmitModuleQuiz,
   assignmentTexts,
   assignmentUrls,
   busyAssignmentId,
@@ -103,6 +114,13 @@ export function LearningRoadmap({
   onSelectLessonId: (lessonId: string) => void;
   busyLessonId: string | null;
   onToggleLessonComplete: (lessonId: string) => Promise<void>;
+  busyExerciseLessonId?: string | null;
+  onToggleExerciseComplete?: (lessonId: string, completed: boolean) => Promise<void>;
+  busyKnowledgeLessonId?: string | null;
+  onSubmitKnowledgeCheck?: (lessonId: string, selectedIndex: number) => Promise<void>;
+  busyModuleQuizId?: string | null;
+  moduleQuizExplanations?: Record<string, Record<string, string>>;
+  onSubmitModuleQuiz?: (moduleId: string, answers: Record<string, number>) => Promise<void>;
   assignmentTexts: Record<string, string>;
   assignmentUrls: Record<string, string>;
   busyAssignmentId: string | null;
@@ -138,12 +156,16 @@ export function LearningRoadmap({
 }) {
   const [showAnnouncements, setShowAnnouncements] = useState(false);
 
-  const flatLessons: CourseLesson[] = detail.modules.flatMap((m) => m.lessons);
+  const flatLessons: SanitizedCourseLesson[] = detail.modules.flatMap((m) => m.lessons);
   const activeLesson =
     flatLessons.find((l) => l.id === activeLessonId) ?? flatLessons[0] ?? null;
   const activeLessonIdx = activeLesson
     ? flatLessons.findIndex((l) => l.id === activeLesson.id)
     : -1;
+  const activeModule = activeLesson
+    ? detail.modules.find((m) => m.lessons.some((l) => l.id === activeLesson.id)) ??
+      detail.modules[0]
+    : detail.modules[0];
 
   const lessonsDone =
     detail.course.lessonCount > 0 &&
@@ -347,233 +369,155 @@ export function LearningRoadmap({
                     </div>
                   )}
 
-                  {/* STEP 2: LEARNING MODULES, VIDEO EMBEDS, NOTES & ASSIGNMENTS */}
+                  {/* STEP 2: LEARNING MODULES, VIDEO EMBEDS, LABS, MODULE QUIZZES & ASSIGNMENTS */}
                   {step.key === "learning_modules" && activeLesson && (
                     <div className="space-y-6">
                       <div className="grid gap-6 lg:grid-cols-[270px_1fr]">
                         {/* Module & lesson outline */}
                         <div className="tgl-subsurface self-start rounded-2xl p-4">
-                          <p className="px-2 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                          <p className="px-2 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground tabular-nums">
                             Modules &amp; Lessons ({detail.course.completedLessonCount}/
                             {detail.course.lessonCount})
                           </p>
                           <div className="mt-3 space-y-4">
-                            {detail.modules.map((mod) => (
-                              <div key={mod.id} className="space-y-1">
-                                <p className="px-2 text-xs font-semibold text-accent">
-                                  0{mod.sortOrder}. {mod.title}
-                                </p>
-                                <ul className="space-y-1">
-                                  {mod.lessons.map((lesson) => {
-                                    const isDone =
-                                      detail.lessonProgress[lesson.id]?.status === "completed";
-                                    const isActive = activeLesson.id === lesson.id;
-                                    return (
-                                      <li key={lesson.id} className="flex items-center gap-1">
-                                        <button
-                                          type="button"
-                                          aria-label={
-                                            isDone
-                                              ? `Mark ${lesson.title} incomplete`
-                                              : `Mark ${lesson.title} complete`
-                                          }
-                                          disabled={busyLessonId === lesson.id}
-                                          onClick={() => void onToggleLessonComplete(lesson.id)}
-                                          className="grid size-7 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
-                                        >
-                                          {isDone ? (
-                                            <CheckCircle2
-                                              size={14}
-                                              className="text-emerald-600 dark:text-emerald-300"
-                                            />
-                                          ) : (
-                                            <Circle size={14} />
-                                          )}
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => onSelectLessonId(lesson.id)}
-                                          className={`flex-1 rounded-xl px-2.5 py-2 text-left text-xs transition-colors ${
-                                            isActive
-                                              ? "bg-accent font-medium text-accent-foreground"
-                                              : "text-foreground/80 hover:bg-foreground/[0.05]"
-                                          }`}
-                                        >
-                                          <span className="flex items-center gap-1.5">
-                                            {lesson.lessonType === "video" ? (
-                                              <PlayCircle size={12} className="shrink-0" aria-hidden="true" />
+                            {detail.modules.map((mod) => {
+                              const modLessonsDone =
+                                mod.lessons.length > 0 &&
+                                mod.lessons.every(
+                                  (l) => detail.lessonProgress[l.id]?.status === "completed",
+                                );
+                              const modQuizPassed = mod.moduleQuiz
+                                ? Boolean(detail.moduleQuizAttempts[mod.id]?.passed)
+                                : true;
+                              const modComplete = modLessonsDone && modQuizPassed;
+                              return (
+                                <div key={mod.id} className="space-y-1">
+                                  <div className="flex items-center justify-between gap-2 px-2">
+                                    <p className="text-xs font-semibold text-accent">
+                                      0{mod.sortOrder}. {mod.title}
+                                    </p>
+                                    {modComplete && (
+                                      <CheckCircle2
+                                        size={12}
+                                        className="shrink-0 text-emerald-600 dark:text-emerald-300"
+                                        aria-label={`Module ${mod.sortOrder} complete`}
+                                      />
+                                    )}
+                                  </div>
+                                  <ul className="space-y-1">
+                                    {mod.lessons.map((lesson) => {
+                                      const isDone =
+                                        detail.lessonProgress[lesson.id]?.status === "completed";
+                                      const isActive = activeLesson.id === lesson.id;
+                                      return (
+                                        <li key={lesson.id} className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            aria-label={
+                                              isDone
+                                                ? `Mark ${lesson.title} incomplete`
+                                                : `Mark ${lesson.title} complete`
+                                            }
+                                            disabled={busyLessonId === lesson.id}
+                                            onClick={() => void onToggleLessonComplete(lesson.id)}
+                                            className="grid size-7 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
+                                          >
+                                            {isDone ? (
+                                              <CheckCircle2
+                                                size={14}
+                                                className="text-emerald-600 dark:text-emerald-300"
+                                              />
                                             ) : (
-                                              <BookOpen size={12} className="shrink-0" aria-hidden="true" />
+                                              <Circle size={14} />
                                             )}
-                                            <span className="line-clamp-2">{lesson.title}</span>
-                                          </span>
-                                        </button>
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
-                              </div>
-                            ))}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => onSelectLessonId(lesson.id)}
+                                            className={`flex-1 rounded-xl px-2.5 py-2 text-left text-xs transition-colors ${
+                                              isActive
+                                                ? "bg-accent font-medium text-accent-foreground"
+                                                : "text-foreground/80 hover:bg-foreground/[0.05]"
+                                            }`}
+                                          >
+                                            <span className="flex items-center gap-1.5">
+                                              {lesson.lessonType === "video" ? (
+                                                <PlayCircle
+                                                  size={12}
+                                                  className="shrink-0"
+                                                  aria-hidden="true"
+                                                />
+                                              ) : (
+                                                <BookOpen
+                                                  size={12}
+                                                  className="shrink-0"
+                                                  aria-hidden="true"
+                                                />
+                                              )}
+                                              <span className="line-clamp-2">{lesson.title}</span>
+                                            </span>
+                                          </button>
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
 
-                        {/* Active Lesson Study Content */}
-                        <article className="space-y-5">
-                          <div className="tgl-subsurface flex flex-wrap items-start justify-between gap-4 rounded-2xl p-5">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-accent">
-                                {activeLesson.lessonType === "video"
-                                  ? "Curated Video + Study Guide"
-                                  : activeLesson.lessonType === "project_milestone"
-                                    ? "Project Milestone Guide"
-                                    : "Written Study Notes"}{" "}
-                                · {activeLesson.durationLabel}
-                              </p>
-                              <h3 className="mt-1.5 text-xl font-semibold tracking-[-0.03em] text-foreground">
-                                {activeLesson.title}
-                              </h3>
-                              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                                {activeLesson.summary}
-                              </p>
-                            </div>
+                        {/* Active Lesson Study Content + Active Module Quiz */}
+                        <div className="min-w-0 space-y-6">
+                          <LessonStudyViewer
+                            key={activeLesson.id}
+                            lesson={activeLesson}
+                            lessonStatus={
+                              detail.lessonProgress[activeLesson.id]?.status ?? "not_started"
+                            }
+                            exerciseCompletion={detail.exerciseCompletions[activeLesson.id]}
+                            knowledgeCheckResult={detail.knowledgeCheckResults[activeLesson.id]}
+                            busyLesson={busyLessonId === activeLesson.id}
+                            busyExercise={busyExerciseLessonId === activeLesson.id}
+                            busyKnowledgeCheck={busyKnowledgeLessonId === activeLesson.id}
+                            canGoPrev={activeLessonIdx > 0}
+                            canGoNext={activeLessonIdx < flatLessons.length - 1}
+                            allLessonsDone={lessonsDone}
+                            onToggleLessonComplete={() => void onToggleLessonComplete(activeLesson.id)}
+                            onToggleExerciseComplete={(completed) => {
+                              if (onToggleExerciseComplete) {
+                                void onToggleExerciseComplete(activeLesson.id, completed);
+                              }
+                            }}
+                            onSubmitKnowledgeCheck={(selectedIndex) => {
+                              if (onSubmitKnowledgeCheck) {
+                                void onSubmitKnowledgeCheck(activeLesson.id, selectedIndex);
+                              }
+                            }}
+                            onPrevLesson={() => {
+                              const prev = flatLessons[activeLessonIdx - 1];
+                              if (prev) onSelectLessonId(prev.id);
+                            }}
+                            onNextLesson={() => {
+                              const next = flatLessons[activeLessonIdx + 1];
+                              if (next) onSelectLessonId(next.id);
+                            }}
+                            onContinueToQuiz={() => onJumpToStep("modules_completed")}
+                          />
 
-                            <button
-                              type="button"
-                              disabled={busyLessonId === activeLesson.id}
-                              onClick={() => void onToggleLessonComplete(activeLesson.id)}
-                              className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                                detail.lessonProgress[activeLesson.id]?.status === "completed"
-                                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                                  : "bg-primary text-primary-foreground"
-                              }`}
-                            >
-                              <CheckCircle2 size={14} aria-hidden="true" />
-                              {detail.lessonProgress[activeLesson.id]?.status === "completed"
-                                ? "Lesson completed"
-                                : "Mark lesson complete"}
-                            </button>
-                          </div>
-
-                          {/* Curated YouTube Embed */}
-                          {activeLesson.youtubeVideoId && (
-                            <div className="space-y-2.5">
-                              <div className="aspect-video w-full overflow-hidden rounded-2xl border border-border bg-black">
-                                <iframe
-                                  src={`https://www.youtube-nocookie.com/embed/${activeLesson.youtubeVideoId}?rel=0`}
-                                  title={activeLesson.title}
-                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                  allowFullScreen
-                                  className="h-full w-full"
-                                />
-                              </div>
-                              <div className="tgl-subsurface flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-2.5 text-xs text-muted-foreground">
-                                <span>
-                                  Curated external lecture by{" "}
-                                  <strong className="text-foreground">
-                                    {activeLesson.videoCreator ?? "YouTube Educator"}
-                                  </strong>
-                                </span>
-                                {activeLesson.youtubeUrl && (
-                                  <a
-                                    href={activeLesson.youtubeUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1.5 font-medium text-accent hover:underline"
-                                  >
-                                    Watch on YouTube <ExternalLink size={12} aria-hidden="true" />
-                                  </a>
-                                )}
-                              </div>
-                            </div>
+                          {activeModule?.moduleQuiz && onSubmitModuleQuiz && (
+                            <ModuleQuizCard
+                              key={activeModule.id}
+                              moduleId={activeModule.id}
+                              moduleTitle={activeModule.title}
+                              quiz={activeModule.moduleQuiz}
+                              attempt={detail.moduleQuizAttempts[activeModule.id]}
+                              explanations={moduleQuizExplanations?.[activeModule.id]}
+                              busy={busyModuleQuizId === activeModule.id}
+                              onSubmit={onSubmitModuleQuiz}
+                            />
                           )}
-
-                          {/* Structured Written Study Notes */}
-                          <div className="space-y-4">
-                            {activeLesson.noteSections.map((sec) => (
-                              <section
-                                key={sec.heading}
-                                className="tgl-subsurface rounded-2xl p-5"
-                              >
-                                <h4 className="text-sm font-semibold text-foreground sm:text-base">
-                                  {sec.heading}
-                                </h4>
-                                <p className="mt-2 text-xs leading-6 text-foreground/85 sm:text-sm sm:leading-7">
-                                  {sec.body}
-                                </p>
-                                {sec.codeSnippet && (
-                                  <pre className="mt-3 overflow-x-auto rounded-xl border border-border bg-[#111216] p-4 font-mono text-xs leading-5 text-[#e4e4e7]">
-                                    <code>{sec.codeSnippet}</code>
-                                  </pre>
-                                )}
-                                <p className="mt-3 border-t border-border pt-2.5 text-xs font-medium text-accent">
-                                  Key takeaway: {sec.takeaway}
-                                </p>
-                              </section>
-                            ))}
-                          </div>
-
-                          {/* Curated Reference Docs */}
-                          {activeLesson.resources.length > 0 && (
-                            <div className="tgl-subsurface rounded-2xl p-5 text-xs">
-                              <p className="font-semibold text-foreground">
-                                Supporting reference docs
-                              </p>
-                              <ul className="mt-2.5 space-y-1.5">
-                                {activeLesson.resources.map((resLink) => (
-                                  <li key={resLink.id}>
-                                    <a
-                                      href={resLink.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1.5 font-medium text-accent hover:underline"
-                                    >
-                                      {resLink.title} ({resLink.provider})
-                                      <ExternalLink size={12} aria-hidden="true" />
-                                    </a>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          {/* Lesson Footer Navigation */}
-                          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-                            <button
-                              type="button"
-                              disabled={activeLessonIdx <= 0}
-                              onClick={() => {
-                                const prev = flatLessons[activeLessonIdx - 1];
-                                if (prev) onSelectLessonId(prev.id);
-                              }}
-                              className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-foreground disabled:opacity-40"
-                            >
-                              <ArrowLeft size={13} aria-hidden="true" />
-                              Previous lesson
-                            </button>
-
-                            {activeLessonIdx < flatLessons.length - 1 ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const next = flatLessons[activeLessonIdx + 1];
-                                  if (next) onSelectLessonId(next.id);
-                                }}
-                                className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
-                              >
-                                Next lesson <ArrowRight size={13} aria-hidden="true" />
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled={!lessonsDone}
-                                onClick={() => onJumpToStep("modules_completed")}
-                                className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-xs font-medium text-accent-foreground disabled:opacity-45"
-                              >
-                                Continue to Graded Quiz <ArrowRight size={13} aria-hidden="true" />
-                              </button>
-                            )}
-                          </div>
-                        </article>
+                        </div>
                       </div>
 
                       {/* Applied Course Assignments */}

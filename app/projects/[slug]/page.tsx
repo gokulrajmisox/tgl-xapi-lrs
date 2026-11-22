@@ -8,7 +8,7 @@ import {
   type ProjectBrief,
 } from "@/lib/learning-graph";
 import { getLearnerSnapshot } from "@/lib/learning-workspace-store";
-import { DEMO_STUDENT_ID, resolveCurrentActor } from "@/lib/certifications/store";
+import { resolveCurrentActor } from "@/lib/certifications/store";
 import {
   getCourseDetailForActor,
   listAllCoursesRaw,
@@ -42,8 +42,8 @@ export default async function ProjectPage({
   if (!project) notFound();
 
   const { user } = await resolveCurrentActor();
-  const actorId = user?.id ?? DEMO_STUDENT_ID;
-  const workspace = getLearnerSnapshot(actorId);
+  const actorId = user?.id ?? null;
+  const workspace = actorId ? getLearnerSnapshot(actorId) : null;
 
   const allCourses = await listAllCoursesRaw(true);
   const linkedCourse = allCourses.find(
@@ -81,12 +81,10 @@ export default async function ProjectPage({
     .map((s) => findProjectBySlug(s))
     .filter((p): p is ProjectBrief => Boolean(p));
 
-  const projectSubmissions = workspace.submissions.filter(
-    (s) => s.projectSlug === project.slug,
-  );
-  const projectMessages = workspace.messages.filter(
-    (m) => m.projectSlug === project.slug,
-  );
+  const projectSubmissions =
+    workspace?.submissions.filter((s) => s.projectSlug === project.slug) ?? [];
+  const projectMessages =
+    workspace?.messages.filter((m) => m.projectSlug === project.slug) ?? [];
 
   return (
     <RoleShell
@@ -109,7 +107,7 @@ export default async function ProjectPage({
         relatedProjects={relatedProjects}
         initialSubmissions={projectSubmissions}
         initialMessages={projectMessages}
-        initiallySaved={workspace.savedItems.includes(`project:${project.slug}`)}
+        initiallySaved={workspace?.savedItems.includes(`project:${project.slug}`) ?? false}
       />
     </RoleShell>
   );

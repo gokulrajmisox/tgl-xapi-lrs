@@ -174,6 +174,31 @@ export function WorkspaceProjectPanel({
 
         <p className="mt-3 text-xs leading-6 text-foreground/85 sm:text-sm">{project.brief}</p>
 
+        {(project.problemStatement || project.useCase || (project.technologies && project.technologies.length > 0)) && (
+          <div className="mt-4 grid gap-3 border-t border-border pt-4 text-xs sm:grid-cols-2">
+            {project.problemStatement && (
+              <div className="rounded-xl border border-border bg-card p-3.5">
+                <p className="font-semibold text-foreground">Problem Statement</p>
+                <p className="mt-1 leading-5 text-muted-foreground">{project.problemStatement}</p>
+              </div>
+            )}
+            {project.useCase && (
+              <div className="rounded-xl border border-border bg-card p-3.5">
+                <p className="font-semibold text-foreground">Real-World Use Case</p>
+                <p className="mt-1 leading-5 text-muted-foreground">{project.useCase}</p>
+              </div>
+            )}
+            {project.technologies && project.technologies.length > 0 && (
+              <div className="rounded-xl border border-border bg-card p-3.5 sm:col-span-2">
+                <p className="font-semibold text-foreground">Required Technologies</p>
+                <p className="mt-1 font-medium text-accent">
+                  {project.technologies.join(" · ")}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="mt-5 grid gap-4 border-t border-border pt-4 text-xs sm:grid-cols-2">
           <div>
             <p className="font-semibold text-foreground">Why this project matters</p>
@@ -195,25 +220,44 @@ export function WorkspaceProjectPanel({
           <div className="rounded-xl border border-border bg-card p-4 text-xs">
             <p className="font-semibold text-foreground">Step-by-step instructions</p>
             <ol className="mt-2.5 list-decimal space-y-1.5 pl-4 text-muted-foreground">
-              {guidance.stepByStep.map((s) => (
+              {(project.submissionInstructions?.length
+                ? project.submissionInstructions
+                : guidance.stepByStep
+              ).map((s) => (
                 <li key={s}>{s}</li>
               ))}
             </ol>
           </div>
           <div className="rounded-xl border border-border bg-card p-4 text-xs">
             <p className="font-semibold text-foreground">Mentor evaluation rubric</p>
-            <ul className="mt-2.5 space-y-1.5 text-muted-foreground">
-              {guidance.evaluationCriteria.map((c) => (
-                <li key={c} className="flex items-start gap-2">
-                  <CheckCircle2
-                    size={13}
-                    className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-300"
-                    aria-hidden="true"
-                  />
-                  <span>{c}</span>
-                </li>
-              ))}
-            </ul>
+            {project.structuredRubric && project.structuredRubric.length > 0 ? (
+              <ul className="mt-2.5 space-y-2.5 text-muted-foreground">
+                {project.structuredRubric.map((item) => (
+                  <li key={item.criterion} className="border-b border-border/60 pb-2 last:border-b-0 last:pb-0">
+                    <div className="flex items-baseline justify-between gap-2 font-medium text-foreground">
+                      <span>{item.criterion}</span>
+                      <span className="font-mono text-[11px] tabular-nums text-accent">
+                        {item.weightPercent}%
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] leading-4">{item.expectation}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <ul className="mt-2.5 space-y-1.5 text-muted-foreground">
+                {guidance.evaluationCriteria.map((c) => (
+                  <li key={c} className="flex items-start gap-2">
+                    <CheckCircle2
+                      size={13}
+                      className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-300"
+                      aria-hidden="true"
+                    />
+                    <span>{c}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       </div>
